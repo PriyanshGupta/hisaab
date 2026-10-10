@@ -6,6 +6,7 @@ from alembic.config import Config
 from sqlalchemy import Column, Integer, MetaData, String, Table
 
 from hisaab.config import PROJECT_ROOT
+from hisaab.models import Base
 
 
 def _config(db_path):
@@ -28,10 +29,14 @@ def test_autogenerate_renders_batch_operations(tmp_path):
     # render_as_batch=True is what makes autogenerate emit batch_alter_table
     # blocks, which SQLite needs for anything beyond ADD COLUMN.
     db = tmp_path / "m.db"
+    command.upgrade(_config(db), "head")  # autogenerate refuses a database that is behind head
     with sqlite3.connect(db) as conn:
         conn.execute("CREATE TABLE widgets (id INTEGER PRIMARY KEY)")
 
+    # The real schema plus one probe change, so the only diff is on `widgets`.
     target = MetaData()
+    for table in Base.metadata.tables.values():
+        table.to_metadata(target)
     Table("widgets", target, Column("id", Integer, primary_key=True), Column("name", String(50)))
 
     versions = tmp_path / "versions"

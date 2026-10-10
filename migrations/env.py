@@ -29,6 +29,7 @@ from sqlalchemy import text
 
 from hisaab.config import Settings
 from hisaab.db import make_engine
+from hisaab.models import Base
 
 config = context.config
 if config.config_file_name is not None and not config.attributes.get("skip_logging_config"):
@@ -36,8 +37,8 @@ if config.config_file_name is not None and not config.attributes.get("skip_loggi
 
 # Tests inject these through config.attributes; normal runs read .env.
 DATABASE_PATH = Path(config.attributes.get("database_path") or Settings().database_path)
-# Slice 2 replaces None with the models' MetaData.
-target_metadata = config.attributes.get("target_metadata", None)
+# The models are the source of truth that autogenerate compares against.
+target_metadata = config.attributes.get("target_metadata", Base.metadata)
 
 
 def run_migrations_offline() -> None:

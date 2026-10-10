@@ -39,6 +39,11 @@ Every slice follows the same shape, so it won't be repeated in each prompt:
 - Build the named slice only. Never start the next one unasked.
 - If something in `tech-design.md` turns out wrong once you're in the detail,
   stop and tell me. Don't work around it silently.
+- When reporting a verification, paste the actual command and its actual output.
+  Never summarise it as "tests pass" or "verified". If a check produces a number
+  (a count, a parse rate, a balance), state the number.
+- For the four verify-hard slices (2, 11, 15, 20), also tell me the one thing I
+  should check by hand to confirm your test isn't passing vacuously.
 
 ## Settled decisions — do not re-open
 The stack was decided with reasoning recorded in `tech-design.md` §11. Python 3.14, FastAPI,
