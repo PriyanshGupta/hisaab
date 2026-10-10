@@ -1,2 +1,18 @@
 docs/
 fixtures/
+# Slice 0 OAuth spike secrets
+spikes/slice0_oauth/.venv/
+spikes/slice0_oauth/client_secret*.json
+spikes/slice0_oauth/token.json
+spikes/slice0_oauth/refresh.py
+**/token.json
+# App
+.env
+.venv/
+data/
+__pycache__/
+*.egg-info/
+.pytest_cache/
+*.db
+*.db-wal
+*.db-shm
