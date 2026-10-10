@@ -26,6 +26,20 @@ VPAs, names, addresses. Use consistent fake values so patterns still match.
 - Every slice has a verification step in `build-plan.md`. It is not optional. "Looks right" is not verification.
 - A slice is not done until its verification has actually been run and its output seen.
 
+## Per-slice protocol
+
+Every slice follows the same shape, so it won't be repeated in each prompt:
+
+- `superpowers:writing-plans` before starting
+- `superpowers:test-driven-development` while implementing
+- `superpowers:systematic-debugging` on any bug or unexpected behaviour
+- `superpowers:verification-before-completion` before claiming done, which
+  includes actually running that slice's verification step from `build-plan.md`
+  and showing me the output
+- Build the named slice only. Never start the next one unasked.
+- If something in `tech-design.md` turns out wrong once you're in the detail,
+  stop and tell me. Don't work around it silently.
+
 ## Settled decisions — do not re-open
 The stack was decided with reasoning recorded in `tech-design.md` §11. Python 3.14, FastAPI,
 SQLite in WAL mode, SQLAlchemy 2.0 + Alembic (batch mode), React 19 + TypeScript + Vite,
