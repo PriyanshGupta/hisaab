@@ -1,0 +1,77 @@
+/* Transactions list (a .ledger table) with an inline detail row, and the Add form. */
+.txn-table__date {
+  white-space: nowrap;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.txn-row__toggle {
+  border: 0;
+  background: none;
+  padding: 0;
+  font: inherit;
+  font-weight: var(--w-strong);
+  color: var(--ink);
+  text-align: left;
+  cursor: pointer;
+}
+.txn-row__toggle:hover {
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.txn-row__edited {
+  margin-left: var(--s2);
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.txn-row--open td {
+  border-bottom-color: transparent;
+}
+.txn-detail > td {
+  background: var(--paper-raised);
+}
+.txn-detail__body {
+  display: grid;
+  gap: var(--s3);
+  padding: var(--s2) 0 var(--s3);
+  max-width: 40rem;
+}
+.txn-edits {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  gap: var(--s1);
+}
+.txn-edits li {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+.txn-correct {
+  display: grid;
+  gap: var(--s3);
+}
+
+.entry-form {
+  display: grid;
+  gap: var(--s4);
+  padding-top: var(--s5);
+  padding-bottom: var(--s5);
+  padding-right: var(--s5);
+  max-width: 46rem;
+}
+.entry-form select.field__input {
+  appearance: auto;
+}
+.saved {
+  font-weight: var(--w-strong);
+  color: var(--accent);
+}
+
+/* Phones: the account column folds away; the details cell still names the payee. */
+@media (max-width: 640px) {
+  .txn-table__account {
+    display: none;
+  }
+}

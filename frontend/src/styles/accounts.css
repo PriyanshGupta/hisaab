@@ -56,15 +56,6 @@
   color: var(--ink-soft);
 }
 
-.actions {
-  display: flex;
-  gap: var(--s2);
-  flex-wrap: wrap;
-  align-items: center;
-}
-.account .actions > .button--quiet:first-child {
-  padding-left: 0;
-}
 
 .upi {
   display: grid;
@@ -138,67 +129,12 @@
   padding: 0;
   margin: 0;
 }
-.form-grid {
-  display: grid;
-  gap: var(--s4);
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-}
-.field__help {
-  font-size: var(--t-small);
-  color: var(--ink-muted);
-}
-.field__error {
-  font-size: var(--t-small);
-  font-weight: var(--w-strong);
-  color: var(--margin);
-}
-.field__input[aria-invalid="true"] {
-  border-color: var(--margin);
-}
-.amount-input {
-  font-variant-numeric: tabular-nums;
-}
-
-.choice {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
-}
-.choice legend {
-  width: 100%;
-  margin-bottom: var(--s2);
-}
-.choice__option {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s2);
-  min-height: var(--touch);
-  padding: 0 var(--s4) 0 var(--s3);
-  border: 1px solid var(--field-border);
-  border-radius: var(--r-control);
-  background: var(--paper-raised);
-  cursor: pointer;
-  font-weight: 520;
-}
-.choice__option:has(input:checked) {
-  border-color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-.choice__option input {
-  accent-color: var(--ink);
-}
 
 .archived {
   margin-top: var(--s5);
 }
 .archived > .button--quiet {
   padding-left: 0;
-}
-.muted {
-  color: var(--ink-muted);
 }
 
 @media (max-width: 640px) {

@@ -17,9 +17,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from hisaab.accounts import repository as accounts_repo
-from hisaab.api import accounts, admin_users, auth
+from hisaab.api import accounts, admin_users, auth, transactions
 from hisaab.auth import users
 from hisaab.auth.throttle import LoginThrottle
+from hisaab.transactions import repository as txns_repo
+from hisaab.transactions.legs import LegError
 from hisaab.config import Settings
 from hisaab.db import Database, WriterBusy, make_engine
 from hisaab.spa import SpaStaticFiles
@@ -44,6 +46,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(auth.router)
     app.include_router(admin_users.router)
     app.include_router(accounts.router)
+    app.include_router(transactions.router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
 
 
@@ -70,6 +73,10 @@ _ERROR_STATUS = (
     (users.DuplicateUsername, 409),
     (users.LastAdmin, 409),
     (users.UserError, 422),
+    (txns_repo.NotFound, 404),
+    (txns_repo.EditsWouldBeLost, 409),
+    (txns_repo.TransactionError, 422),
+    (LegError, 422),
 )
 _WRITER_BUSY_DETAIL = "Busy with a long-running job; try again shortly."
 
