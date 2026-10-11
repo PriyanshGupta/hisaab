@@ -8,8 +8,10 @@ shell history or the process list.
 """
 
 import argparse
+import json
 import sys
 from getpass import getpass
+from pathlib import Path
 
 from sqlalchemy import inspect
 
@@ -51,6 +53,14 @@ def _create_admin(args: argparse.Namespace, settings: Settings) -> int:
     return 0
 
 
+def _export_openapi(args: argparse.Namespace) -> int:
+    from hisaab.openapi_export import build_openapi_schema
+
+    # Sorted and indented so the file is stable across runs and diffs cleanly.
+    Path(args.output).write_text(json.dumps(build_openapi_schema(), indent=2, sort_keys=True) + "\n")
+    return 0
+
+
 def main(argv: list[str], settings: Settings | None = None) -> int:
     parser = argparse.ArgumentParser(prog="python -m hisaab", description="Hisaab administration.")
     commands = parser.add_subparsers(dest="command", required=True)
@@ -58,8 +68,11 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
     create.add_argument("--username", required=True)
     create.add_argument("--display-name", required=True)
     create.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
+    export = commands.add_parser("export-openapi", help="write the OpenAPI schema (for the frontend client)")
+    export.add_argument("output", help="path of the JSON file to write")
     args = parser.parse_args(argv)
-    settings = settings or Settings()
     if args.command == "create-admin":
-        return _create_admin(args, settings)
+        return _create_admin(args, settings or Settings())
+    if args.command == "export-openapi":
+        return _export_openapi(args)
     return 2  # unreachable: argparse rejects unknown commands

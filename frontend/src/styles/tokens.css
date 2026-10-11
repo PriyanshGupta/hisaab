@@ -1,0 +1,97 @@
+/*
+ * Hisaab design tokens. Every screen inherits these; change them here, nowhere else.
+ * Palette after docs/prototype.html: a ledger in dark green ink on light beige
+ * paper, with the red double margin rule of ruled account paper as a quiet accent.
+ * Light theme only, by decision (2026-10-11); tokens.test.ts enforces it.
+ *
+ *   --ink      deep green ink: text, primary buttons, the active-nav bar
+ *   --accent   ledger green: links, focus rings, data bars, "done" states
+ *   --margin   the red margin line. Used as a thin double rule (the chrome's one
+ *              motif) and for things that need attention: errors, unsorted
+ *              items, review counts. Never used to colour money.
+ *   paper / paper-raised / rule: warm paper, white sheets, feint ruling.
+ *
+ * Two prototype values were darkened to pass WCAG AA (see tokens.test.ts):
+ * muted text #6F7A70 -> #646F65 (4.07 -> 4.77:1) and input edges, which get
+ * their own --field-border (#8F8875, 3.5:1) since #D0C9B8 is only 1.6:1.
+ *
+ * Money convention: amounts are ink, tabular, right-aligned. Credits carry a
+ * muted "Cr" suffix as on Indian bank statements; totals sit on a double rule.
+ * Red/green is never used for sign: it fails for colour-blind users.
+ */
+:root {
+  color-scheme: light;
+
+  --paper: #f7f4ec;
+  --paper-raised: #fffefa;
+  --paper-sunk: #f3efe5;
+  --ink: #14302a;
+  --ink-soft: #4a5e57;
+  --ink-muted: #646f65;
+  --rule: #e6e1d4;
+  --rule-strong: #d0c9b8;
+  --field-border: #8f8875;
+  --accent: #2f6e5a;
+  --accent-wash: #dce9e0;
+  --margin: #c0443c;
+  --margin-wash: #fbebe6;
+  --on-ink: #fffefa;
+  --cover: #14302a; /* login cover: green ledger cloth */
+  --on-cover: #fffefa;
+
+  /* Type: Anek Latin variable (wght 100–800, wdth 75–125), one family.
+     Scale: minor third (×1.2) from a 15px base. */
+  --font: "Anek Latin Variable", "Anek Latin", system-ui, sans-serif;
+  --t-small: 0.8333rem;   /* 12.5px */
+  --t-body: 1rem;         /* 15px   */
+  --t-lead: 1.2rem;       /* 18px   */
+  --t-title: 1.44rem;     /* 21.6px */
+  --t-display: 1.728rem;  /* 26px   */
+  --t-cover: 2.986rem;    /* 44.8px */
+  --lh-body: 1.45;
+  --lh-tight: 1.2;
+  --lh-data: 1.3;
+  --w-body: 420;
+  --w-strong: 600;
+  --w-title: 640;
+  --w-wordmark: 760;
+  --wdth-body: 100;
+  --wdth-title: 112;
+  --wdth-wordmark: 125;
+  --wdth-data: 100;       /* condensed on phones, see below */
+
+  /* Space: 4px base. */
+  --s1: 0.25rem;  /* 4  */
+  --s2: 0.5rem;   /* 8  */
+  --s3: 0.75rem;  /* 12 */
+  --s4: 1rem;     /* 16 */
+  --s5: 1.5rem;   /* 24 */
+  --s6: 2rem;     /* 32 */
+  --s7: 3rem;     /* 48 */
+
+  /* Shape: controls are softly rounded; surfaces are flat and separated by rules. */
+  --r-control: 6px;
+  --margin-rule-gap: 3px; /* the red double rule: two 1px lines this far apart */
+  --margin-rule-opacity: 0.5; /* as in the prototype: a quiet accent, not a stripe */
+  --sidebar-w: 216px;
+  --content-max: 70rem;
+  --touch: 44px;
+  --focus: 0 0 0 2px var(--paper), 0 0 0 4px var(--accent);
+}
+
+/* Phones: 16px base so inputs never trigger iOS zoom; data cells condense in
+   width (not size) so amount columns fit without shrinking the type. */
+@media (max-width: 640px) {
+  :root {
+    --wdth-data: 84;
+  }
+  html {
+    font-size: 16px;
+  }
+}
+
+@media (min-width: 641px) {
+  html {
+    font-size: 15px;
+  }
+}

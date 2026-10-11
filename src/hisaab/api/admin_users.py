@@ -17,7 +17,7 @@ from hisaab.models import User
 router = APIRouter(prefix="/api/admin/users", tags=["admin"], dependencies=[Depends(require_admin)])
 
 
-class UserOut(BaseModel):
+class ManagedUser(BaseModel):
     id: str
     username: str
     display_name: str
@@ -25,7 +25,7 @@ class UserOut(BaseModel):
     created_at: str
 
     @classmethod
-    def of(cls, user: User) -> "UserOut":
+    def of(cls, user: User) -> "ManagedUser":
         return cls(id=user.id, username=user.username, display_name=user.display_name,
                    role=user.role, created_at=user.created_at)
 
@@ -58,17 +58,17 @@ def _get_or_404(session, user_id: str) -> User:
     return user
 
 
-@router.get("", response_model=list[UserOut])
+@router.get("", response_model=list[ManagedUser])
 def list_users(db: Database = Depends(get_db)):
     with db.read_session() as s:
-        return [UserOut.of(u) for u in users.list_users(s)]
+        return [ManagedUser.of(u) for u in users.list_users(s)]
 
 
-@router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+@router.post("", response_model=ManagedUser, status_code=status.HTTP_201_CREATED)
 def create_user(body: NewUser, request: Request, db: Database = Depends(get_db)):
     try:
         with db.write_session(timeout=request.app.state.writer_timeout) as s:
-            return UserOut.of(users.create_user(s, body.username, body.display_name, body.password, body.role))
+            return ManagedUser.of(users.create_user(s, body.username, body.display_name, body.password, body.role))
     except users.UserError as exc:
         raise _rule_violation(exc) from exc
 
@@ -83,12 +83,12 @@ def reset_password(user_id: str, body: NewPassword, request: Request, db: Databa
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
-@router.patch("/{user_id}", response_model=UserOut)
+@router.patch("/{user_id}", response_model=ManagedUser)
 def change_user(user_id: str, body: UserChange, request: Request, db: Database = Depends(get_db)):
     try:
         with db.write_session(timeout=request.app.state.writer_timeout) as s:
             user = _get_or_404(s, user_id)
             users.set_role(s, user, body.role)
-            return UserOut.of(user)
+            return ManagedUser.of(user)
     except users.UserError as exc:
         raise _rule_violation(exc) from exc

@@ -16,3 +16,9 @@ __pycache__/
 *.db
 *.db-wal
 *.db-shm
+# Frontend
+frontend/node_modules/
+frontend/dist/
+frontend/openapi.json
+frontend/src/api/schema.d.ts
+*.tsbuildinfo

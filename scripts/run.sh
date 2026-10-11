@@ -18,12 +18,43 @@ if [[ ! -x .venv/bin/python ]]; then
 fi
 [[ -f .env ]] || echo "note: no .env found; using defaults (copy .env.example to .env)" >&2
 
-# Frontend arrives in slice 4. Rebuild only when dist/ is missing or older than its sources.
-if [[ -d frontend ]]; then
-  if [[ ! -d frontend/dist ]] || [[ -n "$(find frontend/src frontend/index.html -newer frontend/dist -print -quit 2>/dev/null)" ]]; then
-    echo "Building frontend..." >&2
-    (cd frontend && npm run build)
+# Linux Node.js for the frontend build. Under WSL a Windows npm (/mnt/c/...) is
+# often first on PATH via interop; it must not be used: it is slow over the
+# Windows mount and builds against the wrong platform. Prefer a Linux npm on
+# PATH, else nvm (bash-only setups don't load it in zsh), else stop and say so.
+find_linux_npm() {
+  local npm_path
+  npm_path="$(command -v npm || true)"
+  if [[ -n "$npm_path" && "$npm_path" != /mnt/* ]]; then
+    echo "$npm_path"; return 0
   fi
+  if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
+    # shellcheck disable=SC1091
+    source "${NVM_DIR:-$HOME/.nvm}/nvm.sh" >/dev/null
+    (cd frontend && nvm use --silent >/dev/null 2>&1 || nvm use --silent default >/dev/null 2>&1) || true
+    npm_path="$(nvm which current 2>/dev/null | sed 's#/node$#/npm#')"
+    if [[ -x "$npm_path" ]]; then echo "$npm_path"; return 0; fi
+  fi
+  return 1
+}
+
+# Rebuild the frontend when dist/ is missing or older than anything it is built
+# from, including the backend API (the TypeScript client is generated from it).
+frontend_is_stale() {
+  [[ ! -f frontend/dist/index.html ]] && return 0
+  [[ -n "$(find frontend/src frontend/index.html frontend/package.json src/hisaab \
+            -newer frontend/dist/index.html \( -name '*.py' -o -path 'frontend/*' \) -print -quit 2>/dev/null)" ]]
+}
+
+if [[ -d frontend ]] && frontend_is_stale; then
+  if ! NPM="$(find_linux_npm)"; then
+    echo "Linux Node.js not found (a Windows npm under /mnt/c does not work here)." >&2
+    echo "Install Node 24 in WSL (e.g. via nvm), then re-run." >&2
+    exit 1
+  fi
+  echo "Building frontend with $NPM ..." >&2
+  NODE_BIN="$(dirname "$NPM")"
+  (cd frontend && export PATH="$NODE_BIN:$PATH" && { [[ -d node_modules ]] || "$NPM" ci; } && "$NPM" run build)
 fi
 
 .venv/bin/alembic upgrade head

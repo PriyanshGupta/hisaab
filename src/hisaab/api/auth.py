@@ -24,7 +24,7 @@ class LoginRequest(BaseModel):
     password: str
 
 
-class UserOut(BaseModel):
+class SessionUser(BaseModel):
     id: str
     username: str
     display_name: str
@@ -34,7 +34,7 @@ class UserOut(BaseModel):
 _BAD_LOGIN = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid username or password")
 
 
-@router.post("/login", response_model=UserOut)
+@router.post("/login", response_model=SessionUser)
 def login(body: LoginRequest, request: Request, response: Response, db: Database = Depends(get_db)):
     # 1. Read and verify outside the writer lock: Argon2 takes ~50 ms by design.
     with db.read_session() as s:
@@ -55,7 +55,7 @@ def login(body: LoginRequest, request: Request, response: Response, db: Database
         if new_hash:
             user.password_hash = new_hash
         token = sessions.create(s, session_secret(request), user_id)
-        out = UserOut(id=user.id, username=user.username, display_name=user.display_name, role=user.role)
+        out = SessionUser(id=user.id, username=user.username, display_name=user.display_name, role=user.role)
     set_session_cookie(response, token)
     return out
 
@@ -71,6 +71,6 @@ def logout(request: Request, response: Response, db: Database = Depends(get_db))
     return response
 
 
-@router.get("/me", response_model=UserOut)
+@router.get("/me", response_model=SessionUser)
 def me(user: CurrentUser = Depends(current_user)):
-    return UserOut(id=user.id, username=user.username, display_name=user.display_name, role=user.role)
+    return SessionUser(id=user.id, username=user.username, display_name=user.display_name, role=user.role)

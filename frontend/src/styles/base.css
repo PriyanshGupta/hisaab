@@ -1,0 +1,247 @@
+/* Element defaults and the shared vocabulary every screen uses. */
+*,
+*::before,
+*::after {
+  box-sizing: border-box;
+}
+
+html {
+  -webkit-text-size-adjust: 100%;
+  text-size-adjust: 100%;
+}
+
+body {
+  margin: 0;
+  min-height: 100dvh;
+  background: var(--paper);
+  color: var(--ink);
+  font-family: var(--font);
+  font-size: var(--t-body);
+  font-weight: var(--w-body);
+  font-variation-settings: "wdth" var(--wdth-body);
+  line-height: var(--lh-body);
+  -webkit-font-smoothing: antialiased;
+}
+
+h1,
+h2,
+h3,
+p {
+  margin: 0;
+}
+
+a {
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+  border-radius: var(--r-control);
+}
+
+.skip-link {
+  position: absolute;
+  left: var(--s4);
+  top: -100px;
+  padding: var(--s2) var(--s3);
+  background: var(--paper-raised);
+  color: var(--ink);
+  z-index: 10;
+}
+.skip-link:focus-visible {
+  top: var(--s4);
+}
+
+/* Wordmark: the app name at full expanded width. */
+.wordmark {
+  font-size: var(--t-lead);
+  font-weight: var(--w-wordmark);
+  font-variation-settings: "wdth" var(--wdth-wordmark);
+  letter-spacing: -0.01em;
+  color: var(--ink);
+  line-height: 1;
+}
+
+/* Page heading. */
+.page-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  gap: var(--s4);
+  padding-bottom: var(--s3);
+  margin-bottom: var(--s5);
+  border-bottom: 1px solid var(--rule);
+}
+.page-title {
+  font-size: var(--t-display);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+  line-height: var(--lh-tight);
+}
+
+/* Empty states: say what will appear and what makes it appear. */
+.empty {
+  max-width: 34rem;
+  padding: var(--s5) 0;
+}
+.empty__lead {
+  font-size: var(--t-lead);
+  font-weight: var(--w-strong);
+  margin-bottom: var(--s2);
+}
+.empty__body {
+  color: var(--ink-muted);
+}
+
+/* Form fields. */
+.field {
+  display: grid;
+  gap: var(--s1);
+}
+.field__label {
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  color: var(--ink-muted);
+}
+.field__input {
+  min-height: var(--touch);
+  padding: var(--s2) var(--s3);
+  font: inherit;
+  font-size: max(16px, var(--t-body));
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-control);
+}
+.field__input:focus-visible {
+  border-color: var(--accent);
+}
+
+/* Something needs attention: ink text on a red wash, red rule on the left. */
+.form-error {
+  padding: var(--s2) var(--s3);
+  background: var(--margin-wash);
+  border-left: 3px solid var(--margin);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+  color: var(--ink);
+  font-weight: var(--w-strong);
+}
+
+/*
+ * The red double margin rule of ruled account paper: the app's one chrome
+ * motif. Add .sheet--ruled to a sheet to get it down the left side, with the
+ * content starting to its right.
+ */
+.sheet {
+  position: relative;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: 8px;
+}
+.sheet--ruled {
+  padding-left: calc(var(--s7) + var(--s2));
+}
+.sheet--ruled::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 var(--s5);
+  width: calc(var(--margin-rule-gap) + 2px);
+  border-inline: 1px solid var(--margin);
+  opacity: var(--margin-rule-opacity);
+  pointer-events: none;
+}
+
+/* Buttons: primary is ink; red is reserved for the margin rule and attention. */
+.button {
+  min-height: var(--touch);
+  padding: var(--s2) var(--s4);
+  font: inherit;
+  font-weight: var(--w-strong);
+  border-radius: var(--r-control);
+  border: 1px solid transparent;
+  cursor: pointer;
+}
+.button:disabled {
+  opacity: 0.6;
+  cursor: progress;
+}
+.button--primary {
+  background: var(--ink);
+  color: var(--on-ink);
+}
+.button--primary:hover:not(:disabled) {
+  background: color-mix(in oklab, var(--ink) 85%, var(--paper));
+}
+.button--quiet {
+  background: transparent;
+  color: var(--ink-soft);
+  padding-inline: var(--s2);
+}
+.button--quiet:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+
+/*
+ * Ledger tables, the vocabulary for every data screen to come:
+ * feint horizontal ruling, tabular amounts, a double rule above the total.
+ *   <table class="ledger"> … <td class="amount">1,23,456.00<span class="cr">Cr</span></td>
+ *   <tr class="ledger__total"> … </tr>
+ */
+.ledger {
+  width: 100%;
+  border-collapse: collapse;
+  font-variation-settings: "wdth" var(--wdth-data);
+  line-height: var(--lh-data);
+}
+.ledger th {
+  text-align: left;
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  color: var(--ink-muted);
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.ledger td {
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--rule);
+  min-height: var(--touch);
+}
+.ledger .amount,
+.ledger th.amount {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.ledger .cr {
+  margin-left: 0.3em;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.ledger__total td {
+  font-weight: var(--w-strong);
+  border-top: 3px double var(--ink);
+  border-bottom: none;
+}
+
+.boot {
+  min-height: 100dvh;
+  display: grid;
+  place-items: center;
+  padding: var(--s5);
+}
+.boot--error {
+  color: var(--margin);
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    transition-duration: 0.01ms !important;
+    animation-duration: 0.01ms !important;
+  }
+}

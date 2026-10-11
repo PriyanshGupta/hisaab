@@ -1,0 +1,80 @@
+/*
+ * Sign-in: the one bold moment. The ledger's green cloth cover carries the
+ * wordmark at cover size; the form is a ruled sheet (red double margin rule)
+ * on the paper beside it (desktop) or below it (phone).
+ */
+.login {
+  min-height: 100dvh;
+  display: grid;
+  grid-template-rows: auto 1fr;
+}
+
+.login__cover {
+  position: relative;
+  display: flex;
+  flex-direction: column;
+  justify-content: flex-end;
+  gap: var(--s2);
+  padding: var(--s6) var(--s5) var(--s5);
+  background: var(--cover);
+  color: var(--on-cover);
+}
+.login__wordmark {
+  font-size: var(--t-cover);
+  font-weight: var(--w-wordmark);
+  font-variation-settings: "wdth" var(--wdth-wordmark);
+  letter-spacing: -0.02em;
+  line-height: 0.95;
+}
+.login__tagline {
+  font-size: var(--t-lead);
+  font-variation-settings: "wdth" var(--wdth-title);
+  opacity: 0.85;
+}
+
+.login__page {
+  display: grid;
+  align-content: start;
+  justify-items: start;
+  padding: var(--s5) var(--s4);
+}
+.login__form {
+  display: grid;
+  gap: var(--s4);
+  width: 100%;
+  max-width: 26rem;
+  padding: var(--s5) var(--s5) var(--s5) calc(var(--s7) + var(--s2));
+}
+.login__title {
+  font-size: var(--t-display);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+  margin-bottom: var(--s2);
+}
+.login__form .button--primary {
+  margin-top: var(--s2);
+}
+.login__help {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+
+@media (min-width: 960px) {
+  .login {
+    grid-template-rows: none;
+    grid-template-columns: minmax(20rem, 2fr) 3fr;
+  }
+  .login__cover {
+    padding: var(--s7);
+  }
+  .login__wordmark {
+    font-size: calc(var(--t-cover) * 1.6);
+  }
+  .login__page {
+    align-content: center;
+    padding: var(--s7);
+  }
+  .login__form {
+    padding: var(--s6) var(--s6) var(--s6) calc(var(--s7) + var(--s4));
+  }
+}

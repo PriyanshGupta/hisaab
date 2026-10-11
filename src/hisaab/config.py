@@ -36,6 +36,8 @@ class Settings(BaseSettings):
     database_path: Path = Path("data/hisaab.db")
     host: str = "0.0.0.0"  # LAN-reachable for phone access (tech-design §9.6)
     port: int = 8765  # the OAuth loopback callback targets this port (§2.3, §5.5)
+    # The built SPA (npm run build in frontend/). Served at / with a client-route fallback.
+    frontend_dist: Path = Path("frontend/dist")
 
     # Optional until the slice that needs each one makes it required.
     anthropic_api_key: SecretStr | None = None
@@ -44,7 +46,7 @@ class Settings(BaseSettings):
     encryption_key: SecretStr | None = None
     session_secret: SecretStr | None = None
 
-    @field_validator("database_path")
+    @field_validator("database_path", "frontend_dist")
     @classmethod
     def _anchor_to_project_root(cls, value: Path) -> Path:
         value = value.expanduser()
