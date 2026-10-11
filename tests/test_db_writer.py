@@ -8,7 +8,6 @@ from sqlalchemy import select
 
 from hisaab.db import Database, WriterBusy
 from hisaab.models import Payee
-from tests import factories as f
 
 
 @pytest.fixture

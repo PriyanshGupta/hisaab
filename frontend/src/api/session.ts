@@ -2,7 +2,7 @@
 // cookie the browser manages; the SPA only ever asks the server who it is.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { type SessionUser, ApiError, NetworkError, api, apiError, send } from "./client";
+import { type SessionUser, ApiError, api, apiError, describeError, send } from "./client";
 
 export const meQueryKey = ["auth", "me"] as const;
 
@@ -44,13 +44,8 @@ export function useLogout() {
   });
 }
 
-/** What the sign-in form says when signing in fails. */
+/** What the sign-in form says when signing in fails: the shared sentences, plus the 401 case. */
 export function loginErrorMessage(error: unknown): string {
-  if (error instanceof NetworkError) return "Can't reach the Hisaab server. Check that it's running, then try again.";
-  if (error instanceof ApiError) {
-    if (error.status === 401) return "Wrong username or password.";
-    if (error.status === 503) return "Hisaab is busy finishing a long job. Try again in a minute.";
-    return `Sign-in failed (error ${error.status}). Try again.`;
-  }
-  return "Sign-in failed. Try again.";
+  if (error instanceof ApiError && error.status === 401) return "Wrong username or password.";
+  return describeError(error); // network, busy (503), locked out (429: the server's sentence)
 }

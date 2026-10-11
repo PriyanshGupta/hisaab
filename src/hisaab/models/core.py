@@ -12,7 +12,7 @@ Invariants SQLite cannot express (leg validity per kind, cross-user
 integrity) are enforced in the repository layer and by tests (§3.9).
 """
 
-from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, Text, UniqueConstraint
+from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hisaab.models.base import Base, created_column, id_column, one_of, partial_index_where, updated_column

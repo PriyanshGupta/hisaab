@@ -18,6 +18,14 @@ if [[ ! -x .venv/bin/python ]]; then
 fi
 [[ -f .env ]] || echo "note: no .env found; using defaults (copy .env.example to .env)" >&2
 
+# Python dependencies: reinstall whenever pyproject.toml changed since the last
+# install, so a pulled update that adds a package doesn't crash on import.
+if [[ pyproject.toml -nt .venv/.hisaab-installed ]]; then
+  echo "Installing Python dependencies..." >&2
+  .venv/bin/pip install -q -e '.[dev]'
+  touch .venv/.hisaab-installed
+fi
+
 # Linux Node.js for the frontend build. Under WSL a Windows npm (/mnt/c/...) is
 # often first on PATH via interop; it must not be used: it is slow over the
 # Windows mount and builds against the wrong platform. Prefer a Linux npm on
@@ -31,7 +39,8 @@ find_linux_npm() {
   if [[ -s "${NVM_DIR:-$HOME/.nvm}/nvm.sh" ]]; then
     # shellcheck disable=SC1091
     source "${NVM_DIR:-$HOME/.nvm}/nvm.sh" >/dev/null
-    (cd frontend && nvm use --silent >/dev/null 2>&1 || nvm use --silent default >/dev/null 2>&1) || true
+    # Same shell, not a subshell: a subshell's `nvm use` would be lost at once.
+    nvm use --silent "$(cat frontend/.nvmrc)" >/dev/null 2>&1 || nvm use --silent default >/dev/null 2>&1 || true
     npm_path="$(nvm which current 2>/dev/null | sed 's#/node$#/npm#')"
     if [[ -x "$npm_path" ]]; then echo "$npm_path"; return 0; fi
   fi
@@ -42,7 +51,7 @@ find_linux_npm() {
 # from, including the backend API (the TypeScript client is generated from it).
 frontend_is_stale() {
   [[ ! -f frontend/dist/index.html ]] && return 0
-  [[ -n "$(find frontend/src frontend/index.html frontend/package.json src/hisaab \
+  [[ -n "$(find frontend/src frontend/index.html frontend/package.json frontend/package-lock.json src/hisaab \
             -newer frontend/dist/index.html \( -name '*.py' -o -path 'frontend/*' \) -print -quit 2>/dev/null)" ]]
 }
 
@@ -54,7 +63,13 @@ if [[ -d frontend ]] && frontend_is_stale; then
   fi
   echo "Building frontend with $NPM ..." >&2
   NODE_BIN="$(dirname "$NPM")"
-  (cd frontend && export PATH="$NODE_BIN:$PATH" && { [[ -d node_modules ]] || "$NPM" ci; } && "$NPM" run build)
+  (
+    cd frontend && export PATH="$NODE_BIN:$PATH"
+    # npm writes node_modules/.package-lock.json on every install, so a lockfile
+    # newer than it means dependencies changed (or were never installed).
+    if [[ package-lock.json -nt node_modules/.package-lock.json ]]; then "$NPM" ci; fi
+    "$NPM" run build
+  )
 fi
 
 .venv/bin/alembic upgrade head

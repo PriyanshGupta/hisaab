@@ -16,7 +16,10 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
+from hisaab.accounts import repository as accounts_repo
 from hisaab.api import accounts, admin_users, auth
+from hisaab.auth import users
+from hisaab.auth.throttle import LoginThrottle
 from hisaab.config import Settings
 from hisaab.db import Database, WriterBusy, make_engine
 from hisaab.spa import SpaStaticFiles
@@ -55,6 +58,33 @@ def _require_session_secret(settings: Settings) -> None:
         raise RuntimeError(f"HISAAB_SESSION_SECRET must be at least {MIN_SESSION_SECRET_LENGTH} characters.")
 
 
+# Repository rule violations, turned into HTTP errors in one place. Each carries
+# a sentence for the person; routes just let them propagate. More specific
+# classes are listed before their bases (Starlette matches by class anyway).
+_ERROR_STATUS = (
+    (WriterBusy, 503),
+    (accounts_repo.NotFound, 404),
+    (accounts_repo.DuplicateLast4, 409),
+    (accounts_repo.DuplicateIdentifier, 409),
+    (accounts_repo.AccountError, 422),
+    (users.DuplicateUsername, 409),
+    (users.LastAdmin, 409),
+    (users.UserError, 422),
+)
+_WRITER_BUSY_DETAIL = "Busy with a long-running job; try again shortly."
+
+
+def _register_error_handlers(app: FastAPI) -> None:
+    def respond(status_code: int):
+        async def handler(_request: Request, exc: Exception):
+            detail = _WRITER_BUSY_DETAIL if isinstance(exc, WriterBusy) else str(exc)
+            return JSONResponse(status_code=status_code, content={"detail": detail})
+        return handler
+
+    for exc_type, status_code in _ERROR_STATUS:
+        app.add_exception_handler(exc_type, respond(status_code))
+
+
 def _mount_frontend(app: FastAPI, settings: Settings) -> None:
     """Serve the built SPA at / (after the API routes, which therefore take precedence)."""
     if (settings.frontend_dist / "index.html").is_file():
@@ -80,11 +110,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = Database(make_engine(settings.database_path))
     # How long a user action waits for the writer lock before answering 503.
     app.state.writer_timeout = 10.0
+    app.state.login_throttle = LoginThrottle()
 
-    @app.exception_handler(WriterBusy)
-    async def writer_busy(_request: Request, _exc: WriterBusy):
-        return JSONResponse(status_code=503, content={"detail": "Busy with a long-running job; try again shortly."})
-
+    _register_error_handlers(app)
     register_routes(app)
     _mount_frontend(app, settings)
     return app

@@ -21,7 +21,7 @@ export function AppShell() {
   const signOut = () => logout.mutate(undefined, { onSettled: () => navigate("/login", { replace: true }) });
 
   return (
-    <div className={NAV_ITEMS.length > 1 ? "shell shell--tabbar" : "shell"}>
+    <div className="shell">
       <a className="skip-link" href="#main">
         Skip to content
       </a>
@@ -61,16 +61,13 @@ export function AppShell() {
         <Outlet />
       </main>
 
-      {/* A tab bar with a single destination is chrome without a job; it appears once there are two. */}
-      {NAV_ITEMS.length > 1 && (
-        <nav className="tabbar" aria-label="Main">
-          {NAV_ITEMS.map((item) => (
-            <NavLink key={item.to} className="tabbar__link" to={item.to} end={item.end ?? false}>
-              {item.label}
-            </NavLink>
-          ))}
-        </nav>
-      )}
+      <nav className="tabbar" aria-label="Main">
+        {NAV_ITEMS.map((item) => (
+          <NavLink key={item.to} className="tabbar__link" to={item.to} end={item.end ?? false}>
+            {item.label}
+          </NavLink>
+        ))}
+      </nav>
     </div>
   );
 }

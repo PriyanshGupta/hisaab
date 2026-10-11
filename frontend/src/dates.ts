@@ -10,6 +10,25 @@ export function formatDate(iso: string): string {
   return `${Number(day)} ${MONTHS[Number(month) - 1]} ${year}`;
 }
 
+// Intl does only the time-zone conversion ("en-CA" formats as YYYY-MM-DD);
+// formatDate does the wording, so month names match everywhere ("Sep", not
+// the "Sept" newer ICU data uses for en-GB).
+const indiaIsoDate = new Intl.DateTimeFormat("en-CA", {
+  timeZone: "Asia/Kolkata",
+  year: "numeric",
+  month: "2-digit",
+  day: "2-digit",
+});
+
+/**
+ * "2026-10-11T20:00:00.000Z" -> "12 Oct 2026". Timestamps are stored in UTC
+ * (tech-design §3.1); a person reads them as an India date. Slicing off the
+ * date part would be up to 5½ hours wrong.
+ */
+export function formatInstantDate(isoUtc: string): string {
+  return formatDate(indiaIsoDate.format(new Date(isoUtc)));
+}
+
 /** Today's local date as "YYYY-MM-DD". */
 export function todayIso(now: Date = new Date()): string {
   return toIso(now);

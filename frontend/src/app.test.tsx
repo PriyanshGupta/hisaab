@@ -56,6 +56,19 @@ test("a busy server asks the user to try again shortly", async () => {
   expect(await screen.findByRole("alert")).toHaveTextContent("busy");
 });
 
+test("a locked-out username shows the server's explanation", async () => {
+  mockApi({
+    "GET /api/auth/me": NOT_LOGGED_IN,
+    "POST /api/auth/login": {
+      status: 429,
+      body: { detail: "Too many wrong passwords for this username. Try again in 15 minutes." },
+    },
+  });
+  renderApp("/login");
+  await signIn();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Try again in 15 minutes.");
+});
+
 test("an unreachable server is reported as such", async () => {
   mockApi({ "GET /api/auth/me": NOT_LOGGED_IN, "POST /api/auth/login": "network-error" });
   renderApp("/login");

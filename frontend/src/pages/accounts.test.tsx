@@ -20,7 +20,8 @@ const card = {
   opening_balance_paise: 4700000, identifiers: [{ id: "i-3", kind: "card_last4", identifier: "8830", removable: false }],
 };
 const oldAccount = {
-  ...bank, id: "a-3", display_name: "Old ICICI", last4: "2218", archived_at: "2026-09-01T00:00:00.000Z", identifiers: [],
+  // Archived at 01:30 India time on 1 Sep, which is still 31 Aug in UTC.
+  ...bank, id: "a-3", display_name: "Old ICICI", last4: "2218", archived_at: "2026-08-31T20:00:00.000Z", identifiers: [],
 };
 
 function setup(accounts: unknown[] = [bank, card, oldAccount]) {
@@ -48,7 +49,7 @@ test("archived accounts appear only when asked for", async () => {
   const { user } = setup();
   await user.click(await screen.findByRole("button", { name: "Show archived (1)" }));
   const old = screen.getByRole("article", { name: "Old ICICI" });
-  expect(within(old).getByText(/Archived/)).toBeInTheDocument();
+  expect(within(old).getByText(/Archived 1 Sep 2026/)).toBeInTheDocument();
   expect(within(old).queryByRole("button", { name: "Edit" })).not.toBeInTheDocument();
 });
 

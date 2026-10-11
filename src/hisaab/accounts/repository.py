@@ -31,6 +31,7 @@ from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from hisaab.accounts.identifiers import IdentifierError, normalize, normalize_for_lookup
+from hisaab.clock import local_today
 from hisaab.models import Account, AccountIdentifier, utc_now
 from hisaab.models.core import ACCOUNT_TYPES
 
@@ -40,6 +41,9 @@ SETUP_IDENTIFIER_KIND = {"bank": "last4", "credit_card": "card_last4"}
 USER_IDENTIFIER_KINDS = ("vpa", "other")
 
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+# ₹10 lakh crore. Far beyond any household balance, inside SQLite's BIGINT and
+# below JavaScript's exact-integer limit (~9e15), and the same cap money.ts uses.
+MAX_ABS_PAISE = 10**15
 _UNSET = object()
 
 
@@ -76,6 +80,8 @@ def _check_name(name: str) -> str:
 def _check_balance(account_type: str, paise: int) -> int:
     if not isinstance(paise, int) or isinstance(paise, bool):
         raise AccountError("Opening balance must be a whole number of paise.")
+    if abs(paise) > MAX_ABS_PAISE:
+        raise AccountError("That amount is too large.")
     if account_type == "credit_card" and paise < 0:
         raise AccountError(
             "A card's opening balance is the amount owed: enter it as a positive number "
@@ -93,7 +99,7 @@ def _check_date(value: str) -> str:
         parsed = date.fromisoformat(value)
     except ValueError:
         raise AccountError("Opening balance date must be a real date (YYYY-MM-DD).") from None
-    if parsed > date.today():
+    if parsed > local_today():  # India's date, not the (possibly UTC) server's
         raise AccountError("The opening balance date can't be in the future.")
     return value
 

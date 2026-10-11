@@ -1,7 +1,7 @@
 /*
  * The authenticated frame. One markup, two layouts:
  *  phone (< 960px): slim top bar (with the red double rule beneath it), page,
- *                   and a bottom tab bar once there are two destinations
+ *                   and a bottom tab bar
  *  desktop:         sidebar (its right edge is the red double margin rule), page
  * The page to the right of / below the rule reads as the ledger sheet.
  */
@@ -49,12 +49,9 @@
 }
 
 .shell__main {
-  padding: var(--s5) var(--s4) calc(var(--s6) + env(safe-area-inset-bottom));
+  /* bottom padding leaves room for the fixed tab bar */
+  padding: var(--s5) var(--s4) calc(var(--touch) + var(--s7) + env(safe-area-inset-bottom));
   max-width: var(--content-max);
-}
-/* Room for the fixed bottom tab bar, when there is one. */
-.shell--tabbar .shell__main {
-  padding-bottom: calc(var(--touch) + var(--s7) + env(safe-area-inset-bottom));
 }
 .shell__main:focus {
   outline: none;

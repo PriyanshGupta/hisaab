@@ -32,21 +32,33 @@ class SessionUser(BaseModel):
 
 
 _BAD_LOGIN = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid username or password")
+_LOCKED = HTTPException(
+    status.HTTP_429_TOO_MANY_REQUESTS,
+    "Too many wrong passwords for this username. Try again in 15 minutes.",
+)
 
 
 @router.post("/login", response_model=SessionUser)
 def login(body: LoginRequest, request: Request, response: Response, db: Database = Depends(get_db)):
+    throttle = request.app.state.login_throttle
+    username = users.normalize_username(body.username)
+    if throttle.is_locked(username):
+        raise _LOCKED  # checked first, so a locked username costs no Argon2 time
+
     # 1. Read and verify outside the writer lock: Argon2 takes ~50 ms by design.
     with db.read_session() as s:
-        user = users.get_by_username(s, body.username)
+        user = users.get_by_username(s, username)
         found = (user.id, user.password_hash) if user else None
     if found is None:
         burn_verify_time(body.password)  # same cost as a real check: no username probing
+        throttle.record_failure(username)
         raise _BAD_LOGIN
     user_id, stored_hash = found
     ok, needs_rehash = verify_password(stored_hash, body.password)
     if not ok:
+        throttle.record_failure(username)
         raise _BAD_LOGIN
+    throttle.record_success(username)
     new_hash = hash_password(body.password) if needs_rehash else None
 
     # 2. One short write under the writer lock (WriterBusy -> 503, see main.py).
@@ -64,8 +76,12 @@ def login(body: LoginRequest, request: Request, response: Response, db: Database
 def logout(request: Request, response: Response, db: Database = Depends(get_db)):
     token = request.cookies.get(SESSION_COOKIE)
     if token:
-        with db.write_session(timeout=request.app.state.writer_timeout) as s:
-            sessions.delete(s, session_secret(request), token)
+        # Never wait for the writer (a reprocess can hold it for minutes): clearing
+        # the cookie is what signs this browser out. If the row can't be deleted
+        # now, it is harmless: only the browser ever had the token.
+        with db.try_write_session() as s:
+            if s is not None:
+                sessions.delete(s, session_secret(request), token)
     clear_session_cookie(response)
     response.status_code = status.HTTP_204_NO_CONTENT
     return response

@@ -15,7 +15,7 @@ import {
   useUpdateAccount,
 } from "../api/accounts";
 import { describeError } from "../api/client";
-import { formatDate, threeMonthsAgoIso } from "../dates";
+import { formatDate, formatInstantDate, threeMonthsAgoIso } from "../dates";
 import { Field } from "../forms/Field";
 import { formatPaise, paiseToInput, parseRupees } from "../money";
 import "../styles/accounts.css";
@@ -109,7 +109,7 @@ function AccountItem({ account }: { account: Account }) {
 
       {isArchived ? (
         <p className="account__archived">
-          Archived {formatDate(account.archived_at!)}. Its alerts no longer match; past transactions stay in your reports.
+          Archived {formatInstantDate(account.archived_at!)}. Its alerts no longer match; past transactions stay in your reports.
         </p>
       ) : mode === "edit" ? (
         <EditAccountForm account={account} onDone={() => setMode("view")} />
