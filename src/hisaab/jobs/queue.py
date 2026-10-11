@@ -30,7 +30,7 @@ from contextlib import contextmanager
 from dataclasses import dataclass
 from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import select, update
 from sqlalchemy.orm import Session
 
 from hisaab.db import Database
@@ -72,6 +72,10 @@ class JobContext:
         """Raise JobTimeout if the job has been cancelled. Long jobs call it between batches."""
         if self.cancelled.is_set():
             raise JobTimeout()
+
+    def report(self, session: Session, progress: dict[str, int | None]) -> None:
+        """Record progress on this job's row inside the caller's write transaction (no row, no-op)."""
+        session.execute(update(Job).where(Job.id == self.job_id).values(progress=json.dumps(progress)))
 
     @contextmanager
     def read(self) -> Iterator[Session]:

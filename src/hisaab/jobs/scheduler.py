@@ -17,6 +17,7 @@ from datetime import datetime
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import select
 
+from hisaab.ingest.sync import enqueue_sync
 from hisaab.jobs.queue import JobQueue
 from hisaab.models import GmailConnection
 from hisaab.tunables import tunable
@@ -29,7 +30,7 @@ def enqueue_syncs(queue: JobQueue) -> None:
     with queue.db.read_session() as s:
         users: list[str] = list(s.scalars(select(GmailConnection.user_id).where(GmailConnection.status == "connected")))
     for user_id in users:
-        queue.enqueue("sync", user_id=user_id)
+        enqueue_sync(queue, user_id)  # a backfill for anyone whose first sync never finished
 
 
 def start_scheduler(queue: JobQueue) -> BackgroundScheduler:

@@ -163,6 +163,7 @@ class Mailbox:
         self._access: str = access_token
         self._http: Transport = http
         self._sleep: Callable[[float], None] = sleep
+        self.estimate: int | None = None  # Gmail's guess at the last search's total, for progress ("of ~800")
 
     @classmethod
     def open(cls, client: OAuthClient, credential: str, *, http: Transport = default_transport,
@@ -201,6 +202,8 @@ class Mailbox:
         params: dict[str, str] = {"q": query, "maxResults": str(PAGE_SIZE)}
         while True:
             answer: dict[str, Any] = self._get("messages", params)
+            if "pageToken" not in params:
+                self.estimate = answer.get("resultSizeEstimate")
             ids: list[str] = [m["id"] for m in answer.get("messages", [])]
             if ids:
                 yield ids

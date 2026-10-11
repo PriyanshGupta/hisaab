@@ -59,6 +59,16 @@ def test_search_pages_through_ids_for_the_senders_since_a_time() -> None:
     assert fake.queries[0] == f"(from:alerts@bank.example OR from:cards@bank.example) after:{int(since.timestamp())}"
 
 
+def test_search_keeps_gmails_estimate_of_the_total_for_progress() -> None:
+    fake: FakeGmail = FakeGmail(page_size=2)
+    for i in range(5):
+        fake.add(f"m{i}", make_eml("alerts@bank.example", f"Alert {i}", "<p>hi</p>"), OCT_10 + i)
+    box: Mailbox = open_box(fake)
+    assert box.estimate is None
+    next(iter(box.search(["alerts@bank.example"], datetime(2026, 10, 8, tzinfo=UTC))))
+    assert box.estimate == 5
+
+
 def test_search_with_no_senders_never_queries_the_whole_mailbox() -> None:
     fake: FakeGmail = FakeGmail()
     with pytest.raises(ValueError, match="sender"):

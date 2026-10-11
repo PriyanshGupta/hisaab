@@ -1,5 +1,6 @@
 """/api/gmail, /oauth/callback and /api/jobs (tech-design §5.5, §6.7), against a fake Google."""
 
+import threading
 import time
 from collections.abc import Iterator
 from typing import Any
@@ -15,8 +16,8 @@ from sqlalchemy import select
 
 from hisaab.api.gmail import sign_state
 from hisaab.config import Settings
-from hisaab.ingest.sync import make_sync
-from hisaab.jobs.queue import JobKind
+from hisaab.ingest.sync import backfill_start, make_sync
+from hisaab.jobs.queue import JobContext, JobKind
 from hisaab.main import create_app
 from hisaab.models import GmailConnection, Job
 from tests import factories as f
@@ -38,8 +39,9 @@ def gmail_app(settings: Settings, migrated_engine: Any, fake: FakeGmail) -> Fast
         "encryption_key": SecretStr(KEY)})
     app: FastAPI = create_app(configured)
     app.state.mail_transport = fake
-    app.state.jobs.kinds["sync"] = JobKind(run=make_sync(configured, transport=fake, sleep=lambda s: None), timeout=60,
-                                           joins=True)
+    for kind in ("sync", "backfill"):
+        app.state.jobs.kinds[kind] = JobKind(run=make_sync(configured, transport=fake, sleep=lambda s: None),
+                                             timeout=60, joins=True)
     return app
 
 
@@ -48,6 +50,10 @@ def asha(gmail_app: FastAPI) -> Iterator[TestClient]:
     with TestClient(gmail_app) as client:
         make_user(gmail_app, "asha", "asha password 1")
         login(client, "asha", "asha password 1")
+        with gmail_app.state.db.read_session() as s:  # first run: Gmail only after accounts (slice 16)
+            start: str = backfill_start(s, client.get("/api/auth/me").json()["id"]).isoformat()
+        client.post("/api/accounts", json={"type": "bank", "display_name": "Savings", "last4": "1111",
+                                           "opening_balance_paise": 0, "opening_balance_date": start})
         yield client
 
 
@@ -82,16 +88,17 @@ def test_unconfigured_gmail_says_what_to_set(app: FastAPI) -> None:
     assert resp.status_code == 409 and "HISAAB_GOOGLE_OAUTH_CLIENT_ID" in resp.json()["detail"]
 
 
-def test_connect_round_trip_stores_the_grant_and_starts_a_sync(asha: TestClient, gmail_app: FastAPI) -> None:
+def test_connect_round_trip_stores_the_grant_and_starts_the_backfill(asha: TestClient, gmail_app: FastAPI) -> None:
     resp: Response = connect(asha)
-    assert resp.status_code == 303 and resp.headers["location"] == "/settings?gmail=connected"
+    assert resp.status_code == 303 and resp.headers["location"] == "/setup?gmail=connected"  # first run
     login(asha, "asha", "asha password 1")
     status: dict[str, Any] = asha.get("/api/gmail").json()
     assert (status["status"], status["email_address"]) == ("connected", "asha@example.test")
     with gmail_app.state.db.read_session() as s:
         assert b"fake-refresh-token" not in s.scalars(select(GmailConnection.refresh_token_enc)).one()
-        job_id: str = s.scalars(select(Job.id).where(Job.kind == "sync")).one()
-    assert wait_job(asha, job_id)["state"] == "succeeded"
+        job_id: str = s.scalars(select(Job.id).where(Job.kind == "backfill")).one()  # the first sync (slice 16)
+    job: dict[str, Any] = wait_job(asha, job_id)
+    assert (job["state"], job["progress"]) == ("succeeded", None)  # no senders registered: nothing to fetch or read
 
 
 def test_a_tampered_state_is_refused(asha: TestClient, gmail_app: FastAPI) -> None:
@@ -115,13 +122,35 @@ def test_declining_consent_comes_back_as_denied(asha: TestClient) -> None:
     assert resp.headers["location"] == "/settings?gmail=denied"
 
 
-def test_sync_now_returns_a_job_to_poll(asha: TestClient) -> None:
+def backfill_of(gmail_app: FastAPI) -> str:
+    with gmail_app.state.db.read_session() as s:
+        job_id: str = s.scalars(select(Job.id).where(Job.kind == "backfill")).one()
+        return job_id
+
+
+def test_sync_now_returns_a_job_to_poll(asha: TestClient, gmail_app: FastAPI) -> None:
     connect(asha)
     login(asha, "asha", "asha password 1")
+    wait_job(asha, backfill_of(gmail_app))
     job_id: str = asha.post("/api/gmail/sync").json()["job_id"]
     job: dict[str, Any] = wait_job(asha, job_id)
     assert (job["kind"], job["state"], job["error"]) == ("sync", "succeeded", None)
     assert set(job["result"]) >= {"stored", "already_had", "failed"}
+
+
+def test_sync_now_during_the_backfill_joins_it(asha: TestClient, gmail_app: FastAPI) -> None:
+    release: threading.Event = threading.Event()
+
+    def held(ctx: JobContext) -> None:
+        release.wait(5)
+
+    gmail_app.state.jobs.kinds["backfill"] = JobKind(run=held, timeout=60, joins=True)
+    connect(asha)
+    login(asha, "asha", "asha password 1")
+    try:
+        assert asha.post("/api/gmail/sync").json()["job_id"] == backfill_of(gmail_app)  # one job, not two
+    finally:
+        release.set()
 
 
 def test_sync_now_without_a_connection_is_refused(asha: TestClient) -> None:

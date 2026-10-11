@@ -1,8 +1,13 @@
 """The sync job (tech-design §5.1, §5.6; PRD §4.4): new mail from active senders becomes Sources.
 
 1. Window: from last_successful_sync_at less a day of overlap, but never less
-   than sync_min_lookback_hours (48) back. A first sync is that minimum;
-   the three-month backfill is slice 16.
+   than sync_min_lookback_hours (48) back. Until a sync has fully succeeded
+   once, the window is the backfill (§5.4): from local midnight on
+   backfill_start, or on the earliest opening balance if older (setup checks
+   anchors against the start on the day Gmail is connected; history from each
+   anchor on must arrive even if the backfill begins or resumes days later). So a backfill cut short (killed, timed out, a fetch failed)
+   resumes on whichever sync runs next, startup's catch-up included, and step
+   3 skips what it already stored.
 2. Search active senders over the window, page by page.
 3. Skip message ids this user already has (idempotency, §4.10).
 4. Store each new message as a pending Source: content retained for tier
@@ -16,25 +21,28 @@ A dead grant (revoked, expired, or undecryptable with the current key) moves
 the connection to needs_reauth and fails the job; the clock is untouched.
 """
 
+import calendar
 import hashlib
 import json
 import logging
 import time
 from collections.abc import Callable
 from dataclasses import asdict
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from datetime import time as day_time
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from hisaab.clock import LOCAL_TZ, local_today
 from hisaab.config import Settings
 from hisaab.crypto import DecryptionFailed, decrypt
 from hisaab.ingest import connection
 from hisaab.ingest.mailbox import Mailbox, MailboxAuthError, MailboxError, Message, Transport, default_transport
 from hisaab import llm
-from hisaab.jobs.queue import JobContext
-from hisaab.models import GmailConnection, Sender, Source, utc_now
+from hisaab.jobs.queue import JobContext, JobQueue
+from hisaab.models import Account, GmailConnection, Sender, Source, utc_now
 from hisaab.pipeline.process import process_pending
 from hisaab.transactions.repository import next_ingest_seq
 from hisaab.tunables import tunable
@@ -71,6 +79,12 @@ def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transpo
         since: datetime = started - timedelta(hours=tunable(s, "sync_min_lookback_hours", user_id))
         senders: list[str] = list(s.scalars(select(Sender.email_address).where(Sender.status == "active")
                                             .order_by(Sender.email_address)))
+        mailbox: str = row.email_address
+        if last is None:  # the backfill: from its start, or the earliest opening balance if that is older
+            anchors: list[str] = list(s.scalars(select(Account.opening_balance_date).where(
+                Account.user_id == user_id, Account.archived_at.is_(None))))
+            first_day: date = min([backfill_start(s, user_id, started), *map(date.fromisoformat, anchors)])
+            since = datetime.combine(first_day, day_time(), LOCAL_TZ)
     if last is not None:
         since = min(since, datetime.fromisoformat(last) - OVERLAP)
     reparse: bool = bool(ctx.params.get("reparse"))
@@ -88,7 +102,9 @@ def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transpo
     pipeline: dict[str, int] = process_pending(ctx, user_id, settings, llm_transport, sleep)
     if counts["failed"] == 0:  # pending_llm does not hold the clock: those Sources are stored, retried next sync
         with ctx.write() as s:
-            s.get_one(GmailConnection, user_id).last_successful_sync_at = utc_now(started)
+            now_row: GmailConnection = s.get_one(GmailConnection, user_id)
+            if now_row.email_address == mailbox:  # a reconnect to another mailbox reset the clock for its backfill
+                now_row.last_successful_sync_at = utc_now(started)
     return {**counts, **pipeline, "since": utc_now(since)}
 
 
@@ -119,6 +135,8 @@ def _sync_page(ctx: JobContext, user_id: str, box: Mailbox, page: list[str], cou
         for message in refetched:
             _requeue(s, user_id, message)
             counts["reparsed"] += 1
+        ctx.report(s, {"fetched": sum(counts[k] for k in ("stored", "already_had", "reparsed", "failed")),
+                       "estimate": box.estimate})
 
 
 def _requeue(session: Session, user_id: str, message: Message) -> None:
@@ -139,3 +157,24 @@ def _store(session: Session, user_id: str, message: Message) -> None:
         attachments=json.dumps([asdict(a) for a in message.attachments]) if message.attachments else None,
     ))
     session.flush()  # so the next message's ingest_seq sees this one
+
+
+def backfill_start(session: Session, user_id: str, now: datetime | None = None) -> date:
+    """The local date backfill_window_months calendar months before today, the day clamped to the month's end."""
+    months: int = tunable(session, "backfill_window_months", user_id)
+    today: date = local_today(now)
+    year, month0 = divmod(today.year * 12 + today.month - 1 - months, 12)
+    return date(year, month0 + 1, min(today.day, calendar.monthrange(year, month0 + 1)[1]))
+
+
+def sync_kind(session: Session, user_id: str) -> str:
+    """'backfill' until the user's first sync has fully succeeded, then 'sync' (only the timeout differs)."""
+    row: GmailConnection | None = session.get(GmailConnection, user_id)
+    return "sync" if row is not None and row.last_successful_sync_at is not None else "backfill"
+
+
+def enqueue_sync(queue: JobQueue, user_id: str) -> str:
+    """The one way a sync is enqueued (button, connect, schedule); joins one already queued or running."""
+    with queue.db.read_session() as s:
+        kind: str = sync_kind(s, user_id)
+    return queue.enqueue(kind, user_id=user_id)

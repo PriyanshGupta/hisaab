@@ -4,7 +4,8 @@ import hashlib
 import json
 import time
 from collections.abc import Callable
-from datetime import UTC, datetime, timedelta
+from datetime import UTC, date, datetime, timedelta
+from datetime import time as dt_time
 from typing import Any, TypeAlias
 
 import pytest
@@ -12,13 +13,15 @@ from cryptography.fernet import Fernet
 from pydantic import SecretStr
 from sqlalchemy import Connection, func, select, update
 
+from hisaab.clock import LOCAL_TZ
 from hisaab.config import Settings
 from hisaab.db import Database
 from hisaab.ingest import connection
 from hisaab.ingest.mailbox import Grant
-from hisaab.ingest.sync import SyncError, make_sync
+from hisaab.ingest import sync as sync_module
+from hisaab.ingest.sync import SyncError, backfill_start, make_sync
 from hisaab.jobs.queue import JobContext
-from hisaab.models import GmailConnection, Sender, Source, TransactionSource, utc_now
+from hisaab.models import GmailConnection, Job, Sender, Source, TransactionSource, utc_now
 from tests import factories as f
 from tests.claude_fake import MARKETING, TRANSACTION, FakeClaude
 from tests.gmail_fake import FakeGmail, make_eml
@@ -126,15 +129,49 @@ def test_the_clock_is_the_time_the_sync_started(db: Database, user_id: str, gmai
     assert stamped is not None and stamped <= first_call[0]  # mail arriving mid-sync is inside the next window
 
 
-def test_the_query_names_active_senders_and_the_48_hour_minimum(user_id: str, sync: Run, fake: FakeGmail,
-                                                                conn: Connection) -> None:
+@pytest.mark.parametrize(("now", "start"), [
+    (datetime(2026, 10, 11, 6, 0, tzinfo=UTC), date(2026, 7, 11)),
+    (datetime(2026, 5, 31, 6, 0, tzinfo=UTC), date(2026, 2, 28)),  # no 31 Feb: the month's last day
+    (datetime(2026, 1, 15, 6, 0, tzinfo=UTC), date(2025, 10, 15)),  # across a year
+    (datetime(2026, 10, 10, 18, 45, tzinfo=UTC), date(2026, 7, 11)),  # already 11 Oct in India
+])
+def test_backfill_start_is_three_calendar_months_back(db: Database, user_id: str, now: datetime,
+                                                      start: date) -> None:
+    with db.read_session() as s:
+        assert backfill_start(s, user_id, now) == start
+
+
+def test_a_first_sync_is_the_backfill_from_midnight_on_its_start(db: Database, user_id: str, sync: Run,
+                                                                  fake: FakeGmail, conn: Connection) -> None:
     f.sender(conn, email_address="news@bank.example", status="ignored")
     conn.commit()
+    sync(user_id)
+    with db.read_session() as s:
+        midnight: datetime = datetime.combine(backfill_start(s, user_id), dt_time(), LOCAL_TZ)
+    query: str = fake.queries[0]
+    assert query == f"(from:{BANK}) after:{int(midnight.timestamp())}"
+
+
+def test_a_first_sync_reaches_back_to_the_earliest_opening_balance(db: Database, user_id: str, sync: Run,
+                                                                    fake: FakeGmail, conn: Connection) -> None:
+    """Accounts dated on the default start, Gmail connected days later: those days must still be fetched."""
+    with db.read_session() as s:
+        anchor: date = backfill_start(s, user_id) - timedelta(days=3)
+    f.account(conn, user_id, opening_balance_date=anchor.isoformat())
+    f.account(conn, user_id, opening_balance_date=anchor.replace(year=anchor.year - 1).isoformat(), archived_at=utc_now())  # ignored
+    conn.commit()
+    sync(user_id)
+    midnight: datetime = datetime.combine(anchor, dt_time(), LOCAL_TZ)
+    assert fake.queries[0].endswith(f"after:{int(midnight.timestamp())}")
+
+
+def test_once_synced_the_window_is_the_48_hour_minimum(db: Database, user_id: str, sync: Run,
+                                                       fake: FakeGmail) -> None:
+    with db.write_session() as s:
+        s.get_one(GmailConnection, user_id).last_successful_sync_at = utc_now(datetime.now(UTC) - timedelta(hours=1))
     started: datetime = datetime.now(UTC)
     sync(user_id)
-    query: str = fake.queries[0]
-    assert query.startswith(f"(from:{BANK}) after:")
-    assert abs(int(query.rsplit(":", 1)[1]) - int((started - timedelta(hours=48)).timestamp())) <= 2
+    assert abs(int(fake.queries[0].rsplit(":", 1)[1]) - int((started - timedelta(hours=48)).timestamp())) <= 2
 
 
 def test_after_a_long_gap_the_window_reaches_back_to_the_last_sync_less_a_day(
@@ -273,3 +310,88 @@ def test_an_llm_outage_leaves_emails_pending_and_the_next_sync_reads_them(
     second: dict[str, Any] = full_sync(user_id)
     assert (second["llm_calls"], second["pending_llm"]) == (2, 0)
     assert by_message(db)["unknown"].processing_state == "parsed"
+
+
+# --- an interrupted backfill resumes (slice 16) ----------------------------------------------
+
+class Killed(BaseException):
+    """A process kill: BaseException, so no handler in the job catches it; committed pages stay."""
+
+
+def test_an_interrupted_backfill_resumes_without_duplicating(db: Database, user_id: str, gmail_settings: Settings,
+                                                             mixed_mail: FakeGmail, claude: FakeClaude) -> None:
+    configured: Settings = gmail_settings.model_copy(update={"anthropic_api_key": SecretStr("sk-test")})
+    fetches: list[str] = []
+
+    def dies_on_the_third_fetch(method: str, url: str, body: bytes | None, headers: dict[str, str]) -> tuple[int, bytes]:
+        if "/messages/" in url:
+            fetches.append(url)
+            if len(fetches) == 3:
+                raise Killed()
+        return mixed_mail(method, url, body, headers)
+
+    def run(transport: Any) -> dict[str, Any]:
+        result: dict[str, Any] = make_sync(configured, transport=transport, llm_transport=claude,
+                                           sleep=lambda s: None)(JobContext(db, "job", user_id, {}))
+        return result
+
+    with pytest.raises(Killed):
+        run(dies_on_the_third_fetch)
+    assert (source_count(db), clock(db, user_id)) == (2, None)  # page 1 committed; the clock held
+    second: dict[str, Any] = run(mixed_mail)
+    assert (second["stored"], second["already_had"]) == (1, 2)
+    with db.read_session() as s:
+        ids: list[str] = [i or "" for i in s.scalars(select(Source.external_message_id))]
+        assert sorted(ids) == ["known", "marketing", "unknown"]  # each message once
+        assert "pending" not in set(s.scalars(select(Source.processing_state)))  # page 1's Sources were read too
+        assert s.scalar(select(func.count()).select_from(TransactionSource)) == 2
+    assert clock(db, user_id) is not None
+
+
+def test_a_crash_after_storing_reads_the_stored_sources_next_time(db: Database, user_id: str, full_sync: Run,
+                                                                  monkeypatch: pytest.MonkeyPatch) -> None:
+    def killed(*args: Any, **kw: Any) -> dict[str, int]:
+        raise Killed()
+
+    with monkeypatch.context() as m:
+        m.setattr(sync_module, "process_pending", killed)
+        with pytest.raises(Killed):
+            full_sync(user_id)
+    assert {s.processing_state for s in by_message(db).values()} == {"pending"}
+    again: dict[str, Any] = full_sync(user_id)
+    assert (again["stored"], again["transactions_new"]) == (0, 2)
+    assert "pending" not in {s.processing_state for s in by_message(db).values()}
+
+
+def test_a_sync_that_outlives_a_change_of_mailbox_leaves_the_new_backfill_to_run(
+    db: Database, user_id: str, gmail_settings: Settings, fake: FakeGmail,
+) -> None:
+    """Reconnecting with another address resets the clock; a sync of the old mailbox must not set it again."""
+    def reconnects_mid_sync(method: str, url: str, body: bytes | None, headers: dict[str, str]) -> tuple[int, bytes]:
+        if "/messages/" in url:
+            with db.write_session() as s:
+                s.get_one(GmailConnection, user_id).email_address = "other@example.test"
+        return fake(method, url, body, headers)
+
+    make_sync(gmail_settings, transport=reconnects_mid_sync, sleep=lambda s: None)(JobContext(db, "job", user_id, {}))
+    assert clock(db, user_id) is None
+
+
+# --- visible progress (slice 16, tech-design §6.7: "Fetched 340 of ~800") ---------------------
+
+def test_the_job_row_shows_progress_while_fetching_then_reading(db: Database, user_id: str, conn: Connection,
+                                                                 sync: Run, monkeypatch: pytest.MonkeyPatch) -> None:
+    f.job(conn, id="job", user_id=user_id, kind="backfill", state="running")
+    conn.commit()
+    seen: list[dict[str, int | None]] = []
+    real: Callable[..., None] = JobContext.report
+
+    def recording(self: JobContext, session: Any, progress: dict[str, int | None]) -> None:
+        seen.append(progress)
+        real(self, session, progress)
+
+    monkeypatch.setattr(JobContext, "report", recording)
+    sync(user_id)
+    assert seen == [{"fetched": 2, "estimate": 4}, {"fetched": 4, "estimate": 4}, {"read": 4, "to_read": 4}]
+    with db.read_session() as s:
+        assert json.loads(s.get_one(Job, "job").progress or "null") == {"read": 4, "to_read": 4}

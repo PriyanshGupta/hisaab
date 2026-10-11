@@ -60,7 +60,7 @@ def test_app_start_fails_interrupted_jobs_and_runs_cleanup(app: FastAPI, conn: C
 def test_syncs_are_enqueued_for_connected_users_at_start_then_every_6_hours(
     db: Database, settings: Settings, conn: Connection,
 ) -> None:
-    connected: str = f.gmail_connection(conn)["user_id"]
+    connected: str = f.gmail_connection(conn, last_successful_sync_at="2026-10-11T00:00:00.000Z")["user_id"]
     f.gmail_connection(conn, status="needs_reauth")  # a dead grant is not synced; the banner asks to reconnect
     conn.commit()
     queue: JobQueue = JobQueue(db, job_kinds(settings))
@@ -70,5 +70,21 @@ def test_syncs_are_enqueued_for_connected_users_at_start_then_every_6_hours(
         assert scheduler.get_job("sync").trigger.interval == timedelta(hours=6)  # sync_interval_hours
         with db.read_session() as s:
             assert list(s.scalars(select(Job.user_id).where(Job.kind == "sync"))) == [connected]
+    finally:
+        scheduler.shutdown(wait=False)
+
+
+def test_a_connected_user_whose_backfill_never_finished_gets_a_backfill_at_start(
+    db: Database, settings: Settings, conn: Connection,
+) -> None:
+    """A process killed mid-backfill: the catch-up must not be a 48-hour sync that advances the clock."""
+    interrupted: str = f.gmail_connection(conn)["user_id"]  # clock still NULL
+    conn.commit()
+    queue: JobQueue = JobQueue(db, job_kinds(settings))
+    scheduler: BackgroundScheduler = start_scheduler(queue)
+    try:
+        wait_until(lambda: jobs_of_kind(db, "backfill"))
+        with db.read_session() as s:
+            assert list(s.scalars(select(Job.user_id).where(Job.kind.in_(("sync", "backfill"))))) == [interrupted]
     finally:
         scheduler.shutdown(wait=False)

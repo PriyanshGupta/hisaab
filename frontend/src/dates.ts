@@ -40,8 +40,10 @@ export function todayIso(now: Date = new Date()): string {
  * from day one (PRD §4.11).
  */
 export function threeMonthsAgoIso(now: Date = new Date()): string {
-  const d = new Date(now.getFullYear(), now.getMonth() - 3, now.getDate());
-  return toIso(d);
+  const first = new Date(now.getFullYear(), now.getMonth() - 3, 1);
+  const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();
+  // 31 May -> 28 Feb, not 3 Mar: the same day the server's backfill starts on
+  return toIso(new Date(first.getFullYear(), first.getMonth(), Math.min(now.getDate(), lastDay)));
 }
 
 function toIso(d: Date): string {

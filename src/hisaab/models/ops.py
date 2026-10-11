@@ -8,7 +8,9 @@ from sqlalchemy.orm import Mapped, mapped_column
 from hisaab.models.base import Base, created_column, id_column, one_of
 
 # cleanup: ruling 2026-10-11 (migration 0004); §6.7 runs it through the queue like every job.
-JOB_KINDS: tuple[str, ...] = ("sync", "resync", "sweep", "statement_merge", "reprocess_normalization", "cleanup")
+# backfill: slice 16 (migration 0007); §6.7 gives it a 30-minute timeout of its own.
+JOB_KINDS: tuple[str, ...] = ("sync", "resync", "sweep", "statement_merge", "reprocess_normalization", "cleanup",
+                              "backfill")
 JOB_STATES: tuple[str, ...] = ("queued", "running", "succeeded", "failed", "cancelled")
 
 

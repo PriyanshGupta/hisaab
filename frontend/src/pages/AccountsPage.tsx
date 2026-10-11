@@ -234,14 +234,14 @@ function checkAmount(type: AccountType, raw: string): { paise?: number; error?: 
   return { paise: result.paise };
 }
 
-function AddAccountForm({ onDone }: { onDone: () => void }) {
+export function AddAccountForm({ onDone, defaultDate }: { onDone: () => void; defaultDate?: string }) {
   const create = useCreateAccount();
   const [type, setType] = useState<AccountType>("bank");
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
   const [last4, setLast4] = useState("");
   const [amount, setAmount] = useState("");
-  const [date, setDate] = useState(threeMonthsAgoIso());
+  const [date, setDate] = useState(defaultDate ?? threeMonthsAgoIso());
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const submit = (event: FormEvent) => {

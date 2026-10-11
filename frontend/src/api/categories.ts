@@ -5,6 +5,7 @@ import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tansta
 
 import { api, apiError, send } from "./client";
 import type { components } from "./schema";
+import { setupKey } from "./setup";
 import { transactionsKey } from "./transactions";
 
 export type Category = components["schemas"]["CategoryOut"];
@@ -40,6 +41,7 @@ function refreshAfter(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: categoriesKey }),
     queryClient.invalidateQueries({ queryKey: payeesKey }),
     queryClient.invalidateQueries({ queryKey: transactionsKey }),
+    queryClient.invalidateQueries({ queryKey: setupKey }), // the first-run step and the categorize groups
   ]);
 }
 

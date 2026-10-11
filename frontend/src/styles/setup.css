@@ -1,0 +1,69 @@
+/* First-run setup and bulk categorization. */
+.setup-steps {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  margin: 0 0 var(--s4);
+  padding: 0;
+  list-style: none;
+  counter-reset: step;
+}
+.setup-steps__step {
+  counter-increment: step;
+  color: var(--ink-muted);
+}
+.setup-steps__step::before {
+  content: counter(step) ". ";
+}
+.setup-steps__step[aria-current="step"] {
+  color: var(--accent);
+  font-weight: var(--w-title);
+}
+.setup-step {
+  max-width: 40rem;
+  display: grid;
+  gap: var(--s3);
+}
+.setup-step__title {
+  margin: 0;
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+}
+.setup-list {
+  margin: 0;
+  padding-left: var(--s4);
+}
+.setup-late {
+  display: block;
+  padding: 0;
+  background: none;
+  border: 0;
+}
+.payee-groups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  max-width: 48rem;
+}
+.payee-group {
+  display: grid;
+  grid-template-columns: 1fr minmax(10rem, 14rem) auto;
+  gap: var(--s2) var(--s3);
+  align-items: center;
+  padding: var(--s3) 0;
+  border-top: 1px solid var(--rule);
+}
+.payee-group__who {
+  display: grid;
+}
+.payee-group__name {
+  font-weight: var(--w-title);
+}
+.payee-group > .form-error {
+  grid-column: 1 / -1;
+}
+@media (max-width: 40rem) {
+  .payee-group {
+    grid-template-columns: 1fr;
+  }
+}

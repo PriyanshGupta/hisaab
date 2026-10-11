@@ -19,7 +19,7 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from hisaab.accounts import repository as accounts_repo
-from hisaab.api import accounts, admin_users, auth, categories, gmail, jobs, transactions
+from hisaab.api import accounts, admin_users, auth, categories, gmail, jobs, setup, transactions
 from hisaab.auth import users
 from hisaab.auth.throttle import LoginThrottle
 from hisaab.categories import repository as categories_repo
@@ -61,6 +61,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(gmail.router)
     app.include_router(gmail.callback_router)
     app.include_router(jobs.router)
+    app.include_router(setup.router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
 
 

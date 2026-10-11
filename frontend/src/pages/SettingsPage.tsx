@@ -65,7 +65,7 @@ function GmailConnection({ status }: { status: GmailStatus }) {
   );
 }
 
-function ConnectButton({ label }: { label: string }) {
+export function ConnectButton({ label }: { label: string }) {
   const connect = useConnectGmail();
   return (
     <>

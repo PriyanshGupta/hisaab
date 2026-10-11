@@ -17,6 +17,7 @@ class JobOut(BaseModel):
     id: str
     kind: str
     state: str  # queued | running | succeeded | failed | cancelled
+    progress: dict[str, int | None] | None  # {"fetched", "estimate"} then {"read", "to_read"} (sync, backfill)
     result: dict[str, Any] | None
     error: str | None  # a sentence for the person
     created_at: str
@@ -30,6 +31,11 @@ def get_job(job_id: str, user: CurrentUser = Depends(current_user), db: Database
         job: Job | None = s.get(Job, job_id)
         if job is None or job.user_id != user.id:
             raise HTTPException(status.HTTP_404_NOT_FOUND, "No such job")
-        return JobOut(id=job.id, kind=job.kind, state=job.state, result=json.loads(job.result) if job.result else None,
-                      error=json.loads(job.error)["message"] if job.error else None, created_at=job.created_at,
-                      started_at=job.started_at, finished_at=job.finished_at)
+        return job_out(job)
+
+
+def job_out(job: Job) -> JobOut:
+    return JobOut(id=job.id, kind=job.kind, state=job.state, progress=json.loads(job.progress) if job.progress else None,
+                  result=json.loads(job.result) if job.result else None,
+                  error=json.loads(job.error)["message"] if job.error else None, created_at=job.created_at,
+                  started_at=job.started_at, finished_at=job.finished_at)

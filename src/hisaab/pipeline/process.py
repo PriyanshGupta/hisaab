@@ -52,6 +52,7 @@ def process_pending(ctx: JobContext, user_id: str, settings: Settings, transport
                 (i, route(s, s.get_one(Source, i), extract, settings.email_model)) for i in waiting[start:start + BATCH]]
         with ctx.write() as s:
             counts: PipelineCounts = apply(s, user_id, batch)
+            ctx.report(s, {"read": start + len(batch), "to_read": len(waiting)})
         totals.update({k: v for k, v in vars(counts).items()})
         totals.update("route:" + r.diagnostic["route"] for _, r in batch)
     return {"tier1": totals["route:tier1"], "cache_hits": totals["route:cache"], "llm_calls": totals["llm_calls"],

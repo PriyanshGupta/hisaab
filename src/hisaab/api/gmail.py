@@ -6,7 +6,9 @@ the browser back to http://localhost:<port>/oauth/callback, the loopback
 redirect a Desktop OAuth client allows. The callback trusts the state, not a
 cookie: someone who opened the app at a LAN address has no session cookie for
 localhost. The code exchange is network I/O, done before the short write that
-stores the grant. A connect is followed by a sync.
+stores the grant. A connect is followed by a sync: the backfill, the first
+time. During first run, connect waits for accounts and their opening balances
+(tech-design §5.4) and the callback returns to /setup.
 """
 
 import hashlib
@@ -20,10 +22,12 @@ from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
 
 from hisaab.api.deps import CurrentUser, current_user, get_db, session_secret
+from hisaab.api.setup import first_run_problem
 from hisaab.config import Settings
 from hisaab.db import Database
 from hisaab.ingest import connection
 from hisaab.ingest.mailbox import Grant, MailboxError, OAuthClient, authorization_url, exchange_code
+from hisaab.ingest.sync import enqueue_sync, sync_kind
 from hisaab.jobs.queue import JobQueue
 from hisaab.models import GmailConnection
 
@@ -92,10 +96,15 @@ def gmail_status(request: Request, user: CurrentUser = Depends(current_user),
 
 
 @router.post("/connect", response_model=ConnectOut)
-def connect(request: Request, user: CurrentUser = Depends(current_user)) -> ConnectOut:
+def connect(request: Request, user: CurrentUser = Depends(current_user),
+            db: Database = Depends(get_db)) -> ConnectOut:
     settings: Settings = request.app.state.settings
     client: OAuthClient = connection.oauth_client(settings)
     connection.encryption_key(settings)  # refuse now rather than after the user has consented
+    with db.read_session() as s:
+        problem: str | None = first_run_problem(s, user.id)  # §5.4: accounts and balances before Gmail
+    if problem is not None:
+        raise HTTPException(status.HTTP_409_CONFLICT, problem)
     return ConnectOut(authorization_url=authorization_url(client, sign_state(session_secret(request), user.id)))
 
 
@@ -108,17 +117,24 @@ def sync_now(request: Request, user: CurrentUser = Depends(current_user), db: Da
         raise HTTPException(status.HTTP_409_CONFLICT,
                             "Connect Gmail first." if state is None else "Reconnect Gmail first.")
     jobs: JobQueue = request.app.state.jobs
-    return JobRef(job_id=jobs.enqueue("sync", user_id=user.id))  # joins a queued or running sync
+    return JobRef(job_id=enqueue_sync(jobs, user.id))  # joins a queued or running sync or backfill
 
 
 @callback_router.get(connection.CALLBACK_PATH, include_in_schema=False)
 def oauth_callback(request: Request, state: str = "", code: str = "", error: str = "") -> RedirectResponse:
+    user_id: str | None = verify_state(session_secret(request), state)
+    db: Database = request.app.state.db
+    page: str = "/settings"
+    if user_id is not None:
+        with db.read_session() as s:
+            if sync_kind(s, user_id) == "backfill":
+                page = "/setup"  # first run: back to the setup steps
+
     def back(outcome: str) -> RedirectResponse:
-        return RedirectResponse(f"/settings?gmail={outcome}", status_code=status.HTTP_303_SEE_OTHER)
+        return RedirectResponse(f"{page}?gmail={outcome}", status_code=status.HTTP_303_SEE_OTHER)
 
     if error:  # e.g. access_denied: the user declined on Google's screen
         return back("denied")
-    user_id: str | None = verify_state(session_secret(request), state)
     if user_id is None or not code:
         return back("error")
     settings: Settings = request.app.state.settings
@@ -127,9 +143,7 @@ def oauth_callback(request: Request, state: str = "", code: str = "", error: str
         key: str = connection.encryption_key(settings)
     except (MailboxError, connection.GmailNotConfigured):
         return back("error")
-    db: Database = request.app.state.db
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         connection.save_grant(s, user_id, grant, key)
-    jobs: JobQueue = request.app.state.jobs
-    jobs.enqueue("sync", user_id=user_id)
+    enqueue_sync(request.app.state.jobs, user_id)  # the backfill, on a first connection
     return back("connected")

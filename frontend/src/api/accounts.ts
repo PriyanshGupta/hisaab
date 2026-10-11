@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiError, send } from "./client";
 import type { components } from "./schema";
+import { setupKey } from "./setup";
 
 export type Account = components["schemas"]["AccountOut"];
 export type AccountType = Account["type"];
@@ -30,7 +31,8 @@ function useAccountsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResul
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: fn,
-    onSuccess: () => queryClient.invalidateQueries({ queryKey: accountsKey }),
+    onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: accountsKey }),
+      queryClient.invalidateQueries({ queryKey: setupKey })]),
   });
 }
 

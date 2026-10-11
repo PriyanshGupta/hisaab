@@ -98,6 +98,7 @@ class FakeGmail:
             start: int = int(query.get("pageToken", ["0"])[0])
             page: list[str] = ids[start:start + self.page_size]
             answer: dict[str, Any] = {"messages": [{"id": m, "threadId": m} for m in page]} if page else {}
+            answer["resultSizeEstimate"] = len(ids)  # Gmail's is approximate; the fake's is exact
             if start + self.page_size < len(ids):
                 answer["nextPageToken"] = str(start + self.page_size)
             return 200, json.dumps(answer).encode()
