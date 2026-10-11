@@ -17,6 +17,7 @@ dependencies = [
   "google-re2>=1.1",           # template patterns: linear-time matching (tech-design §4.5)
   "pdfplumber>=0.11",          # statement PDFs: words, rules, passwords (tech-design §4.7)
   "apscheduler>=3.11,<4",      # scheduled jobs (tech-design §6.7); 4.x is still pre-release
+  "cryptography>=44",          # Fernet: Gmail grants encrypted at rest (tech-design §9.1)
 ]
 
 [project.optional-dependencies]

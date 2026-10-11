@@ -10,6 +10,7 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from sqlalchemy import Connection, select
 
+from hisaab.config import Settings
 from hisaab.db import Database
 from hisaab.jobs.kinds import job_kinds
 from hisaab.jobs.queue import INTERRUPTED, JobQueue
@@ -30,8 +31,8 @@ def wait_until(check: Any, timeout: float = 5.0) -> None:
         time.sleep(0.02)
 
 
-def test_cleanup_is_enqueued_at_start_then_every_24_hours(db: Database) -> None:
-    queue: JobQueue = JobQueue(db, job_kinds())  # worker not started: what the scheduler enqueues stays queued
+def test_cleanup_is_enqueued_at_start_then_every_24_hours(db: Database, settings: Settings) -> None:
+    queue: JobQueue = JobQueue(db, job_kinds(settings))  # worker not started: what the scheduler enqueues stays queued
     scheduler: BackgroundScheduler = start_scheduler(queue)
     try:
         wait_until(lambda: jobs_of_kind(db, "cleanup"))
@@ -54,3 +55,20 @@ def test_app_start_fails_interrupted_jobs_and_runs_cleanup(app: FastAPI, conn: C
             killed: Job | None = s.get(Job, "killed-mid-sync")
             assert killed is not None and killed.state == "failed"
             assert json.loads(killed.error or "{}") == {"message": INTERRUPTED}
+
+
+def test_syncs_are_enqueued_for_connected_users_at_start_then_every_6_hours(
+    db: Database, settings: Settings, conn: Connection,
+) -> None:
+    connected: str = f.gmail_connection(conn)["user_id"]
+    f.gmail_connection(conn, status="needs_reauth")  # a dead grant is not synced; the banner asks to reconnect
+    conn.commit()
+    queue: JobQueue = JobQueue(db, job_kinds(settings))
+    scheduler: BackgroundScheduler = start_scheduler(queue)
+    try:
+        wait_until(lambda: jobs_of_kind(db, "sync"))  # catch-up at startup (tech-design §6.7)
+        assert scheduler.get_job("sync").trigger.interval == timedelta(hours=6)  # sync_interval_hours
+        with db.read_session() as s:
+            assert list(s.scalars(select(Job.user_id).where(Job.kind == "sync"))) == [connected]
+    finally:
+        scheduler.shutdown(wait=False)

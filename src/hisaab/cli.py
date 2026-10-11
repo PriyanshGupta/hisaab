@@ -78,7 +78,7 @@ def _sync_seeds(settings: Settings) -> int:
         db.dispose()
     print(f"templates: {report.templates_added} added, {report.templates_updated} updated; "
           f"payees: {report.payees_added} added; patterns: {report.patterns_added} added, "
-          f"{report.patterns_updated} updated")
+          f"{report.patterns_updated} updated; senders: {report.senders_added} added")
     return 0
 
 

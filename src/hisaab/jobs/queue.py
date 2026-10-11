@@ -74,6 +74,12 @@ class JobContext:
             raise JobTimeout()
 
     @contextmanager
+    def read(self) -> Iterator[Session]:
+        """A read-only session (the read pool): sees the last committed data, cannot write."""
+        with self._db.read_session() as session:
+            yield session
+
+    @contextmanager
     def write(self) -> Iterator[Session]:
         """One write transaction on the write connection: commits on success, rolls back on error."""
         self.checkpoint()

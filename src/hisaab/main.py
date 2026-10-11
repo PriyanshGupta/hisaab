@@ -19,12 +19,14 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from hisaab.accounts import repository as accounts_repo
-from hisaab.api import accounts, admin_users, auth, categories, transactions
+from hisaab.api import accounts, admin_users, auth, categories, gmail, jobs, transactions
 from hisaab.auth import users
 from hisaab.auth.throttle import LoginThrottle
 from hisaab.categories import repository as categories_repo
 from hisaab.config import Settings
 from hisaab.db import Database, WriterBusy
+from hisaab.ingest.connection import GmailNotConfigured
+from hisaab.ingest.mailbox import default_transport
 from hisaab.jobs.kinds import job_kinds
 from hisaab.jobs.queue import JobQueue
 from hisaab.jobs.scheduler import start_scheduler
@@ -56,6 +58,9 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(transactions.router)
     app.include_router(categories.categories_router)
     app.include_router(categories.payees_router)
+    app.include_router(gmail.router)
+    app.include_router(gmail.callback_router)
+    app.include_router(jobs.router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
 
 
@@ -75,6 +80,7 @@ def _require_session_secret(settings: Settings) -> None:
 # classes are listed before their bases (Starlette matches by class anyway).
 _ERROR_STATUS: tuple[tuple[type[Exception], int], ...] = (
     (WriterBusy, 503),
+    (GmailNotConfigured, 409),
     (accounts_repo.NotFound, 404),
     (accounts_repo.DuplicateLast4, 409),
     (accounts_repo.DuplicateIdentifier, 409),
@@ -138,7 +144,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app: FastAPI = FastAPI(title=APP_TITLE, lifespan=lifespan)
     app.state.settings = settings
     app.state.db = Database(settings.database_path)
-    app.state.jobs = JobQueue(app.state.db, job_kinds())
+    app.state.jobs = JobQueue(app.state.db, job_kinds(settings))
+    app.state.mail_transport = default_transport  # the mailbox transport; tests swap in a fake Gmail
     # How long a user action waits for the writer lock before answering 503.
     app.state.writer_timeout = 10.0
     app.state.login_throttle = LoginThrottle()

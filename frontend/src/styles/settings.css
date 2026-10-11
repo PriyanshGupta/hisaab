@@ -1,0 +1,20 @@
+/* Settings screen: one section per concern, ruled off like the other screens. */
+.settings-section {
+  max-width: 40rem;
+  padding: var(--s4) 0;
+  border-top: 1px solid var(--rule);
+  display: grid;
+  gap: var(--s3);
+  justify-items: start;
+}
+.settings-section__title {
+  margin: 0;
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+}
+.settings-note {
+  padding: var(--s2) var(--s3);
+  background: var(--accent-wash);
+  border-left: 3px solid var(--accent);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+}

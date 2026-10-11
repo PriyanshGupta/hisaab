@@ -25,7 +25,7 @@ from typing import Any
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from hisaab.models import NormalizationPattern, ParserTemplate, Payee
+from hisaab.models import NormalizationPattern, ParserTemplate, Payee, Sender
 from hisaab.parsing.email_spec import InvalidSpec, parse_email_spec
 from hisaab.parsing.statement_spec import InvalidStatementSpec, parse_statement_spec
 from hisaab.parsing.templates import save_email_template, save_statement_template
@@ -42,12 +42,32 @@ class SeedReport:
     payees_added: int
     patterns_added: int
     patterns_updated: int = 0
+    senders_added: int = 0
 
 
 def sync_seeds(session: Session, template_dir: Path = SEED_TEMPLATES, patterns_file: Path = SEED_PATTERNS) -> SeedReport:
     added, updated = _sync_templates(session, template_dir)
     payees_added, patterns_added, patterns_updated = _sync_patterns(session, patterns_file)
-    return SeedReport(added, updated, payees_added, patterns_added, patterns_updated)
+    senders_added: int = _sync_senders(session, template_dir)
+    return SeedReport(added, updated, payees_added, patterns_added, patterns_updated, senders_added)
+
+
+def _sync_senders(session: Session, template_dir: Path) -> int:
+    """Every sender a seed email spec lists joins the registry as active (PRD §4.3 track 1).
+    An existing sender keeps its status: one the admin ignored stays ignored."""
+    known: set[str] = set(session.scalars(select(Sender.email_address)))
+    added: int = 0
+    for path in sorted(template_dir.glob("*.json")):
+        spec: dict[str, Any] = json.loads(path.read_text())
+        if spec.get("artifact_type") == "statement":
+            continue
+        for address in parse_email_spec(spec).senders:  # specs were validated by _sync_templates
+            if address not in known:
+                session.add(Sender(email_address=address, status="active"))
+                known.add(address)
+                added += 1
+    session.flush()
+    return added
 
 
 def _sync_templates(session: Session, template_dir: Path) -> tuple[int, int]:

@@ -8,6 +8,7 @@ import { CategoriesPage } from "./pages/CategoriesPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
+import { SettingsPage } from "./pages/SettingsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { AppShell } from "./shell/AppShell";
 
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
       { path: "add", element: <AddPage /> },
       { path: "accounts", element: <AccountsPage /> },
       { path: "categories", element: <CategoriesPage /> },
+      { path: "settings", element: <SettingsPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

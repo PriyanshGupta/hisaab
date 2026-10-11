@@ -117,6 +117,8 @@ class Source(Base):
     ingested_at: Mapped[str]
     processing_state: Mapped[str]
     diagnostic: Mapped[str | None]  # JSON; retained after content discard
+    # JSON [{filename, size, mime_type}]: attachment METADATA, never the files (ruling 2026-10-11)
+    attachments: Mapped[str | None]
     created_at: Mapped[str] = created_column()
 
 

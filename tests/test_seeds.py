@@ -9,7 +9,7 @@ import pytest
 from sqlalchemy import func, select
 
 from hisaab.db import Database
-from hisaab.models import NormalizationPattern, ParserTemplate, Payee
+from hisaab.models import NormalizationPattern, ParserTemplate, Payee, Sender
 from hisaab.parsing.email_spec import parse_email_spec
 from hisaab.parsing.statement_spec import parse_statement_spec
 from hisaab.payees.normalization import PatternRule, match_payee
@@ -46,7 +46,8 @@ def rows(db: Database) -> list[tuple[str, str, str, str]]:
 
 def test_first_sync_loads_every_template_active_and_every_pattern(db: Database, seed_dir: Path) -> None:
     report: SeedReport = sync(db, seed_dir)
-    assert report == SeedReport(templates_added=2, templates_updated=0, payees_added=2, patterns_added=2)
+    assert report == SeedReport(templates_added=2, templates_updated=0, payees_added=2, patterns_added=2,
+                                senders_added=len(parse_email_spec(SPEC).senders))
     assert rows(db) == [("example_debit", "email", "active", "human"), ("example_savings", "statement", "active", "human")]
     with db.read_session() as s:
         found: list[tuple[str, str, int]] = [
@@ -141,3 +142,32 @@ def test_the_committed_patterns_resolve_brands_and_their_legal_names(raw: str, p
 def test_every_committed_pattern_is_usable() -> None:
     for rule in _seed_rules():
         assert rule.match_type in ("exact", "contains", "regex") and rule.pattern.strip()
+
+
+def senders(db: Database) -> list[tuple[str, str]]:
+    with db.read_session() as s:
+        return [(r.email_address, r.status) for r in s.scalars(select(Sender).order_by(Sender.email_address))]
+
+
+def test_every_seed_email_spec_sender_is_registered_active_once(db: Database, seed_dir: Path) -> None:
+    expected: list[str] = sorted(parse_email_spec(SPEC).senders)
+    assert sync(db, seed_dir).senders_added == len(expected)
+    assert senders(db) == [(a, "active") for a in expected]
+    assert sync(db, seed_dir).senders_added == 0
+    assert senders(db) == [(a, "active") for a in expected]
+
+
+def test_a_sender_the_admin_ignored_stays_ignored(db: Database, seed_dir: Path) -> None:
+    address: str = parse_email_spec(SPEC).senders[0]
+    with db.write_session() as s:
+        s.add(Sender(email_address=address, status="ignored"))
+    sync(db, seed_dir)
+    assert (address, "ignored") in senders(db)
+
+
+def test_the_committed_seeds_register_every_listed_sender(db: Database) -> None:
+    with db.write_session() as s:
+        sync_seeds(s)
+    listed: set[str] = {a for p in SEED_TEMPLATES.glob("*.json") if json.loads(p.read_text()).get("artifact_type") != "statement"
+                        for a in parse_email_spec(json.loads(p.read_text())).senders}
+    assert {a for a, status in senders(db) if status == "active"} == listed

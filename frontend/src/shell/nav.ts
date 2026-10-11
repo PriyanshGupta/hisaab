@@ -9,4 +9,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: "/add", label: "Add" },
   { to: "/accounts", label: "Accounts" },
   { to: "/categories", label: "Categories" },
+  { to: "/settings", label: "Settings" },
 ];

@@ -87,6 +87,11 @@ class ListedTransaction:
     payee_name: str | None
 
 
+def next_ingest_seq(session: Session) -> int:
+    """ingest_seq is global and monotonic; safe because every write holds the writer lock."""
+    return (session.scalar(select(func.max(Source.ingest_seq))) or 0) + 1
+
+
 def derived_key(user_id: str, anchor_ingest_seq: int, discriminator: str) -> str:
     """Stable identity across regeneration (tech-design §3.6): provenance, never content."""
     return hashlib.sha256(f"{user_id}:{anchor_ingest_seq}:{discriminator}".encode()).hexdigest()
@@ -245,8 +250,7 @@ def create_manual(
                "to_account_id": to_account_id, "payee_raw": payee_raw, "category_id": category_id}
     content: bytes = json.dumps(entered, sort_keys=True, separators=(",", ":")).encode()
     now: str = utc_now()
-    # ingest_seq is global and monotonic; safe because every write holds the writer lock.
-    seq: int = (session.scalar(select(func.max(Source.ingest_seq))) or 0) + 1
+    seq: int = next_ingest_seq(session)
     source: Source = Source(ingest_seq=seq, user_id=user_id, kind="manual", content=content,
                     content_hash=hashlib.sha256(content).hexdigest(), received_at=now, ingested_at=now,
                     processing_state="parsed")
