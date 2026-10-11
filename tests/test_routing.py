@@ -75,7 +75,7 @@ def test_an_unknown_format_goes_to_the_llm_keeps_its_content_and_is_cached(
     assert (result.cache_entry.outcome, result.cache_entry.model, result.cache_entry.tier) == ("transaction", MODEL, 2)
     assert json.loads(result.cache_entry.extracted or "{}") == TRANSACTION
     assert result.diagnostic == {"route": "tier2", "model": MODEL, "outcome": "transaction", "missing_fields": [],
-                                 "tier1_attempts": []}
+                                 "tier1_attempts": [], "sender": "offers@shop.example"}
 
 
 def test_templates_that_declined_are_named_in_the_tier_2_diagnostic(routed: Callable[[bytes, Llm], Routed]) -> None:
@@ -119,3 +119,20 @@ def test_an_off_contract_reply_fails_without_recording_the_bad_value(routed: Cal
     result: Routed = routed(UNKNOWN_EML, Llm(ContractError("amount: '45000' is not a positive integer of paise")))
     assert (result.state, result.cache_entry) == ("failed", None)
     assert result.diagnostic["contract_violation"] == "amount" and "45000" not in json.dumps(result.diagnostic)
+
+
+@pytest.mark.parametrize("content,llm", [(DEBIT_EML, Llm()), (UNKNOWN_EML, Llm()),
+                                         (UNKNOWN_EML, Llm(LLMUnavailable("down")))],
+                         ids=["tier1", "tier2", "pending_llm"])
+def test_every_diagnostic_names_the_sender_for_dedup(routed: Callable[[bytes, Llm], Routed], content: bytes,
+                                                     llm: Llm) -> None:
+    sender: str = "alerts@example-bank.in" if content == DEBIT_EML else "offers@shop.example"
+    assert routed(content, llm).diagnostic["sender"] == sender
+
+
+def test_a_cache_hit_names_the_sender_too(db: Database, routed: Callable[[bytes, Llm], Routed]) -> None:
+    import hashlib
+    with db.write_session() as s:
+        s.add(ExtractionCache(content_hash=hashlib.sha256(UNKNOWN_EML).hexdigest(), outcome="transaction",
+                              extracted=json.dumps(TRANSACTION), model=MODEL, tier=2))
+    assert routed(UNKNOWN_EML, Llm()).diagnostic["sender"] == "offers@shop.example"

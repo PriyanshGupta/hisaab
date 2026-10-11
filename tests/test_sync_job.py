@@ -238,8 +238,9 @@ def test_sync_routes_every_email_and_keeps_content_only_where_section_3_7_says(
     db: Database, user_id: str, full_sync: Run, claude: FakeClaude,
 ) -> None:
     result: dict[str, Any] = full_sync(user_id)
-    assert {k: result[k] for k in ("tier1", "llm_calls", "cache_hits", "transactions_new", "non_transactional")} == \
-        {"tier1": 1, "llm_calls": 2, "cache_hits": 0, "transactions_new": 2, "non_transactional": 1}
+    assert {k: result[k] for k in ("tier1", "llm_calls", "cache_hits", "transactions_new", "duplicates",
+                                   "non_transactional")} == \
+        {"tier1": 1, "llm_calls": 2, "cache_hits": 0, "transactions_new": 2, "duplicates": 0, "non_transactional": 1}
     sources: dict[str, Source] = by_message(db)
     assert (sources["known"].processing_state, sources["known"].content) == ("parsed", None)
     assert sources["unknown"].processing_state == "parsed" and sources["unknown"].content is not None

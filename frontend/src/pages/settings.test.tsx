@@ -51,8 +51,9 @@ test("sync now polls the job and reports what it stored", async () => {
   await user.click(await screen.findByRole("button", { name: "Sync now" }));
   expect(await screen.findByText("Syncing…")).toBeInTheDocument();
   api.set("GET /api/jobs/j-1", job("succeeded", {
-    result: { stored: 3, already_had: 5, failed: 0, transactions_new: 2, needs_review: 1, pending_llm: 0 } }));
-  expect(await screen.findByText("2 new transactions, 1 needs review. 5 emails were already here.", {}, { timeout: 3000 }))
+    result: { stored: 3, already_had: 5, failed: 0, transactions_new: 2, needs_review: 1, duplicates: 1, pending_llm: 0 } }));
+  expect(await screen.findByText("2 new transactions, 1 needs review, 1 duplicate skipped. 5 emails were already here.",
+    {}, { timeout: 3000 }))
     .toBeInTheDocument();
 });
 

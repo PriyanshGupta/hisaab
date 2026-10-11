@@ -42,14 +42,16 @@ def test_income_rejects_card_internal_source_or_no_destination(from_leg: str | N
     bad("income", from_leg, to_leg)
 
 
-# transfer: internal -> a different internal account
-@pytest.mark.parametrize("from_leg,to_leg", [(BANK, CARD), (BANK, CASH), (CASH, BANK), (UNRESOLVED, CARD)])
+# transfer: internal -> a different internal account; the paying account may be
+# unknown (None): a card payment received from an account the app can't see (ruling 2026-10-11)
+@pytest.mark.parametrize("from_leg,to_leg", [(BANK, CARD), (BANK, CASH), (CASH, BANK), (UNRESOLVED, CARD), (None, CARD),
+                                             (None, BANK)])
 def test_transfer_between_two_internal_accounts(from_leg: str | None, to_leg: str | None) -> None:
     ok("transfer", from_leg, to_leg)
 
 
-@pytest.mark.parametrize("from_leg,to_leg,same", [(BANK, None, False), (None, BANK, False), (BANK, BANK, True)])
-def test_transfer_needs_two_distinct_internal_legs(from_leg: str | None, to_leg: str | None, same: bool) -> None:
+@pytest.mark.parametrize("from_leg,to_leg,same", [(BANK, None, False), (None, None, False), (BANK, BANK, True)])
+def test_transfer_needs_a_destination_distinct_from_its_source(from_leg: str | None, to_leg: str | None, same: bool) -> None:
     bad("transfer", from_leg, to_leg, same_account=same)
 
 

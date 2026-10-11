@@ -138,6 +138,8 @@ def test_missing_fields_and_foreign_currency_are_named_in_the_review_reason(db: 
                                   "missing_fields": ["payee_raw"]}))
     reason: str = only_transaction(db).review_reason or ""
     assert "couldn't read: payee_raw" in reason and "USD" in reason
+    review: list[str] = json.loads(source_row(db).diagnostic or "{}")["review"]  # for later runs, without content
+    assert review == ["couldn't read: payee_raw", "currency USD isn't supported (INR only)"]
 
 
 def test_a_tier_2_read_is_cached_and_keeps_its_content(db: Database, process: Process) -> None:

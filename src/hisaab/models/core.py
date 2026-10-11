@@ -148,10 +148,12 @@ class Transaction(Base):
     __table_args__: tuple[Any, ...] = (
         UniqueConstraint("user_id", "derived_key"),
         CheckConstraint("amount > 0", name="amount_positive"),
+        # The paying account may be unknown: a card payment received from an account
+        # the app can't see (migration 0006, ruling 2026-10-11).
         CheckConstraint(
-            "kind <> 'transfer' OR (from_account_id IS NOT NULL AND to_account_id IS NOT NULL"
-            " AND from_account_id <> to_account_id)",
-            name="transfer_has_two_distinct_legs",
+            "kind <> 'transfer' OR (to_account_id IS NOT NULL"
+            " AND (from_account_id IS NULL OR from_account_id <> to_account_id))",
+            name="transfer_legs",
         ),
         CheckConstraint(
             "from_account_id IS NULL OR unresolved_from_identifier IS NULL",

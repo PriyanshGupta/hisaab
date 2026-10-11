@@ -8,12 +8,13 @@ outside the user's net worth).
     kind        from                 to
     expense     bank / card / cash   external
     income      external             bank / cash
-    transfer    internal             internal, a different account
+    transfer    internal / unknown   internal, a different account   (unknown payer: ruling 2026-10-11)
     refund      external             bank / card / cash   (cash: ruling 2026-10-11)
     adjustment  external             any internal account
     lending     schema only in v0: refused
 
-Income never lands on a card: card credits (cashback, rewards) are refunds (§3.8).
+Income never lands on a card: card credits (cashback, rewards) are refunds (§3.8),
+except a payment received with no merchant named: a card bill payment, a transfer.
 The database enforces only the transfer rule (a CHECK); this is the rest.
 """
 
@@ -24,7 +25,7 @@ INTERNAL: set[str | None] = {"bank", "credit_card", "cash", UNRESOLVED}
 _RULES: dict[str, tuple[set[str | None], set[str | None]]] = {
     "expense": (INTERNAL, {None}),
     "income": ({None}, {"bank", "cash", UNRESOLVED}),
-    "transfer": (INTERNAL, INTERNAL),
+    "transfer": (INTERNAL | {None}, INTERNAL),  # None: a card payment from an account the app can't see
     "refund": ({None}, {"bank", "credit_card", "cash", UNRESOLVED}),
     "adjustment": ({None}, INTERNAL),
 }

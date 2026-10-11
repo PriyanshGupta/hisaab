@@ -96,13 +96,18 @@ def test_transfer_with_two_distinct_legs_accepted(conn: Connection, two_accounts
     f.transaction(conn, user_id=u, kind="transfer", from_account_id=a, to_account_id=b)
 
 
-@pytest.mark.parametrize("legs", ["from_only", "to_only", "neither", "same_account"])
-def test_transfer_without_two_distinct_legs_rejected(
+def test_transfer_with_the_paying_account_unknown_accepted(conn: Connection, two_accounts: tuple[str, str, str]) -> None:
+    u, _, b = two_accounts  # a card payment received from an account the app can't see (ruling 2026-10-11)
+    f.transaction(conn, user_id=u, kind="transfer", from_account_id=None, to_account_id=b)
+
+
+@pytest.mark.parametrize("legs", ["from_only", "neither", "same_account"])
+def test_transfer_without_a_distinct_destination_rejected(
     conn: Connection, two_accounts: tuple[str, str, str], legs: str,
 ) -> None:
-    u, a, b = two_accounts
-    from_id, to_id = {"from_only": (a, None), "to_only": (None, b), "neither": (None, None), "same_account": (a, a)}[legs]
-    with rejected(conn, "CHECK constraint failed: ck_transactions_transfer_has_two_distinct_legs"):
+    u, a, _ = two_accounts
+    from_id, to_id = {"from_only": (a, None), "neither": (None, None), "same_account": (a, a)}[legs]
+    with rejected(conn, "CHECK constraint failed: ck_transactions_transfer_legs"):
         f.transaction(conn, user_id=u, kind="transfer", from_account_id=from_id, to_account_id=to_id)
 
 

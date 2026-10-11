@@ -109,8 +109,8 @@ function Connected({ status }: { status: GmailStatus }) {
 const isDone = (job: Job) => job.state !== "queued" && job.state !== "running";
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
-type SyncResult = { transactions_new?: number; needs_review?: number; already_had?: number; failed?: number;
-  pending_llm?: number };
+type SyncResult = { transactions_new?: number; needs_review?: number; duplicates?: number; already_had?: number;
+  failed?: number; pending_llm?: number };
 
 /** PRD §4.4: counts, not a spinner that vanishes. */
 function SyncOutcome({ job }: { job: Job }) {
@@ -125,7 +125,9 @@ function SyncOutcome({ job }: { job: Job }) {
   return (
     <p className="settings-note">
       {`${plural(r.transactions_new ?? 0, "new transaction", "new transactions")}, `}
-      {`${r.needs_review ?? 0} ${(r.needs_review ?? 0) === 1 ? "needs" : "need"} review.`}
+      {`${r.needs_review ?? 0} ${(r.needs_review ?? 0) === 1 ? "needs" : "need"} review`}
+      {(r.duplicates ?? 0) > 0 && `, ${plural(r.duplicates ?? 0, "duplicate", "duplicates")} skipped`}
+      {"."}
       {already > 0 && parts.length === 0 && ` ${plural(already, "email was", "emails were")} already here.`}
       {parts.length > 0 && ` ${parts.join(" and ")}; the next sync retries them.`}
     </p>

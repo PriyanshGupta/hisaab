@@ -15,6 +15,8 @@ Retention (§3.7) is decided here: a tier-1 match discards its content; anything
 read by the model keeps it (its format awaits promotion, slice 22), as do
 pending_llm and failed Sources. The diagnostic never holds the email's own
 text or extracted values: it outlives the content as the only forensic trail.
+It does name the sender's address: dedup's fallback never merges two emails
+from one sender (slice 15), and that has to work after the content is gone.
 """
 
 import json
@@ -54,6 +56,13 @@ def _attempts(interpretation: Interpretation) -> list[dict[str, Any]]:
 
 def route(session: Session, source: Source, llm: LlmExtract, model: str) -> Routed:
     assert source.content is not None, "only Sources holding content can be routed"
+    artifact: EmailArtifact = parse_eml(source.content)
+    routed: Routed = _route(session, source, artifact, llm, model)
+    routed.diagnostic["sender"] = artifact.sender
+    return routed
+
+
+def _route(session: Session, source: Source, artifact: EmailArtifact, llm: LlmExtract, model: str) -> Routed:
     cached: ExtractionCache | None = session.get(ExtractionCache, source.content_hash)
     if cached is not None:
         extraction: dict[str, Any] = (json.loads(cached.extracted) if cached.extracted else
@@ -62,7 +71,6 @@ def route(session: Session, source: Source, llm: LlmExtract, model: str) -> Rout
                       {"route": "cache", "tier": cached.tier, "model": cached.model, "outcome": cached.outcome,
                        "missing_fields": extraction["missing_fields"]}, None, None)
 
-    artifact: EmailArtifact = parse_eml(source.content)
     candidates: list[EmailTemplate] = email_candidates(session, artifact.sender, artifact.subject)
     interpretation: Interpretation = interpret(candidates, artifact)
     if interpretation.extraction is not None:
