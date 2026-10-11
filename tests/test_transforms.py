@@ -34,15 +34,18 @@ def test_the_registry_holds_exactly_the_nine_v0_entries():
         ("₹9,999", 999900),  # no paise
         ("rs.5.5", 550),  # one decimal digit is tens of paise
         ("0.05", 5),
+        ("212,699.42", 21269942),  # Western grouping: the HDFC savings statement prints balances this way
+        ("1,186,092.00", 118609200),
     ],
 )
 def test_inr_to_paise(raw, paise):
     assert field_transform("inr_to_paise")(raw) == paise
 
 
-@pytest.mark.parametrize("raw", ["123,456", "1,2,3", "12,34", "", "Rs.", "-5.00", "12.345", "1 234", "five", "$5.00"])
+@pytest.mark.parametrize("raw", ["1,2,3", "12,34", "1234,567", "1,23,4567", "12,3456.00", "", "Rs.", "-5.00",
+                                 "12.345", "1 234", "five", "$5.00"])
 def test_inr_to_paise_rejects_what_is_not_a_rupee_amount(raw):
-    # 123,456 is Western grouping: no fixture uses it, so it signals a mis-capture rather than a number.
+    # Grouping must be well formed, Indian (1,23,456) or Western (123,456); anything else is a mis-capture.
     with pytest.raises(TransformError):
         field_transform("inr_to_paise")(raw)
 

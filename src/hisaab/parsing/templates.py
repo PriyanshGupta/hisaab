@@ -7,6 +7,9 @@ Templates are GLOBAL: one bank format serves every user.
   whose subject pattern matches, in a fully deterministic order. A spec may
   list several senders (ruling 2026-10-11), so sender_address holds only the
   first, for display; matching reads the spec.
+- save_statement_template / statement_candidates are the statement side: active
+  statement templates in the same deterministic order; the interpreter's
+  pick_statement_template takes the first whose detect matches (§4.7 step 2).
 - record_outcome is §4.3 step 9, the counter automatic demotion reads (§4.10;
   the demote itself is slice 16).
 """
@@ -22,6 +25,8 @@ from hisaab.models.base import utc_now
 from hisaab.parsing import patterns
 from hisaab.parsing.email_interpreter import EmailTemplate, Interpretation
 from hisaab.parsing.email_spec import parse_email_spec
+from hisaab.parsing.statement_interpreter import StatementTemplate
+from hisaab.parsing.statement_spec import parse_statement_spec
 
 FAILURE_WINDOW = timedelta(days=30)  # PRD §10.1: 3 consecutive failures within 30 days demotes
 
@@ -64,6 +69,29 @@ def email_candidates(session: Session, sender: str, subject: str) -> list[EmailT
             continue
         found.append(EmailTemplate(id=row.id, name=row.name, spec=spec))
     return found
+
+
+def save_statement_template(
+    session: Session, *, name: str, spec: dict, status: str = "proposed", priority: int = 0,
+    promoted_at: str | None = None,
+) -> ParserTemplate:
+    parse_statement_spec(spec)  # raises InvalidStatementSpec listing every problem
+    row = ParserTemplate(  # statement templates are human-authored only (tech-design §10 amendment 2)
+        artifact_type="statement", name=name, spec=json.dumps(spec, ensure_ascii=False), origin="human",
+        status=status, priority=priority, promoted_at=promoted_at,
+    )
+    session.add(row)
+    session.flush()
+    return row
+
+
+def statement_candidates(session: Session) -> list[StatementTemplate]:
+    rows = session.scalars(
+        select(ParserTemplate)
+        .where(ParserTemplate.artifact_type == "statement", ParserTemplate.status == "active")
+        .order_by(ParserTemplate.priority.desc(), ParserTemplate.promoted_at.desc().nulls_last(), ParserTemplate.id)
+    )
+    return [StatementTemplate(row.id, row.name, parse_statement_spec(json.loads(row.spec))) for row in rows]
 
 
 def record_outcome(session: Session, result: Interpretation, now: datetime | None = None) -> None:

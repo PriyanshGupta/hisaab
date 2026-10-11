@@ -1,4 +1,4 @@
-# Seed email template specs
+# Seed template specs
 
 Hand-authored specs (tech-design §4.2), one JSON file per bank format, written
 with the authoring harness:
@@ -19,3 +19,15 @@ an email.
 
 Neither HDFC alert states a time or a balance, so both are declared `{"required": false}`.
 The sender is `alerts@hdfcbank.bank.in`, as in the fixtures (the docs say `hdfcbank.net`).
+
+## Statements
+
+`artifact_type: "statement"` specs (tech-design §4.6, amended 2026-10-11: rows are
+built from words in `ruled` or `line_pattern` mode instead of pdfplumber's table
+finder). Run them the same way; a password-protected PDF reads its password from
+an environment variable: `try-template spec.json x.pdf --password-env STMT_PW`.
+
+| File | Fixture | Notes |
+|---|---|---|
+| `hdfc_acct_statement.json` | `statements/hdfc_acct_statement_01.pdf` | `ruled`: the column dividers are 1pt rectangles. The PDF squashes words ("HDFCBANKLIMITED", "Statementof account"). The header row is on page 1 only, so `resumes_after` restarts the table after each page's header block. Narrations wrap at a fixed width, sometimes across a page break. Opening and closing come from the STATEMENT SUMMARY row at the end, which also prints the debit and credit counts the fixture test checks the rows against. Amounts use Western grouping. |
+| `hdfc_cc_statement.json` | `statements/hdfc_cc_statement_01.pdf` | `line_pattern`: there are no rules, and page 1's table sits at different x positions from the later pages. ₹ is drawn by a symbol font as "C"; the PDF reader maps it back. A leading "+" marks a credit (`signed_single_column`, `unsigned_means: debit`). Date and time share a cell. Domestic and International tables each have a header; a cardholder line after each header is skipped. Opening = PREVIOUS STATEMENT DUES, closing = TOTAL AMOUNT DUE. HDFC's own summary differs by a few paise from its components, which is inside the ₹1 tolerance. |

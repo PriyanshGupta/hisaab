@@ -142,3 +142,57 @@ def test_a_failure_after_the_30_day_window_starts_a_new_streak(db):
     later = NOW + timedelta(days=31)
     run(db, now=later)
     assert counter(db, a) == (1, "2026-11-11T12:00:00.000Z")
+
+
+# --- statement templates (§4.7 step 2) -----------------------------------------------------
+
+from hisaab.parsing.pdf import read_pdf  # noqa: E402
+from hisaab.parsing.statement_interpreter import pick_statement_template  # noqa: E402
+from hisaab.parsing.statement_spec import InvalidStatementSpec  # noqa: E402
+from tests.pdf_factory import make_pdf  # noqa: E402
+from tests.statement_samples import card_page, ruled_page  # noqa: E402
+from tests.test_statement_spec import LINES, RULED  # noqa: E402
+
+
+def save_statement(db, name, spec, **kw):
+    kw.setdefault("status", "active")
+    with db.write_session() as s:
+        return templates.save_statement_template(s, name=name, spec=spec, **kw).id
+
+
+def statement_candidates(db):
+    with db.read_session() as s:
+        return templates.statement_candidates(s)
+
+
+def test_an_invalid_statement_spec_is_refused(db):
+    bad = copy.deepcopy(RULED)
+    bad["account_kind"] = "wallet"
+    with pytest.raises(InvalidStatementSpec):
+        save_statement(db, "Bad", bad)
+    assert statement_candidates(db) == []
+
+
+def test_statement_templates_are_stored_without_email_columns(db):
+    tid = save_statement(db, "Example savings", RULED)
+    with db.read_session() as s:
+        row = s.get(ParserTemplate, tid)
+        assert (row.artifact_type, row.sender_address, row.subject_pattern) == ("statement", None, None)
+
+
+def test_the_first_active_template_whose_detect_matches_wins(db):
+    save_statement(db, "Proposed card", LINES, status="proposed")
+    savings = save_statement(db, "Example savings", RULED)
+    card = save_statement(db, "Example card", LINES, priority=1)
+    candidates = statement_candidates(db)
+    assert [c.id for c in candidates] == [card, savings]  # priority first; the proposed one is not a candidate
+    bank_pdf = read_pdf(make_pdf([ruled_page([], first=True)]))
+    card_pdf = read_pdf(make_pdf([card_page([], first=True)]))
+    assert pick_statement_template(candidates, bank_pdf).id == savings
+    assert pick_statement_template(candidates, card_pdf).id == card
+    assert pick_statement_template(candidates, read_pdf(make_pdf([{"texts": [(40, 40, "Unknown")]}]))) is None
+
+
+def test_email_and_statement_candidates_do_not_mix(db):
+    save_statement(db, "Example savings", RULED)
+    assert candidates(db) == []  # email candidates

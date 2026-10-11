@@ -99,10 +99,6 @@ def test_a_missing_fixture_is_a_plain_error(tmp_path, capsys):
     assert code == 2 and "nope.eml" in out
 
 
-def test_a_statement_spec_points_at_slice_10(tmp_path, capsys):
-    code, out = run(capsys, spec_file(tmp_path, {"version": 1, "artifact_type": "statement"}), eml(tmp_path))
-    assert code == 2 and "statement" in out.lower()
-
 
 def test_several_fixtures_get_a_block_each_and_one_failure_fails_the_run(tmp_path, capsys):
     good = eml(tmp_path, "good.eml")
@@ -141,3 +137,87 @@ def test_a_fields_spec_problem_is_shown_on_its_own_line(tmp_path, capsys):
     _, out = run(capsys, spec_file(tmp_path, half), eml(tmp_path))
     payee_line = next(line for line in out.splitlines() if line.strip().startswith("payee_raw"))
     assert "pattern is empty" in payee_line
+
+
+# --- statements (slice 10) ----------------------------------------------------------------
+
+from tests.statement_samples import ruled_page  # noqa: E402
+from tests.pdf_factory import make_pdf  # noqa: E402
+from tests.test_statement_interpreter import ROWS  # noqa: E402
+from tests.test_statement_spec import RULED  # noqa: E402
+
+SUMMARY_OK = ["STATEMENT SUMMARY", "Opening 1,000.00", "Closing 1,450.00"]
+
+
+def statement(tmp_path, page, name="stmt.pdf", password=None):
+    path = tmp_path / name
+    path.write_bytes(make_pdf([page], password))
+    return str(path)
+
+
+def test_a_statement_spec_prints_rows_and_a_passing_validation(tmp_path, capsys):
+    code, out = run(capsys, spec_file(tmp_path, RULED), statement(tmp_path, ruled_page(ROWS, first=True, summary=SUMMARY_OK)))
+    assert code == 0
+    assert "detect   ok" in out and "account  last4 1234" in out
+    assert "2026-07-02" in out and "credit" in out and "500.00" in out and "SALARY JULY" in out
+    assert "3 rows" in out
+    assert "PASSED" in out
+
+
+def test_a_failing_validation_shows_declared_computed_and_the_gap(tmp_path, capsys):
+    page = ruled_page(ROWS, first=True, summary=["STATEMENT SUMMARY", "Opening 1,000.00", "Closing 1,550.00"])
+    code, out = run(capsys, spec_file(tmp_path, RULED), statement(tmp_path, page))
+    assert code == 1
+    assert "FAILED" in out and "gap ₹100.00" in out and "declared closing ₹1,550.00" in out
+    assert "computed closing ₹1,450.00" in out
+
+
+def test_unavailable_says_why_and_is_not_a_pass(tmp_path, capsys):
+    code, out = run(capsys, spec_file(tmp_path, RULED), statement(tmp_path, ruled_page(ROWS, first=True)))
+    assert code == 1
+    assert "UNAVAILABLE" in out and "closing not found" in out
+
+
+def test_unparseable_rows_are_shown_with_their_cells_and_reason(tmp_path, capsys):
+    page = ruled_page([*ROWS, ("04/07/26", "ODD", "9", "5.00", "5.00", "")], first=True, summary=SUMMARY_OK)
+    code, out = run(capsys, spec_file(tmp_path, RULED), statement(tmp_path, page))
+    assert code == 1
+    assert "unparseable" in out and "both debit and credit are filled" in out and "ODD" in out
+
+
+def test_a_template_mismatch_is_explained(tmp_path, capsys):
+    page = ruled_page(ROWS, first=True, labels=["Date", "Narration", "Ref", "Deposit", "Withdrawal", "Balance"])
+    code, out = run(capsys, spec_file(tmp_path, RULED), statement(tmp_path, page))
+    assert code == 1 and "DOES NOT FIT" in out and "Withdrawal" in out
+
+
+def test_detection_failure_is_reported(tmp_path, capsys):
+    spec = copy.deepcopy(RULED)
+    spec["detect"]["all_of"] = ["Some Other Bank"]
+    code, out = run(capsys, spec_file(tmp_path, spec), statement(tmp_path, ruled_page(ROWS, first=True, summary=SUMMARY_OK)))
+    assert code == 1 and "detect   FAILED" in out and "Some Other Bank" in out
+
+
+def test_text_prints_each_page_line_with_its_page(tmp_path, capsys):
+    code, out = run(capsys, spec_file(tmp_path, RULED), statement(tmp_path, ruled_page(ROWS, first=True, summary=SUMMARY_OK)),
+                    "--text")
+    assert "p1 | Date Narration Ref Withdrawal Deposit Balance" in out
+
+
+def test_a_protected_statement_reads_its_password_from_the_named_environment_variable(tmp_path, capsys, monkeypatch):
+    path = statement(tmp_path, ruled_page(ROWS, first=True, summary=SUMMARY_OK), password="s3cret")
+    code, out = run(capsys, spec_file(tmp_path, RULED), path)
+    assert code == 2 and "password-protected" in out and "--password-env" in out
+    monkeypatch.setenv("STMT_PW", "s3cret")
+    code, out = run(capsys, spec_file(tmp_path, RULED), path, "--password-env", "STMT_PW")
+    assert code == 0 and "PASSED" in out
+    monkeypatch.setenv("STMT_PW", "nope")
+    code, out = run(capsys, spec_file(tmp_path, RULED), path, "--password-env", "STMT_PW")
+    assert code == 2 and "doesn't open" in out
+
+
+def test_an_invalid_statement_spec_lists_its_problems(tmp_path, capsys):
+    spec = copy.deepcopy(RULED)
+    spec["account_kind"] = "wallet"
+    code, out = run(capsys, spec_file(tmp_path, spec), statement(tmp_path, ruled_page(ROWS, first=True)))
+    assert code == 1 and "account_kind" in out

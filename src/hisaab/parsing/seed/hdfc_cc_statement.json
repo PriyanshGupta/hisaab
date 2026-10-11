@@ -1,0 +1,26 @@
+{
+  "version": 1,
+  "artifact_type": "statement",
+  "detect": { "page": 1, "all_of": ["Credit Card Statement", "HDFC Bank Credit Cards"] },
+  "account_binding": { "identifier": { "pattern": "Credit Card No\\.\\s*\\d{6}X+(\\d{4})\\b", "transform": "digits_only", "kind": "card_last4" } },
+  "account_kind": "credit_card",
+  "table": {
+    "rows": "line_pattern",
+    "header_row": { "contains": ["DATE & TIME", "TRANSACTION DESCRIPTION", "AMOUNT"] },
+    "line_pattern": "^(?P<date>\\d{2}/\\d{2}/\\d{4})\\s*\\|\\s*(?P<time>\\d{2}:\\d{2})\\s+(?P<narration>.+?)\\s+(?P<amount>\\+?\\s*₹\\s*[\\d,]+\\.\\d{2})(?:\\s+l)?$",
+    "ends_at": "^(Page \\d+ of \\d+|International Transactions|\\*Transaction time)"
+  },
+  "row_rules": {
+    "amount_style": "signed_single_column",
+    "unsigned_means": "debit",
+    "continuation": "none",
+    "skip_matching": ["\\[CKYC ID"]
+  },
+  "field_transforms": { "date": "date:%d/%m/%Y", "time": "time:%H:%M", "amount": "inr_to_paise" },
+  "declared_balances": {
+    "opening": { "pattern": "₹ ([\\d,]+\\.\\d{2}) ₹ [\\d,]+\\.\\d{2} \\+ ₹ [\\d,]+\\.\\d{2} \\+ ₹ [\\d,]+\\.\\d{2} =",
+                 "transform": "inr_to_paise" },
+    "closing": { "pattern": "TOTAL AMOUNT DUE\\s+RECEIVED \\(Current Billing Cycle\\)\\s+_ ₹ ([\\d,]+\\.\\d{2})",
+                 "transform": "inr_to_paise" }
+  }
+}

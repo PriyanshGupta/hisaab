@@ -75,8 +75,9 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
     export.add_argument("output", help="path of the JSON file to write")
     tryout = commands.add_parser("try-template", help="run a template spec over fixture emails, field by field")
     tryout.add_argument("spec", help="template spec JSON file")
-    tryout.add_argument("fixtures", nargs="+", help=".eml files to run it on")
+    tryout.add_argument("fixtures", nargs="+", help=".eml files (or statement PDFs) to run it on")
     tryout.add_argument("--text", action="store_true", help="also print the text the patterns run against")
+    tryout.add_argument("--password-env", metavar="VAR", help="statement PDFs: read the password from this env var")
     skel = commands.add_parser("template-skeleton", help="print a starting template spec for a fixture email")
     skel.add_argument("fixture", help=".eml file")
     args = parser.parse_args(argv)
@@ -87,7 +88,7 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
     if args.command == "try-template":
         from hisaab.parsing.harness import try_template
 
-        return try_template(args.spec, args.fixtures, args.text, sys.stdout)
+        return try_template(args.spec, args.fixtures, args.text, sys.stdout, args.password_env)
     if args.command == "template-skeleton":
         from hisaab.parsing.harness import skeleton
 

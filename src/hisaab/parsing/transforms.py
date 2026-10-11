@@ -19,6 +19,7 @@ format the template pins, so no date format is ever guessed (§4.2, §4.8).
 The vocabulary covers the fixture emails and nothing more (§4.4). Amount forms
 seen across the fixtures: "Rs.179.00", "Rs. 1234.00", "INR 9,99,999.99",
 "₹9,999.99", "₹9,999" (no paise), with or without Indian digit grouping.
+Statements add Western grouping: the HDFC savings statement prints "212,699.42".
 """
 
 import re
@@ -41,8 +42,9 @@ class UnknownTransform(ValueError):
 # --- field transforms ---------------------------------------------------------------
 
 _CURRENCY_PREFIX = re.compile(r"^(?:Rs\.?|INR|₹)\s*", re.IGNORECASE)  # \s covers U+00A0 and U+202F
-# Plain digits, or Indian grouping: 1-2 digits, then pairs, then a final three ("1,23,456").
-_RUPEES = re.compile(r"(\d+|\d{1,2}(?:,\d{2})*,\d{3})(?:\.(\d{1,2}))?")
+# Plain digits; Indian grouping, 1-2 digits then pairs then a final three ("1,23,456");
+# or Western grouping, threes ("123,456"). Ill-formed grouping is a mis-capture and fails.
+_RUPEES = re.compile(r"(\d+|\d{1,2}(?:,\d{2})*,\d{3}|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?")
 
 
 def inr_to_paise(raw: str) -> int:

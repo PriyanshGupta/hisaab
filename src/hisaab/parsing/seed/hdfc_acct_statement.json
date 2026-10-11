@@ -1,0 +1,28 @@
+{
+  "version": 1,
+  "artifact_type": "statement",
+  "detect": { "page": 1, "all_of": ["HDFCBANKLIMITED", "Statementof account", "SAVINGSA/C"], "none_of": ["Credit Card"] },
+  "account_binding": { "identifier": { "pattern": "AccountNo\\s*:\\s*\\d*(\\d{4})\\b", "transform": "digits_only", "kind": "last4" } },
+  "account_kind": "bank",
+  "table": {
+    "rows": "ruled",
+    "columns": [ {"label": "Date", "field": "date"}, {"label": "Narration", "field": "narration"},
+                 {"label": "Chq./Ref.No.", "field": "reference"}, {"label": "ValueDt"},
+                 {"label": "WithdrawalAmt.", "field": "debit"}, {"label": "DepositAmt.", "field": "credit"},
+                 {"label": "ClosingBalance", "field": "balance"} ],
+    "ends_at": "^HDFCBANKLIMITED$",
+    "resumes_after": "Statementof account$"
+  },
+  "row_rules": {
+    "amount_style": "separate_debit_credit",
+    "continuation": "empty_date_column",
+    "stop_at": "^STATEMENTSUMMARY"
+  },
+  "field_transforms": { "date": "date:%d/%m/%y", "debit": "inr_to_paise", "credit": "inr_to_paise", "balance": "inr_to_paise" },
+  "declared_balances": {
+    "opening": { "pattern": "OpeningBalance DrCount CrCount Debits Credits ClosingBal\\s+([\\d,]+\\.\\d{2})",
+                 "transform": "inr_to_paise" },
+    "closing": { "pattern": "OpeningBalance DrCount CrCount Debits Credits ClosingBal\\s+[\\d,]+\\.\\d{2}\\s+\\d+\\s+\\d+\\s+[\\d,]+\\.\\d{2}\\s+[\\d,]+\\.\\d{2}\\s+([\\d,]+\\.\\d{2})",
+                 "transform": "inr_to_paise" }
+  }
+}

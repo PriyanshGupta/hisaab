@@ -18,7 +18,8 @@ usual preprocessing, and every contract field declared. The fields left to
 write show up in try-template as "pattern is empty".
 
 Exit status (try-template): 0 when every fixture matched with nothing missing, 1 when any did
-not, 2 when the input can't be used (unreadable spec or fixture, statement spec).
+not, 2 when the input can't be used (unreadable spec or fixture). A spec with
+"artifact_type": "statement" runs in statement mode (statement_harness.py).
 """
 
 import json
@@ -32,7 +33,8 @@ from hisaab.parsing.email_interpreter import EmailTemplate, interpret, parse_eml
 from hisaab.parsing.email_spec import CONTRACT_FIELDS, CRITICAL_FIELDS, check_email_spec
 
 
-def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out: TextIO) -> int:
+def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out: TextIO,
+                 password_env: str | None = None) -> int:
     def say(line: str = "") -> None:
         print(line, file=out)
 
@@ -45,8 +47,9 @@ def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out:
         say(f"{spec_path} is not valid JSON: {e.msg} at line {e.lineno}, column {e.colno}")
         return 2
     if isinstance(raw, dict) and raw.get("artifact_type") == "statement":
-        say("This is a statement spec. Statement specs run once the statement interpreter exists (slice 10).")
-        return 2
+        from hisaab.parsing.statement_harness import try_statement
+
+        return try_statement(raw, fixture_paths, show_text, password_env, say)
 
     spec, problems = check_email_spec(raw)
     if problems:
