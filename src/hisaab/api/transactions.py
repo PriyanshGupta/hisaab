@@ -18,7 +18,8 @@ from hisaab.transactions import repository as txns
 
 router = APIRouter(prefix="/api/transactions", tags=["transactions"])
 
-EditableField = Literal["amount", "kind", "transaction_date", "from_account_id", "to_account_id"]
+EditableField = Literal["amount", "kind", "transaction_date", "from_account_id", "to_account_id",
+                        "payee_id", "category_override_id"]
 
 
 class EditOut(BaseModel):
@@ -36,6 +37,10 @@ class TransactionOut(BaseModel):
     from_account_id: str | None
     to_account_id: str | None
     payee_raw: str | None
+    payee_id: str | None
+    payee_name: str | None
+    category_id: str | None  # resolved at read time; None = uncategorized
+    category_source: Literal["override", "rule"] | None  # which mechanism applies
     status: str
     provenance: Literal["email", "statement", "manual"]
     edits: list[EditOut]
@@ -49,6 +54,7 @@ class NewTransaction(BaseModel):
     from_account_id: str | None = None
     to_account_id: str | None = None
     payee: str | None = None
+    category_id: str | None = None
 
 
 class TransactionChange(BaseModel):
@@ -58,6 +64,8 @@ class TransactionChange(BaseModel):
     transaction_date: str | None = None
     from_account_id: str | None = None
     to_account_id: str | None = None
+    payee_id: str | None = None
+    category_override_id: str | None = None  # null clears the override (the payee rule applies again)
 
 
 class RevertRequest(BaseModel):
@@ -69,7 +77,8 @@ def _out(row: txns.ListedTransaction) -> TransactionOut:
     return TransactionOut(
         id=t.id, kind=t.kind, amount_paise=t.amount, transaction_date=t.transaction_date,
         transaction_time=t.transaction_time, from_account_id=t.from_account_id, to_account_id=t.to_account_id,
-        payee_raw=t.payee_raw, status=t.status, provenance=row.provenance,
+        payee_raw=t.payee_raw, payee_id=t.payee_id, payee_name=row.payee_name, category_id=row.category_id,
+        category_source=row.category_source, status=t.status, provenance=row.provenance,
         edits=[EditOut(field=e.field, prior_value=e.prior_value, new_value=e.new_value) for e in row.edits],
     )
 
@@ -87,7 +96,7 @@ def create_transaction(body: NewTransaction, request: Request, user: CurrentUser
         txn = txns.create_manual(
             s, user.id, kind=body.kind, amount=body.amount_paise, transaction_date=body.transaction_date,
             transaction_time=body.transaction_time, from_account_id=body.from_account_id,
-            to_account_id=body.to_account_id, payee_raw=body.payee,
+            to_account_id=body.to_account_id, payee_raw=body.payee, category_id=body.category_id,
         )
         return _out(txns.get_listed(s, user.id, txn.id))
 

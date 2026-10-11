@@ -22,7 +22,10 @@ const txn = (over: Record<string, unknown> = {}) => ({
 });
 
 function setup(path: string, extra: Record<string, { status: number; body?: unknown }> = {}) {
-  const api = mockApi({ "GET /api/auth/me": ME, "GET /api/accounts": ACCOUNTS, ...extra });
+  const api = mockApi({
+    "GET /api/auth/me": ME, "GET /api/accounts": ACCOUNTS,
+    "GET /api/categories": { status: 200, body: [] }, "GET /api/payees": { status: 200, body: [] }, ...extra,
+  });
   renderApp(path);
   return { api, user: userEvent.setup() };
 }
@@ -77,7 +80,8 @@ test("a missing account or amount is caught before sending", async () => {
 });
 
 test("with no accounts yet, Add points to Accounts", async () => {
-  mockApi({ "GET /api/auth/me": ME, "GET /api/accounts": { status: 200, body: [] } });
+  mockApi({ "GET /api/auth/me": ME, "GET /api/accounts": { status: 200, body: [] },
+    "GET /api/categories": { status: 200, body: [] }, "GET /api/payees": { status: 200, body: [] } });
   renderApp("/add");
   expect(await screen.findByRole("link", { name: "Add an account first" })).toHaveAttribute("href", "/accounts");
 });

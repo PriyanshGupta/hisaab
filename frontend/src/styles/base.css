@@ -326,3 +326,11 @@ a {
 .muted {
   color: var(--ink-muted);
 }
+
+/* "Show archived" sections (accounts, categories). */
+.archived {
+  margin-top: var(--s5);
+}
+.archived > .button--quiet {
+  padding-left: 0;
+}

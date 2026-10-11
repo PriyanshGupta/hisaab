@@ -67,7 +67,10 @@
   padding-bottom: env(safe-area-inset-bottom);
 }
 .tabbar__link {
-  flex: 1;
+  /* Sized to their labels, in the condensed width, so five tabs fit a 360px phone. */
+  flex: 1 1 auto;
+  padding: 0 var(--s1);
+  font-variation-settings: "wdth" 80;
   display: grid;
   place-items: center;
   min-height: calc(var(--touch) + var(--s2));

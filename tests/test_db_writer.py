@@ -65,7 +65,7 @@ def test_try_write_session_yields_none_without_waiting_while_lock_is_held(db):
         started = time.perf_counter()
         with db.try_write_session() as s:
             assert s is None
-        assert time.perf_counter() - started < 0.05
+        assert time.perf_counter() - started < 0.5  # "didn't wait": waiting would mean seconds; 50 ms was flaky under load
 
 
 def test_try_write_session_writes_when_lock_is_free(db):

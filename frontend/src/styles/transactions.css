@@ -23,6 +23,36 @@
   font-size: var(--t-small);
   color: var(--ink-muted);
 }
+.txn-row__category {
+  display: block;
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+}
+.txn-row__category--none {
+  color: var(--margin); /* uncategorized needs attention (the report's uncategorized line, PRD §7.4) */
+}
+.txn-category {
+  display: grid;
+  gap: var(--s2);
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--rule);
+}
+.txn-category__status {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  font-weight: var(--w-strong);
+}
+.txn-category__change {
+  display: flex;
+  align-items: end;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+.txn-category__change .field {
+  min-width: 14rem;
+}
 .txn-row--open td {
   border-bottom-color: transparent;
 }

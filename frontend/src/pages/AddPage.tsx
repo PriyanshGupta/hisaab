@@ -5,6 +5,7 @@ import { type FormEvent, useState } from "react";
 import { Link } from "react-router";
 
 import { type Account, type AccountType, useAccounts } from "../api/accounts";
+import { useCategories, usePayees } from "../api/categories";
 import { describeError } from "../api/client";
 import { type NewTransaction, useCreateTransaction } from "../api/transactions";
 import { todayIso } from "../dates";
@@ -33,6 +34,8 @@ type Errors = Partial<Record<"from" | "to" | "amount" | "date", string>>;
 
 export function AddPage() {
   const accounts = useAccounts();
+  const categories = useCategories();
+  const payees = usePayees();
   const create = useCreateTransaction();
   const [kind, setKind] = useState<Kind>("expense");
   const [fromId, setFromId] = useState("");
@@ -40,10 +43,12 @@ export function AddPage() {
   const [amount, setAmount] = useState("");
   const [payee, setPayee] = useState("");
   const [date, setDate] = useState(todayIso());
+  const [categoryId, setCategoryId] = useState("");
   const [errors, setErrors] = useState<Errors>({});
   const [saved, setSaved] = useState<string | null>(null);
 
   const active = (accounts.data ?? []).filter((a) => a.archived_at === null);
+  const activeCategories = (categories.data ?? []).filter((c) => c.archived_at === null);
   const spec = KINDS[kind];
 
   const chooseKind = (next: Kind) => {
@@ -75,17 +80,20 @@ export function AddPage() {
       ...(spec.from && { from_account_id: fromId }),
       ...(spec.to && { to_account_id: toId }),
       ...(who && { payee: who }),
+      ...(spec.payee && categoryId && { category_id: categoryId }),
     };
     create.mutate(body, {
       onSuccess: () => {
         setSaved(`Saved ${formatPaise(parsed.paise)}${who ? `${kind === "expense" ? " to " : " from "}${who}` : ""}.`);
         setAmount("");
         setPayee("");
+        setCategoryId("");
       },
     });
   };
 
-  if (accounts.isPending) return <p className="muted">Loading…</p>; // no empty account lists, even briefly
+  // No empty pickers, even briefly. (Payee suggestions are optional; they may arrive later.)
+  if (accounts.isPending || categories.isPending) return <p className="muted">Loading…</p>;
   if (accounts.isError) return <p className="form-error" role="alert">{describeError(accounts.error)}</p>;
   if (active.length === 0) {
     return (
@@ -120,8 +128,23 @@ export function AddPage() {
             error={errors.to} />}
           <Field label="Amount" inputMode="decimal" placeholder="0.00" value={amount}
             onChange={(e) => setAmount(e.target.value)} error={errors.amount} />
-          {spec.payee && <Field label={spec.payee} value={payee} onChange={(e) => setPayee(e.target.value)}
-            placeholder={kind === "expense" ? "Tea stall" : "Who"} />}
+          {spec.payee && (
+            <>
+              <Field label={spec.payee} value={payee} onChange={(e) => setPayee(e.target.value)}
+                placeholder={kind === "expense" ? "Tea stall" : "Who"} list="payee-names" autoComplete="off" />
+              <datalist id="payee-names">
+                {(payees.data ?? []).map((p) => <option key={p.id} value={p.name} />)}
+              </datalist>
+              <div className="field">
+                <label className="field__label" htmlFor="entry-category">Category</label>
+                <select id="entry-category" className="field__input" value={categoryId}
+                  onChange={(e) => setCategoryId(e.target.value)}>
+                  <option value="">No category</option>
+                  {activeCategories.map((c) => <option key={c.id} value={c.id}>{c.name}</option>)}
+                </select>
+              </div>
+            </>
+          )}
           <Field label="Date" type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)}
             error={errors.date} />
         </div>

@@ -27,16 +27,20 @@ from sqlalchemy import delete, func, select
 from sqlalchemy.orm import Session
 
 from hisaab.accounts import repository as accounts
+from hisaab.categories import repository as categories
+from hisaab.categories.resolution import categorized
 from hisaab.clock import local_today
 from hisaab.models import Account, Source, Transaction, TransactionEdit, TransactionEffective, TransactionSource, utc_now
 from hisaab.models.core import TRANSACTION_KINDS
+from hisaab.payees import repository as payees
 from hisaab.transactions.legs import UNRESOLVED, LegError, validate_legs
 
 # Kinds a person types in. Adjustments are written by reconciliation (slice 20).
 MANUAL_KINDS = ("expense", "income", "transfer", "refund")
-# Fields this slice's overlay corrects. Slice 7 adds payee_id / category_override_id,
-# slice 17 review_acknowledged (the transaction_edits schema already allows them).
-EDITABLE_FIELDS = ("amount", "kind", "transaction_date", "from_account_id", "to_account_id")
+# Fields the overlay corrects. Slice 17 adds review_acknowledged (the
+# transaction_edits schema already allows it).
+EDITABLE_FIELDS = ("amount", "kind", "transaction_date", "from_account_id", "to_account_id",
+                   "payee_id", "category_override_id")
 MANUAL_DISCRIMINATOR = "0"  # a manual Source yields exactly one transaction
 
 _ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
@@ -63,6 +67,9 @@ class ListedTransaction:
     transaction: TransactionEffective  # effective values: the source overlaid with edits
     provenance: str  # kind of the primary Source: email / statement / manual
     edits: list[TransactionEdit]
+    category_id: str | None  # resolved at read time (categories.resolution)
+    category_source: str | None  # "override" / "rule" / None
+    payee_name: str | None
 
 
 def derived_key(user_id: str, anchor_ingest_seq: int, discriminator: str) -> str:
@@ -154,23 +161,29 @@ def _edits(session: Session, user_id: str, txn_ids: list[str]) -> dict[str, list
     return grouped
 
 
+def _listed(session: Session, user_id: str, query) -> list[ListedTransaction]:
+    rows = session.execute(query).all()
+    edits = _edits(session, user_id, [r.TransactionEffective.id for r in rows])
+    return [ListedTransaction(r.TransactionEffective, r.provenance, edits[r.TransactionEffective.id],
+                              r.category_id, r.category_source, r.payee_name) for r in rows]
+
+
+def _with_provenance(user_id: str):
+    return (categorized(user_id).add_columns(Source.kind.label("provenance"))
+            .join(Source, Source.id == TransactionEffective.primary_source_id))
+
+
 def list_transactions(session: Session, user_id: str, limit: int = 200) -> list[ListedTransaction]:
-    """The user's transactions, newest first, with provenance and corrections attached."""
-    rows = session.execute(
-        select(TransactionEffective, Source.kind)
-        .join(Source, Source.id == TransactionEffective.primary_source_id)
-        .where(TransactionEffective.user_id == user_id)
-        .order_by(TransactionEffective.transaction_date.desc(), TransactionEffective.created_at.desc())
-        .limit(limit)
-    ).all()
-    edits = _edits(session, user_id, [t.id for t, _ in rows])
-    return [ListedTransaction(t, kind, edits[t.id]) for t, kind in rows]
+    """The user's transactions, newest first, with provenance, category and corrections attached."""
+    return _listed(session, user_id, _with_provenance(user_id).order_by(
+        TransactionEffective.transaction_date.desc(), TransactionEffective.created_at.desc()).limit(limit))
 
 
 def get_listed(session: Session, user_id: str, txn_id: str) -> ListedTransaction:
-    txn = get_effective(session, user_id, txn_id)
-    provenance = session.scalar(select(Source.kind).where(Source.id == txn.primary_source_id))
-    return ListedTransaction(txn, provenance, _edits(session, user_id, [txn_id])[txn_id])
+    found = _listed(session, user_id, _with_provenance(user_id).where(TransactionEffective.id == txn_id))
+    if not found:
+        raise NotFound("No such transaction")
+    return found[0]
 
 
 # --- manual entry --------------------------------------------------------------
@@ -186,7 +199,12 @@ def create_manual(
     to_account_id: str | None = None,
     payee_raw: str | None = None,
     transaction_time: str | None = None,
+    category_id: str | None = None,
 ) -> Transaction:
+    """Record a manual entry. A typed payee name links to the payee of that name
+    (created if new). A category pick follows the ruling of 2026-10-11: the
+    payee's first pick becomes its rule (Loop 2); a pick that differs from an
+    existing rule overrides just this entry; with no payee it's an override."""
     if kind not in MANUAL_KINDS:
         raise TransactionError("A manual entry is an expense, income, a transfer or a refund.")
     amount = _check_amount(amount)
@@ -197,10 +215,16 @@ def create_manual(
     to_type = _usable_account(session, user_id, to_account_id).type if to_account_id else None
     validate_legs(kind, from_type, to_type, same_account=from_account_id is not None and from_account_id == to_account_id)
     payee_raw = (payee_raw or "").strip() or None
+    if category_id is not None:
+        _canonical(session, user_id, "category_override_id", category_id)  # theirs and active, before any write
+    try:
+        payee = payees.get_or_create_by_name(session, payee_raw) if payee_raw else None
+    except payees.PayeeError as exc:
+        raise TransactionError(str(exc)) from None
 
     entered = {"kind": kind, "amount": amount, "transaction_date": transaction_date,
                "transaction_time": transaction_time, "from_account_id": from_account_id,
-               "to_account_id": to_account_id, "payee_raw": payee_raw}
+               "to_account_id": to_account_id, "payee_raw": payee_raw, "category_id": category_id}
     content = json.dumps(entered, sort_keys=True, separators=(",", ":")).encode()
     now = utc_now()
     # ingest_seq is global and monotonic; safe because every write holds the writer lock.
@@ -213,6 +237,7 @@ def create_manual(
     txn = Transaction(
         user_id=user_id, derived_key=derived_key(user_id, seq, MANUAL_DISCRIMINATOR), amount=amount, kind=kind,
         from_account_id=from_account_id, to_account_id=to_account_id, payee_raw=payee_raw,
+        payee_id=payee.id if payee else None,
         transaction_date=transaction_date, transaction_time=transaction_time,
         status="confirmed",  # typed by the user, not parsed: nothing to review (ruling 2026-10-11)
         primary_source_id=source.id,
@@ -221,12 +246,22 @@ def create_manual(
     session.flush()
     session.add(TransactionSource(transaction_id=txn.id, source_id=source.id))
     session.flush()
+    if category_id is not None:
+        rule = categories.payee_rule(session, user_id, payee.id) if payee else None
+        if payee and rule is None:
+            categories.set_payee_category(session, user_id, payee.id, category_id)  # learn
+        elif rule != category_id:
+            session.add(TransactionEdit(transaction_id=txn.id, user_id=user_id, field="category_override_id",
+                                        prior_value=None, new_value=category_id))  # just this entry
+            session.flush()
     return txn
 
 
 # --- the overlay ---------------------------------------------------------------
 
 def _source_value(txn: Transaction, field: str) -> str | None:
+    if field == "category_override_id":
+        return None  # no source ever says a category; it exists only as an edit (tech-design §3.5)
     value = getattr(txn, field)
     return None if value is None else str(value)
 
@@ -241,7 +276,21 @@ def _canonical(session: Session, user_id: str, field: str, value) -> str | None:
         return _check_kind(value)
     if field == "transaction_date":
         return _check_date(value)
-    return None if value is None else _usable_account(session, user_id, value).id  # from/to account
+    if value is None:
+        return None
+    if field == "payee_id":
+        try:
+            return payees.get_payee(session, value).id  # payees are global
+        except payees.NotFound:
+            raise TransactionError("No such payee.") from None
+    if field == "category_override_id":
+        try:
+            return categories.active_category(session, user_id, value).id
+        except categories.NotFound:
+            raise TransactionError("No such category.") from None
+        except categories.CategoryError as exc:
+            raise TransactionError(str(exc)) from None
+    return _usable_account(session, user_id, value).id  # from/to account
 
 
 def _check_effective(session: Session, user_id: str, txn: Transaction, values: dict[str, str | None]) -> None:

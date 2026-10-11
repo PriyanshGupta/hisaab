@@ -130,12 +130,6 @@
   margin: 0;
 }
 
-.archived {
-  margin-top: var(--s5);
-}
-.archived > .button--quiet {
-  padding-left: 0;
-}
 
 @media (max-width: 640px) {
   .account__opening {

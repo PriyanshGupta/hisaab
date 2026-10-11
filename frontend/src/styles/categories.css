@@ -1,0 +1,47 @@
+/* Categories screen: a ruled list with quiet actions, then the add form. */
+.category-intro {
+  margin-bottom: var(--s4);
+  max-width: 40rem;
+}
+.category-list {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+  border-top: 1px solid var(--rule);
+  max-width: 40rem;
+}
+.category {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  min-height: var(--touch);
+  padding: var(--s1) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.category__name {
+  font-weight: var(--w-strong);
+}
+.category-list--archived .category__name {
+  color: var(--ink-soft);
+}
+.category__rename,
+.category-add__row {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  flex: 1;
+  max-width: 30rem;
+}
+.category__rename .field__input,
+.category-add__row .field__input {
+  flex: 1;
+  min-width: 0;
+}
+.category-add {
+  display: grid;
+  gap: var(--s1);
+  margin-top: var(--s5);
+  max-width: 40rem;
+}

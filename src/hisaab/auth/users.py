@@ -16,6 +16,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from hisaab.auth import sessions
+from hisaab.categories import repository as categories
 from hisaab.auth.passwords import hash_password
 from hisaab.models import User
 from hisaab.models.core import USER_ROLES
@@ -81,6 +82,7 @@ def create_user(session: Session, username: str, display_name: str, password: st
                 password_hash=hash_password(password))
     session.add(user)
     session.flush()
+    categories.seed_defaults(session, user.id)  # every user starts with PRD §5.3's defaults
     return user
 
 

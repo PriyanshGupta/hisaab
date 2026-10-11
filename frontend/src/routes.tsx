@@ -4,6 +4,7 @@ import type { RouteObject } from "react-router";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AccountsPage } from "./pages/AccountsPage";
 import { AddPage } from "./pages/AddPage";
+import { CategoriesPage } from "./pages/CategoriesPage";
 import { HomePage } from "./pages/HomePage";
 import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
@@ -23,6 +24,7 @@ export const routes: RouteObject[] = [
       { path: "transactions", element: <TransactionsPage /> },
       { path: "add", element: <AddPage /> },
       { path: "accounts", element: <AccountsPage /> },
+      { path: "categories", element: <CategoriesPage /> },
       { path: "*", element: <NotFoundPage /> },
     ],
   },

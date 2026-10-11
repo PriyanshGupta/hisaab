@@ -17,9 +17,11 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from hisaab.accounts import repository as accounts_repo
-from hisaab.api import accounts, admin_users, auth, transactions
+from hisaab.api import accounts, admin_users, auth, categories, transactions
 from hisaab.auth import users
 from hisaab.auth.throttle import LoginThrottle
+from hisaab.categories import repository as categories_repo
+from hisaab.payees import repository as payees_repo
 from hisaab.transactions import repository as txns_repo
 from hisaab.transactions.legs import LegError
 from hisaab.config import Settings
@@ -47,6 +49,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(admin_users.router)
     app.include_router(accounts.router)
     app.include_router(transactions.router)
+    app.include_router(categories.categories_router)
+    app.include_router(categories.payees_router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
 
 
@@ -77,6 +81,12 @@ _ERROR_STATUS = (
     (txns_repo.EditsWouldBeLost, 409),
     (txns_repo.TransactionError, 422),
     (LegError, 422),
+    (categories_repo.NotFound, 404),
+    (categories_repo.DuplicateCategory, 409),
+    (categories_repo.CategoryError, 422),
+    (payees_repo.NotFound, 404),
+    (payees_repo.DuplicatePayee, 409),
+    (payees_repo.PayeeError, 422),
 )
 _WRITER_BUSY_DETAIL = "Busy with a long-running job; try again shortly."
 
