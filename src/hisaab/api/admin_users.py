@@ -1,0 +1,94 @@
+"""/api/admin/users: admin-only user management (PRD §6.9, §10.8).
+
+Users are created by an admin (no self-signup). Password reset is
+admin-performed and ends the target's sessions. Roles can change, except that
+the last admin cannot be demoted. Every route depends on require_admin, so a
+member gets 403 and an anonymous caller 401 before any handler code runs.
+"""
+
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from pydantic import BaseModel
+
+from hisaab.api.deps import get_db, require_admin
+from hisaab.auth import users
+from hisaab.db import Database
+from hisaab.models import User
+
+router = APIRouter(prefix="/api/admin/users", tags=["admin"], dependencies=[Depends(require_admin)])
+
+
+class UserOut(BaseModel):
+    id: str
+    username: str
+    display_name: str
+    role: str
+    created_at: str
+
+    @classmethod
+    def of(cls, user: User) -> "UserOut":
+        return cls(id=user.id, username=user.username, display_name=user.display_name,
+                   role=user.role, created_at=user.created_at)
+
+
+class NewUser(BaseModel):
+    username: str
+    display_name: str
+    password: str
+    role: str
+
+
+class NewPassword(BaseModel):
+    password: str
+
+
+class UserChange(BaseModel):
+    role: str
+
+
+def _rule_violation(exc: users.UserError) -> HTTPException:
+    if isinstance(exc, (users.DuplicateUsername, users.LastAdmin)):
+        return HTTPException(status.HTTP_409_CONFLICT, str(exc))
+    return HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(exc))
+
+
+def _get_or_404(session, user_id: str) -> User:
+    user = users.get(session, user_id)
+    if user is None:
+        raise HTTPException(status.HTTP_404_NOT_FOUND, "No such user")
+    return user
+
+
+@router.get("", response_model=list[UserOut])
+def list_users(db: Database = Depends(get_db)):
+    with db.read_session() as s:
+        return [UserOut.of(u) for u in users.list_users(s)]
+
+
+@router.post("", response_model=UserOut, status_code=status.HTTP_201_CREATED)
+def create_user(body: NewUser, request: Request, db: Database = Depends(get_db)):
+    try:
+        with db.write_session(timeout=request.app.state.writer_timeout) as s:
+            return UserOut.of(users.create_user(s, body.username, body.display_name, body.password, body.role))
+    except users.UserError as exc:
+        raise _rule_violation(exc) from exc
+
+
+@router.post("/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
+def reset_password(user_id: str, body: NewPassword, request: Request, db: Database = Depends(get_db)):
+    try:
+        with db.write_session(timeout=request.app.state.writer_timeout) as s:
+            users.set_password(s, _get_or_404(s, user_id), body.password)
+    except users.UserError as exc:
+        raise _rule_violation(exc) from exc
+    return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.patch("/{user_id}", response_model=UserOut)
+def change_user(user_id: str, body: UserChange, request: Request, db: Database = Depends(get_db)):
+    try:
+        with db.write_session(timeout=request.app.state.writer_timeout) as s:
+            user = _get_or_404(s, user_id)
+            users.set_role(s, user, body.role)
+            return UserOut.of(user)
+    except users.UserError as exc:
+        raise _rule_violation(exc) from exc

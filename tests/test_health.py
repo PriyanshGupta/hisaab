@@ -14,7 +14,7 @@ def test_health_reports_ok_with_working_database(settings):
 
 def test_health_returns_503_when_database_unreachable(settings):
     app = create_app(settings)
-    app.state.engine = create_engine("sqlite:////nonexistent-hisaab-dir/x.db")
+    app.state.db.engine = create_engine("sqlite:////nonexistent-hisaab-dir/x.db")
     with TestClient(app) as client:
         resp = client.get("/health")
     assert resp.status_code == 503

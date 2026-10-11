@@ -18,9 +18,13 @@ statements. Everything else stays dialect-neutral (tech-design §2.2).
 """
 
 import re
+import threading
+from collections.abc import Iterator
+from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.orm import Session, sessionmaker
 
 # (name, value). foreign_keys is handled separately because migrations turn it off.
 CONNECTION_PRAGMAS: tuple[tuple[str, str], ...] = (
@@ -96,3 +100,63 @@ def make_engine(db_path: Path, *, enforce_foreign_keys: bool = True) -> Engine:
             cursor.close()
 
     return engine
+
+
+class WriterBusy(RuntimeError):
+    """The writer lock could not be taken in time (e.g. a long reprocess holds it)."""
+
+
+class Database:
+    """The engine plus the process-wide single writer lock.
+
+    Write-path ruling (2026-10-10, amends tech-design §6.7): every write, whether
+    a background job or a user action like login or an edit, goes through
+    write_session(), which holds `writer_lock` for the duration of one short
+    transaction. So exactly one writer exists at a time by construction, and
+    SQLite never has to arbitrate between two (its locking stays as a backstop).
+    Jobs (slice 12) take the same lock, releasing it between batches; only a
+    reprocess holds it for a whole run, which is what PRD §10.2 asks for.
+
+    read_session() never commits. Slice 12 gives it a separate read-only pool.
+    """
+
+    def __init__(self, engine: Engine):
+        self.engine = engine
+        self.writer_lock = threading.Lock()
+        self._sessions = sessionmaker(bind=engine, expire_on_commit=False)
+
+    @contextmanager
+    def read_session(self) -> Iterator[Session]:
+        session = self._sessions()
+        try:
+            yield session
+        finally:
+            session.rollback()
+            session.close()
+
+    @contextmanager
+    def write_session(self, timeout: float = 10.0) -> Iterator[Session]:
+        """Hold the writer lock for one transaction: commit on success, roll back on error."""
+        if not self.writer_lock.acquire(timeout=timeout):
+            raise WriterBusy(f"database writer busy for more than {timeout}s")
+        try:
+            with self._sessions.begin() as session:
+                yield session
+        finally:
+            self.writer_lock.release()
+
+    @contextmanager
+    def try_write_session(self) -> Iterator[Session | None]:
+        """Best-effort write: yields None at once if another writer holds the lock.
+
+        For writes that may simply be skipped, like sliding a session's expiry,
+        so a request never waits behind a long job.
+        """
+        if not self.writer_lock.acquire(blocking=False):
+            yield None
+            return
+        try:
+            with self._sessions.begin() as session:
+                yield session
+        finally:
+            self.writer_lock.release()
