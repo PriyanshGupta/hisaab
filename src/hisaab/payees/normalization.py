@@ -20,6 +20,10 @@ transaction, so a new pattern can be applied to history without a re-fetch.
 import re
 from dataclasses import dataclass
 
+from sqlalchemy import select
+from sqlalchemy.orm import Session
+
+from hisaab.models import NormalizationPattern
 from hisaab.parsing import patterns
 
 _NOT_ALNUM: re.Pattern[str] = re.compile(r"[^0-9a-z]")
@@ -56,3 +60,9 @@ def match_payee(rules: list[PatternRule], raw: str) -> str | None:
         if _matches(rule, raw):
             return rule.payee_id
     return None
+
+
+def load_rules(session: Session) -> list[PatternRule]:
+    """Every normalization pattern (global, tech-design §3.3), ready for match_payee."""
+    return [PatternRule(p.id, p.match_type, p.pattern, p.payee_id, p.priority)
+            for p in session.scalars(select(NormalizationPattern))]

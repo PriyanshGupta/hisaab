@@ -31,9 +31,11 @@ from sqlalchemy.orm import Session
 from hisaab.config import Settings
 from hisaab.crypto import DecryptionFailed, decrypt
 from hisaab.ingest import connection
-from hisaab.ingest.mailbox import Transport, Mailbox, MailboxAuthError, MailboxError, Message, default_transport
+from hisaab.ingest.mailbox import Mailbox, MailboxAuthError, MailboxError, Message, Transport, default_transport
+from hisaab import llm
 from hisaab.jobs.queue import JobContext
 from hisaab.models import GmailConnection, Sender, Source, utc_now
+from hisaab.pipeline.process import process_pending
 from hisaab.transactions.repository import next_ingest_seq
 from hisaab.tunables import tunable
 
@@ -47,14 +49,16 @@ class SyncError(RuntimeError):
     pass
 
 
-def make_sync(settings: Settings, *, http: Transport = default_transport,
+def make_sync(settings: Settings, *, transport: Transport = default_transport,
+              llm_transport: llm.Transport = llm.default_transport,
               sleep: Callable[[float], None] = time.sleep) -> Callable[[JobContext], dict[str, Any]]:
     def run(ctx: JobContext) -> dict[str, Any]:
-        return _sync(ctx, settings, http, sleep)
+        return _sync(ctx, settings, transport, llm_transport, sleep)
     return run
 
 
-def _sync(ctx: JobContext, settings: Settings, http: Transport, sleep: Callable[[float], None]) -> dict[str, Any]:
+def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transport: llm.Transport,
+          sleep: Callable[[float], None]) -> dict[str, Any]:
     started: datetime = datetime.now(UTC)
     user_id: str | None = ctx.user_id
     assert user_id is not None, "a sync job belongs to a user"
@@ -69,34 +73,38 @@ def _sync(ctx: JobContext, settings: Settings, http: Transport, sleep: Callable[
                                             .order_by(Sender.email_address)))
     if last is not None:
         since = min(since, datetime.fromisoformat(last) - OVERLAP)
-    counts: dict[str, int] = {"stored": 0, "already_had": 0, "failed": 0, "with_attachments": 0}
+    reparse: bool = bool(ctx.params.get("reparse"))
+    counts: dict[str, int] = {"stored": 0, "already_had": 0, "reparsed": 0, "failed": 0, "with_attachments": 0}
     try:
         box: Mailbox = Mailbox.open(connection.oauth_client(settings),
-                                    decrypt(connection.encryption_key(settings), blob), http=http, sleep=sleep)
+                                    decrypt(connection.encryption_key(settings), blob), http=transport, sleep=sleep)
         for page in box.search(senders, since) if senders else ():
             ctx.checkpoint()
-            _sync_page(ctx, user_id, box, page, counts)
+            _sync_page(ctx, user_id, box, page, counts, reparse)
     except (MailboxAuthError, DecryptionFailed) as exc:
         with ctx.write() as s:
             connection.mark_needs_reauth(s, user_id)
         raise SyncError(REAUTH) from exc
-    if counts["failed"] == 0:
+    pipeline: dict[str, int] = process_pending(ctx, user_id, settings, llm_transport, sleep)
+    if counts["failed"] == 0:  # pending_llm does not hold the clock: those Sources are stored, retried next sync
         with ctx.write() as s:
             s.get_one(GmailConnection, user_id).last_successful_sync_at = utc_now(started)
-    return {**counts, "since": utc_now(since)}
+    return {**counts, **pipeline, "since": utc_now(since)}
 
 
-def _sync_page(ctx: JobContext, user_id: str, box: Mailbox, page: list[str], counts: dict[str, int]) -> None:
+def _sync_page(ctx: JobContext, user_id: str, box: Mailbox, page: list[str], counts: dict[str, int],
+               reparse: bool) -> None:
     with ctx.read() as s:
         have: set[str | None] = set(s.scalars(select(Source.external_message_id).where(
             Source.user_id == user_id, Source.external_message_id.in_(page))))
     fetched: list[Message] = []
+    refetched: list[Message] = []
     for message_id in page:
-        if message_id in have:
+        if message_id in have and not reparse:
             counts["already_had"] += 1
             continue
         try:
-            fetched.append(box.fetch(message_id))
+            (refetched if message_id in have else fetched).append(box.fetch(message_id))
         except MailboxAuthError:
             raise
         except MailboxError as exc:  # §5.6: logged, counted, the sync continues
@@ -108,6 +116,18 @@ def _sync_page(ctx: JobContext, user_id: str, box: Mailbox, page: list[str], cou
             _store(s, user_id, message)
             counts["stored"] += 1
             counts["with_attachments"] += bool(message.attachments)
+        for message in refetched:
+            _requeue(s, user_id, message)
+            counts["reparsed"] += 1
+
+
+def _requeue(session: Session, user_id: str, message: Message) -> None:
+    """Re-parse (the core of re-sync, §5.2): the stored Source gets its content back and waits for
+    routing again. Its identity (id, ingest_seq) is unchanged, so derived keys and edits hold."""
+    source: Source = session.scalars(select(Source).where(
+        Source.user_id == user_id, Source.external_message_id == message.message_id)).one()
+    source.content, source.processing_state = message.content, "pending"
+    source.content_hash = hashlib.sha256(message.content).hexdigest()  # same bytes as before: the rebuild is stable
 
 
 def _store(session: Session, user_id: str, message: Message) -> None:

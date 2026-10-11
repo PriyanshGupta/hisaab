@@ -47,6 +47,10 @@ class Settings(BaseSettings):
     encryption_key: SecretStr | None = None
     session_secret: SecretStr | None = None
 
+    # Tier-2 extraction (tech-design §4.11): any server speaking the Anthropic Messages API.
+    llm_base_url: str = "https://api.anthropic.com"
+    email_model: str = "claude-haiku-5-5"
+
     @field_validator("database_path", "frontend_dist")
     @classmethod
     def _anchor_to_project_root(cls, value: Path) -> Path:

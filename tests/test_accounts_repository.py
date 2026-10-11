@@ -8,6 +8,7 @@ from sqlalchemy import Connection, select
 
 from hisaab.accounts import repository as accounts
 from hisaab.accounts.repository import AccountError, DuplicateIdentifier, DuplicateLast4, NotFound
+from hisaab.clock import local_today
 from hisaab.db import Database
 from hisaab.models import Account, AccountIdentifier
 from tests import factories as f
@@ -82,7 +83,7 @@ def test_bank_may_be_overdrawn(db: Database, asha: str) -> None:
     ({"display_name": "   "}, "name"),
     ({"type": "wallet"}, "type"),
     ({"opening_balance_date": "2026-13-01"}, "date"),
-    ({"opening_balance_date": (date.today() + timedelta(days=1)).isoformat()}, "future"),
+    ({"opening_balance_date": (local_today() + timedelta(days=1)).isoformat()}, "future"),  # India's tomorrow
 ])
 def test_create_validation(db: Database, asha: str, kw: dict[str, Any], message: str) -> None:
     with pytest.raises(AccountError, match=message):

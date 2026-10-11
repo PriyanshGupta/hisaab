@@ -107,18 +107,27 @@ function Connected({ status }: { status: GmailStatus }) {
 }
 
 const isDone = (job: Job) => job.state !== "queued" && job.state !== "running";
-const emails = (n: number) => `${n} new email${n === 1 ? "" : "s"}`;
+const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
 
+type SyncResult = { transactions_new?: number; needs_review?: number; already_had?: number; failed?: number;
+  pending_llm?: number };
+
+/** PRD §4.4: counts, not a spinner that vanishes. */
 function SyncOutcome({ job }: { job: Job }) {
   if (job.state !== "succeeded") {
     return <p className="form-error" role="alert">{job.error ?? "The sync didn't finish."}</p>;
   }
-  const result = (job.result ?? {}) as { stored?: number; already_had?: number; failed?: number };
-  const failed = result.failed ?? 0;
+  const r = (job.result ?? {}) as SyncResult;
+  const [failed, waiting, already] = [r.failed ?? 0, r.pending_llm ?? 0, r.already_had ?? 0];
+  const parts: string[] = [];
+  if (failed > 0) parts.push(`${plural(failed, "email", "emails")} couldn't be fetched`);
+  if (waiting > 0) parts.push(`${failed > 0 ? waiting : plural(waiting, "email", "emails")} ${waiting === 1 ? "is" : "are"} waiting to be read`);
   return (
     <p className="settings-note">
-      {`${emails(result.stored ?? 0)} stored, ${result.already_had ?? 0} already here.`}
-      {failed > 0 && ` ${failed} couldn't be fetched; the next sync retries them.`}
+      {`${plural(r.transactions_new ?? 0, "new transaction", "new transactions")}, `}
+      {`${r.needs_review ?? 0} ${(r.needs_review ?? 0) === 1 ? "needs" : "need"} review.`}
+      {already > 0 && parts.length === 0 && ` ${plural(already, "email was", "emails were")} already here.`}
+      {parts.length > 0 && ` ${parts.join(" and ")}; the next sync retries them.`}
     </p>
   );
 }

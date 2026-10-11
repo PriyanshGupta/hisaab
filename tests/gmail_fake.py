@@ -37,7 +37,7 @@ class FakeGmail:
     revoked: bool = False
     messages: dict[str, tuple[int, dict[str, Any]]] = field(default_factory=dict)  # id -> (internalDate ms, payload)
     blobs: dict[str, bytes] = field(default_factory=dict)  # attachmentId -> bytes (text bodies only are served)
-    fail_next: list[int] = field(default_factory=list)  # statuses to return before answering normally
+    fail_next: list[int | tuple[int, bytes]] = field(default_factory=list)  # (status[, body]) before answering normally
     queries: list[str] = field(default_factory=list)
     calls: list[str] = field(default_factory=list)
     broken_ids: set[str] = field(default_factory=set)  # messages.get answers 404 for these
@@ -77,7 +77,8 @@ class FakeGmail:
         query: dict[str, list[str]] = parse_qs(parts.query)
         self.calls.append(f"{method} {parts.path}")
         if self.fail_next:
-            return self.fail_next.pop(0), b"{}"
+            failure: int | tuple[int, bytes] = self.fail_next.pop(0)
+            return failure if isinstance(failure, tuple) else (failure, b"{}")
         if path == TOKEN_URL:
             form: dict[str, list[str]] = parse_qs((body or b"").decode())
             if self.revoked:

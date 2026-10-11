@@ -18,8 +18,9 @@ from hisaab.ingest import connection
 from hisaab.ingest.mailbox import Grant
 from hisaab.ingest.sync import SyncError, make_sync
 from hisaab.jobs.queue import JobContext
-from hisaab.models import GmailConnection, Sender, Source, utc_now
+from hisaab.models import GmailConnection, Sender, Source, TransactionSource, utc_now
 from tests import factories as f
+from tests.claude_fake import MARKETING, TRANSACTION, FakeClaude
 from tests.gmail_fake import FakeGmail, make_eml
 
 KEY: str = Fernet.generate_key().decode()
@@ -59,7 +60,7 @@ Run: TypeAlias = Callable[..., dict[str, Any]]
 @pytest.fixture
 def sync(db: Database, gmail_settings: Settings, fake: FakeGmail) -> Run:
     def run(user_id: str) -> dict[str, Any]:
-        result: dict[str, Any] = make_sync(gmail_settings, http=fake, sleep=lambda s: None)(JobContext(db, "job", user_id, {}))
+        result: dict[str, Any] = make_sync(gmail_settings, transport=fake, sleep=lambda s: None)(JobContext(db, "job", user_id, {}))
         return result
     return run
 
@@ -88,7 +89,8 @@ def test_first_sync_stores_each_message_as_a_pending_source(db: Database, user_i
         rows: list[Source] = list(s.scalars(select(Source).order_by(Source.ingest_seq)))
         assert {r.external_message_id for r in rows} == {"m0", "m1", "m2", "m-statement"}
         for r in rows:
-            assert (r.kind, r.processing_state, r.user_id) == ("email", "pending", user_id)
+            # no LLM configured in this test: anything tier 1 can't read waits for one
+            assert (r.kind, r.processing_state, r.user_id) == ("email", "pending_llm", user_id)
             assert r.content is not None and r.content_hash == hashlib.sha256(r.content).hexdigest()
         statement: Source = next(r for r in rows if r.external_message_id == "m-statement")
         assert json.loads(statement.attachments or "null") == [
@@ -119,7 +121,7 @@ def test_the_clock_is_the_time_the_sync_started(db: Database, user_id: str, gmai
             time.sleep(0.01)
         return fake(method, url, body, headers)
 
-    make_sync(gmail_settings, http=http, sleep=lambda s: None)(JobContext(db, "job", user_id, {}))
+    make_sync(gmail_settings, transport=http, sleep=lambda s: None)(JobContext(db, "job", user_id, {}))
     stamped: str | None = clock(db, user_id)
     assert stamped is not None and stamped <= first_call[0]  # mail arriving mid-sync is inside the next window
 
@@ -190,3 +192,83 @@ def test_with_no_active_senders_nothing_is_searched(db: Database, user_id: str, 
     assert sync(user_id)["stored"] == 0
     assert fake.queries == []
     assert clock(db, user_id) is not None
+
+
+# --- tier routing and the pipeline inside the sync (slice 14) ----------------------------------
+
+@pytest.fixture
+def mixed_mail(db: Database, conn: Connection) -> FakeGmail:
+    """A known-format alert, an unknown-format alert and a marketing email, all from active senders."""
+    from tests.pipeline_helpers import DEBIT_EML, UNKNOWN_EML, install_templates
+    install_templates(db)
+    f.sender(conn, email_address="alerts@example-bank.in", status="active")
+    conn.commit()
+    gmail: FakeGmail = FakeGmail(page_size=2)
+    gmail.add("known", DEBIT_EML, NOW_MS)
+    gmail.add("unknown", UNKNOWN_EML, NOW_MS - 1000)
+    gmail.add("marketing", make_eml(BANK, "Festive offers", "<p>Pre-approved loan, apply now</p>"), NOW_MS - 2000)
+    return gmail
+
+
+@pytest.fixture
+def claude() -> FakeClaude:
+    return FakeClaude(reply=lambda prompt: MARKETING if "Pre-approved loan" in prompt else TRANSACTION)
+
+
+@pytest.fixture
+def full_sync(db: Database, gmail_settings: Settings, mixed_mail: FakeGmail, claude: FakeClaude) -> Run:
+    configured: Settings = gmail_settings.model_copy(update={"anthropic_api_key": SecretStr("sk-test")})
+
+    def run(user_id: str, **params: Any) -> dict[str, Any]:
+        result: dict[str, Any] = make_sync(configured, transport=mixed_mail, llm_transport=claude,
+                                           sleep=lambda s: None)(JobContext(db, "job", user_id, params))
+        return result
+    return run
+
+
+def by_message(db: Database) -> dict[str, Source]:
+    with db.read_session() as s:
+        rows: list[Source] = list(s.scalars(select(Source)))
+        for r in rows:
+            s.expunge(r)
+    return {r.external_message_id or "": r for r in rows}
+
+
+def test_sync_routes_every_email_and_keeps_content_only_where_section_3_7_says(
+    db: Database, user_id: str, full_sync: Run, claude: FakeClaude,
+) -> None:
+    result: dict[str, Any] = full_sync(user_id)
+    assert {k: result[k] for k in ("tier1", "llm_calls", "cache_hits", "transactions_new", "non_transactional")} == \
+        {"tier1": 1, "llm_calls": 2, "cache_hits": 0, "transactions_new": 2, "non_transactional": 1}
+    sources: dict[str, Source] = by_message(db)
+    assert (sources["known"].processing_state, sources["known"].content) == ("parsed", None)
+    assert sources["unknown"].processing_state == "parsed" and sources["unknown"].content is not None
+    assert sources["marketing"].processing_state == "non_transactional" and sources["marketing"].content is not None
+    assert all(json.loads(s.diagnostic or "{}")["route"] for s in sources.values())
+    with db.read_session() as s:
+        assert set(s.scalars(select(Source.external_message_id).join(
+            TransactionSource, TransactionSource.source_id == Source.id))) == {"known", "unknown"}
+
+
+def test_a_reparse_of_the_same_period_makes_no_llm_calls(db: Database, user_id: str, full_sync: Run,
+                                                         claude: FakeClaude) -> None:
+    full_sync(user_id)
+    before: int = claude.calls
+    again: dict[str, Any] = full_sync(user_id, reparse=True)
+    assert claude.calls == before  # the cache absorbed every model read
+    assert {k: again[k] for k in ("reparsed", "tier1", "cache_hits", "llm_calls", "transactions_new",
+                                  "transactions_updated")} == \
+        {"reparsed": 3, "tier1": 1, "cache_hits": 2, "llm_calls": 0, "transactions_new": 0, "transactions_updated": 2}
+    assert by_message(db)["known"].content is None  # re-fetched for the re-parse, discarded again
+
+
+def test_an_llm_outage_leaves_emails_pending_and_the_next_sync_reads_them(
+    db: Database, user_id: str, full_sync: Run, claude: FakeClaude,
+) -> None:
+    claude.fail_next = [529] * 4  # one email's worth of attempts, then the run stops asking
+    first: dict[str, Any] = full_sync(user_id)
+    assert (first["pending_llm"], claude.calls) == (2, 4)
+    assert {by_message(db)[m].processing_state for m in ("unknown", "marketing")} == {"pending_llm"}
+    second: dict[str, Any] = full_sync(user_id)
+    assert (second["llm_calls"], second["pending_llm"]) == (2, 0)
+    assert by_message(db)["unknown"].processing_state == "parsed"

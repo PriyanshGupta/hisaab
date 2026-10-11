@@ -1,5 +1,6 @@
 """The mailbox module: the one place that knows the transport is the Gmail API."""
 
+import json
 from datetime import UTC, datetime
 from pathlib import Path
 from urllib.parse import parse_qs, urlsplit
@@ -110,6 +111,32 @@ def test_rate_limits_give_up_after_five_retries() -> None:
     with pytest.raises(MailboxError, match="429"):
         list(box.search(["a@bank.example"], datetime(2026, 10, 8, tzinfo=UTC)))
     assert sleeps == [1, 2, 4, 8, 16]
+
+
+def gmail_403(reason: str) -> tuple[int, bytes]:
+    return 403, json.dumps({"error": {"code": 403, "status": "PERMISSION_DENIED",
+                                      "errors": [{"reason": reason, "domain": "usageLimits"}]}}).encode()
+
+
+@pytest.mark.parametrize("reason", ["rateLimitExceeded", "userRateLimitExceeded"])
+def test_gmails_403_rate_limits_back_off_like_429(reason: str) -> None:
+    fake: FakeGmail = FakeGmail()
+    fake.add("m1", make_eml("a@bank.example", "Alert", "<p>x</p>"), OCT_10)
+    sleeps: list[float] = []
+    box: Mailbox = open_box(fake, sleeps)
+    fake.fail_next = [gmail_403(reason)]
+    assert box.fetch("m1").message_id == "m1"
+    assert sleeps == [1]
+
+
+def test_another_403_is_not_retried_and_names_gmails_reason() -> None:
+    fake: FakeGmail = FakeGmail()
+    sleeps: list[float] = []
+    box: Mailbox = open_box(fake, sleeps)
+    fake.fail_next = [gmail_403("insufficientPermissions")]
+    with pytest.raises(MailboxError, match="403 insufficientPermissions"):
+        box.fetch("m1")
+    assert sleeps == []
 
 
 def test_a_revoked_grant_is_an_auth_error() -> None:

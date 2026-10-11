@@ -50,18 +50,23 @@ test("sync now polls the job and reports what it stored", async () => {
   });
   await user.click(await screen.findByRole("button", { name: "Sync now" }));
   expect(await screen.findByText("Syncing…")).toBeInTheDocument();
-  api.set("GET /api/jobs/j-1", job("succeeded", { result: { stored: 3, already_had: 5, failed: 0, with_attachments: 1 } }));
-  expect(await screen.findByText("3 new emails stored, 5 already here.", {}, { timeout: 3000 })).toBeInTheDocument();
+  api.set("GET /api/jobs/j-1", job("succeeded", {
+    result: { stored: 3, already_had: 5, failed: 0, transactions_new: 2, needs_review: 1, pending_llm: 0 } }));
+  expect(await screen.findByText("2 new transactions, 1 needs review. 5 emails were already here.", {}, { timeout: 3000 }))
+    .toBeInTheDocument();
 });
 
 test("a sync that could not fetch some messages says the next one retries them", async () => {
   const { user } = setup("/settings", {
     "GET /api/gmail": gmail(),
     "POST /api/gmail/sync": { status: 202, body: { job_id: "j-1" } },
-    "GET /api/jobs/j-1": job("succeeded", { result: { stored: 1, already_had: 0, failed: 2, with_attachments: 0 } }),
+    "GET /api/jobs/j-1": job("succeeded", {
+      result: { stored: 1, already_had: 0, failed: 2, transactions_new: 1, needs_review: 0, pending_llm: 3 } }),
   });
   await user.click(await screen.findByRole("button", { name: "Sync now" }));
-  expect(await screen.findByText(/1 new email stored, 0 already here\. 2 couldn't be fetched/)).toBeInTheDocument();
+  expect(await screen.findByText(
+    "1 new transaction, 0 need review. 2 emails couldn't be fetched and 3 are waiting to be read; the next sync retries them.",
+  )).toBeInTheDocument();
 });
 
 test("a failed sync shows the job's sentence", async () => {

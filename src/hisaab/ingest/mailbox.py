@@ -46,6 +46,8 @@ SCOPE: str = "https://www.googleapis.com/auth/gmail.readonly"
 TIMEOUT_S: float = 30.0
 RETRIES: int = 5
 RETRYABLE: frozenset[int] = frozenset({0, 429, 500, 502, 503, 504})  # 0: no response (network, timeout)
+# Gmail reports per-user rate limits as 403 with one of these reasons (not 429); they back off too.
+RATE_LIMIT_REASONS: frozenset[str] = frozenset({"rateLimitExceeded", "userRateLimitExceeded"})
 PAGE_SIZE: int = 100
 KEPT_HEADERS: tuple[str, ...] = ("From", "To", "Subject", "Date")
 
@@ -106,14 +108,22 @@ def _call(http: Transport, sleep: Callable[[float], None], method: str, url: str
           headers: dict[str, str]) -> tuple[int, Any]:
     for attempt in range(RETRIES + 1):
         status, raw = http(method, url, body, headers)
-        if status not in RETRYABLE:
-            try:
-                return status, json.loads(raw or b"{}")
-            except ValueError:
-                return status, {}
+        try:
+            answer: Any = json.loads(raw or b"{}")
+        except ValueError:
+            answer = {}
+        if status not in RETRYABLE and not (status == 403 and _reasons(answer) & RATE_LIMIT_REASONS):
+            return status, answer
         if attempt < RETRIES:
             sleep(2 ** attempt)
     raise MailboxError(f"Gmail unavailable: HTTP {status or 'no response'} after {RETRIES} retries")
+
+
+def _reasons(answer: Any) -> set[str]:
+    """Gmail's machine-readable error reasons, e.g. {"insufficientPermissions"}."""
+    error: Any = answer.get("error") if isinstance(answer, dict) else None
+    items: Any = error.get("errors", []) if isinstance(error, dict) else []
+    return {e["reason"] for e in items if isinstance(e, dict) and isinstance(e.get("reason"), str)}
 
 
 def _token(http: Transport, sleep: Callable[[float], None], client: OAuthClient, form: dict[str, str]) -> dict[str, Any]:
@@ -173,7 +183,8 @@ class Mailbox:
             if status == 401:
                 raise MailboxAuthError("Gmail refused the refreshed access token")
             if status != 200:
-                raise MailboxError(f"Gmail answered HTTP {status} for {path.split('/')[0]}")
+                why: str = " ".join(sorted(_reasons(answer)))
+                raise MailboxError(f"Gmail answered HTTP {status}{' ' + why if why else ''} for {path.split('/')[0]}")
             result: dict[str, Any] = answer
             return result
         raise AssertionError("unreachable")

@@ -38,7 +38,7 @@ def gmail_app(settings: Settings, migrated_engine: Any, fake: FakeGmail) -> Fast
         "encryption_key": SecretStr(KEY)})
     app: FastAPI = create_app(configured)
     app.state.mail_transport = fake
-    app.state.jobs.kinds["sync"] = JobKind(run=make_sync(configured, http=fake, sleep=lambda s: None), timeout=60,
+    app.state.jobs.kinds["sync"] = JobKind(run=make_sync(configured, transport=fake, sleep=lambda s: None), timeout=60,
                                            joins=True)
     return app
 
