@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "match": { "sender": "credit_cards@icici.bank.in", "subject": "^Payment received on your ICICI Bank Credit Card\\.?$" },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "received payment of INR\\s*([\\d,]+(?:\\.\\d{1,2})?)", "transform": "inr_to_paise" },
+    "currency":                { "const": "INR" },
+    "direction":               { "const": "credit" },
+    "account_identifier":      { "pattern": "Credit Card account\\s+\\d{4}\\s+X{4}\\s+X{4}\\s+(\\d{4})\\b", "transform": "digits_only" },
+    "counterparty_identifier": { "required": false },
+    "payee_raw":               { "required": false },
+    "reference_number":        { "required": false },
+    "date":                    { "pattern": "Credit Card account\\s+[\\dX ]+\\s+on\\s+(\\d{2}-[A-Z][a-z]{2}-\\d{4})", "transform": "date:%d-%b-%Y" },
+    "time":                    { "required": false },
+    "balance":                 { "required": false }
+  }
+}

@@ -237,3 +237,20 @@ def test_an_invalid_statement_spec_lists_its_problems(tmp_path: Path, capsys: py
     spec["account_kind"] = "wallet"
     code, out = run(capsys, spec_file(tmp_path, spec), statement(tmp_path, ruled_page(ROWS, first=True)))
     assert code == 1 and "account_kind" in out
+
+
+# --- non-transactional specs (slice 11) -------------------------------------------------
+
+def test_a_notice_spec_shows_its_confirm_phrases_and_a_non_transactional_verdict(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    from tests.test_email_interpreter import NOTICE_BODY
+    from tests.test_email_spec import NOTICE
+
+    notice_eml: str = eml(tmp_path, "notice.eml", body=NOTICE_BODY, subject="Account update")
+    code, out = run(capsys, spec_file(tmp_path, NOTICE), notice_eml)
+    assert code == 0
+    assert "confirm" in out and "upcoming E-mandate" in out
+    assert "MATCHED: non-transactional" in out
+    code, out = run(capsys, spec_file(tmp_path, NOTICE), eml(tmp_path, "debit.eml", subject="Account update"))
+    assert code == 1 and "NOT MATCHED" in out and "confirm" in out

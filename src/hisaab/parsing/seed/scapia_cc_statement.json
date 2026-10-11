@@ -1,0 +1,22 @@
+{
+  "version": 1,
+  "artifact_type": "statement",
+  "detect": { "page": 1, "all_of": ["BillingCycle", "Accountsummary", "Newbalance"] },
+  "account_binding": { "identifier": { "pattern": "X{12}(\\d{4})\\b", "transform": "digits_only", "kind": "card_last4" } },
+  "account_kind": "credit_card",
+  "table": {
+    "rows": "line_pattern",
+    "header_row": { "contains": ["Your Transactions"] },
+    "line_pattern": "^(?P<date>\\d{2}-\\d{2}-\\d{4})·(?P<time>\\d{2}:\\d{2}) (?P<narration>.+?) (?P<amount>₹[\\d,]+\\.\\d{2})$"
+  },
+  "row_rules": {
+    "amount_style": "signed_single_column",
+    "unsigned_means": "debit",
+    "continuation": "none"
+  },
+  "field_transforms": { "date": "date:%d-%m-%Y", "time": "time:%H:%M", "amount": "inr_to_paise" },
+  "declared_balances": {
+    "opening": { "pattern": "Previousbalance ₹([\\d,]+\\.\\d{2})", "transform": "inr_to_paise" },
+    "closing": { "pattern": "Newbalance ₹([\\d,]+\\.\\d{2})", "transform": "inr_to_paise" }
+  }
+}

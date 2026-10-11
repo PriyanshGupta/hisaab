@@ -1,0 +1,24 @@
+{
+  "version": 1,
+  "artifact_type": "statement",
+  "detect": { "page": 1, "all_of": ["CREDIT CARD STATEMENT", "ICICI Bank"] },
+  "account_binding": { "identifier": { "pattern": "\\b\\d{4}X{8}(\\d{4})\\b", "transform": "digits_only", "kind": "card_last4" } },
+  "account_kind": "credit_card",
+  "table": {
+    "rows": "line_pattern",
+    "header_row": { "contains": ["Date", "SerNo.", "Transaction Details", "Amount"] },
+    "line_pattern": "^(?P<date>\\d{2}/\\d{2}/\\d{4}) (?P<reference>\\d+) (?P<narration>.+?) (?:-?\\d+ )?(?P<amount>[\\d,]+\\.\\d{2})$",
+    "ends_at": "^# International Spends"
+  },
+  "row_rules": {
+    "amount_style": "cr_dr_suffix",
+    "unsigned_means": "debit",
+    "continuation": "none",
+    "skip_matching": ["^Points amount$", "^\\d{4}X{8}\\d{4}$"]
+  },
+  "field_transforms": { "date": "date:%d/%m/%Y", "amount": "inr_to_paise" },
+  "declared_balances": {
+    "opening": { "pattern": "Cash Advances Payments / Credits\\n= \\+ \\+ -\\n₹ [\\d,]+\\.\\d{2}\\n₹ ([\\d,]+\\.\\d{2}) ₹", "transform": "inr_to_paise" },
+    "closing": { "pattern": "Cash Advances Payments / Credits\\n= \\+ \\+ -\\n₹ ([\\d,]+\\.\\d{2})\\n", "transform": "inr_to_paise" }
+  }
+}

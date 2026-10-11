@@ -1,0 +1,18 @@
+{
+  "version": 1,
+  "match": { "sender": "alerts@hdfcbank.bank.in", "subject": "^A payment was made using your Credit Card$" },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "Rs\\.?\\s*([\\d,]+(?:\\.\\d{1,2})?) has been debited from your HDFC Bank Credit Card",
+                                 "transform": "inr_to_paise" },
+    "currency":                { "const": "INR" },
+    "direction":               { "const": "debit" },
+    "account_identifier":      { "pattern": "HDFC Bank Credit Card ending\\s+([X*\\d]+)", "transform": "digits_only" },
+    "counterparty_identifier": { "required": false },
+    "payee_raw":               { "pattern": "Credit Card ending\\s+\\S+\\s+towards\\s+(.+?)\\s+on\\s+\\d", "transform": "trim" },
+    "reference_number":        { "required": false },
+    "date":                    { "pattern": "\\bon\\s+(\\d{2} [A-Z][a-z]{2}, \\d{4})", "transform": "date:%d %b, %Y" },
+    "time":                    { "pattern": "\\bat\\s+(\\d{2}:\\d{2}:\\d{2})", "transform": "time:%H:%M:%S", "required": false },
+    "balance":                 { "required": false }
+  }
+}

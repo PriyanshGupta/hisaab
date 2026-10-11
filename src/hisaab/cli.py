@@ -1,7 +1,9 @@
 """Command-line administration: `python -m hisaab <command>`.
 
 try-template runs a template spec over fixture emails: the authoring loop
-(parsing/harness.py).
+(parsing/harness.py). sync-seeds loads the shipped templates and normalization
+patterns (seeds.py); scripts/run.sh runs it after migrating. measure-fixtures
+prints the PRD §9 parse rate over the local fixture corpus (parsing/measure.py).
 
 create-admin bootstraps the first admin, since there is no self-signup
 (PRD §6.9). It is also the recovery path if every admin is locked out.
@@ -19,7 +21,7 @@ from pathlib import Path
 from sqlalchemy import Engine, inspect
 
 from hisaab.auth import users
-from hisaab.config import Settings
+from hisaab.config import PROJECT_ROOT, Settings
 from hisaab.db import Database, make_engine
 from hisaab.models import User
 
@@ -65,6 +67,44 @@ def _export_openapi(args: argparse.Namespace) -> int:
     return 0
 
 
+def _sync_seeds(settings: Settings) -> int:
+    from hisaab.seeds import SeedReport, sync_seeds
+
+    engine: Engine = make_engine(settings.database_path)
+    try:
+        with Database(engine).write_session() as session:
+            report: SeedReport = sync_seeds(session)
+    finally:
+        engine.dispose()
+    print(f"templates: {report.templates_added} added, {report.templates_updated} updated; "
+          f"payees: {report.payees_added} added; patterns: {report.patterns_added} added, "
+          f"{report.patterns_updated} updated")
+    return 0
+
+
+HELD_OUT: frozenset[str] = frozenset({"hdfc_cc_purchase_02", "icici_cc_purchase_02", "scapia_cc_purchase_02"})
+
+
+def _measure_fixtures(args: argparse.Namespace) -> int:
+    from hisaab.parsing.measure import FixtureResult, Summary, load_seed_templates, measure, summarize
+    from hisaab.seeds import SEED_TEMPLATES
+
+    results: list[FixtureResult] = measure(Path(args.fixtures), load_seed_templates(SEED_TEMPLATES), HELD_OUT)
+    for r in results:
+        mark: str = "ok  " if r.ok else "FAIL"
+        held: str = " (held out)" if r.held_out else ""
+        count: str = "notice" if r.kind == "notice" else f"{r.correct}/{r.transactions}"
+        print(f"{mark} {r.name:28} {count:>7}  via {r.template or '-'}{held}")
+        if r.detail:
+            print(f"       {r.detail}")
+    summary: Summary = summarize(results)
+    print(f"\n{summary.correct} of {summary.transactions} transactions with correct amount, date and account: "
+          f"{summary.rate:.1%} (target 95%)")
+    if summary.held_out_transactions:
+        print(f"held out: {summary.held_out_correct} of {summary.held_out_transactions}")
+    return 0 if summary.transactions and summary.rate >= 0.95 else 1
+
+
 def main(argv: list[str], settings: Settings | None = None) -> int:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog="python -m hisaab", description="Hisaab administration.")
@@ -85,6 +125,10 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
     skel: argparse.ArgumentParser = commands.add_parser(
         "template-skeleton", help="print a starting template spec for a fixture email")
     skel.add_argument("fixture", help=".eml file")
+    meas: argparse.ArgumentParser = commands.add_parser(
+        "measure-fixtures", help="PRD §9 parse rate: every fixture with an expected answer, through the seeds")
+    meas.add_argument("--fixtures", default=str(PROJECT_ROOT / "fixtures"), help="fixture directory")
+    commands.add_parser("sync-seeds", help="load the shipped parser templates and normalization patterns")
     args: argparse.Namespace = parser.parse_args(argv)
     if args.command == "create-admin":
         return _create_admin(args, settings or Settings())
@@ -94,6 +138,10 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
         from hisaab.parsing.harness import try_template
 
         return try_template(args.spec, args.fixtures, args.text, sys.stdout, args.password_env)
+    if args.command == "measure-fixtures":
+        return _measure_fixtures(args)
+    if args.command == "sync-seeds":
+        return _sync_seeds(settings or Settings())
     if args.command == "template-skeleton":
         from hisaab.parsing.harness import skeleton
 

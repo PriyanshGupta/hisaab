@@ -129,3 +129,42 @@ def test_all_problems_are_reported_together() -> None:
 def test_a_non_object_spec_is_refused() -> None:
     assert problems([]) == ["spec must be a JSON object"]
     assert any("fields" in p for p in problems({**SPEC, "fields": []}))
+
+
+# --- non-transactional specs (slice 11): notices that move no money -------------------------
+
+NOTICE: dict[str, Any] = {
+    "version": 1,
+    "outcome": "non_transactional",
+    "match": {"sender": "alerts@example-bank.in", "subject": "^Account update"},
+    "preprocess": ["strip_html", "collapse_whitespace"],
+    "confirm": [r"upcoming E-mandate", r"will be debited from your Credit Card ending"],
+}
+
+
+def test_a_non_transactional_spec_confirms_phrases_instead_of_extracting_fields() -> None:
+    parsed: EmailSpec = parse_email_spec(NOTICE)
+    assert parsed.outcome == "non_transactional"
+    assert len(parsed.confirm) == 2 and parsed.fields == ()
+
+
+def test_an_ordinary_spec_is_a_transaction_spec() -> None:
+    assert parse_email_spec(SPEC).outcome == "transaction" and parse_email_spec(SPEC).confirm == ()
+
+
+@pytest.mark.parametrize(
+    ("change", "fragment"),
+    [
+        ({"confirm": []}, "confirm: must list"),
+        ({"confirm": ["(unclosed"]}, "confirm: RE2 cannot compile"),
+        ({"fields": SPEC["fields"]}, "fields: a non_transactional spec extracts nothing"),
+        ({"outcome": "maybe"}, "outcome: must be transaction or non_transactional"),
+    ],
+)
+def test_non_transactional_rules(change: dict[str, Any], fragment: str) -> None:
+    found: list[str] = problems({**NOTICE, **change})
+    assert any(fragment in p for p in found), found
+
+
+def test_a_transaction_spec_may_not_carry_confirm() -> None:
+    assert any("confirm" in p for p in problems({**SPEC, "confirm": ["x"]}))

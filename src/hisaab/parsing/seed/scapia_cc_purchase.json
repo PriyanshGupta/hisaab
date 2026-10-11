@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "match": { "sender": "scapiacards@federalbank.co.in", "subject": "^Your transaction was successful$" },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "\\bAmount\\s+(₹\\s*[\\d,]+(?:\\.\\d{1,2})?)", "transform": "inr_to_paise" },
+    "currency":                { "const": "INR" },
+    "direction":               { "const": "debit" },
+    "account_identifier":      { "pattern": "Credit Card ending in\\s+([X*\\d]+)", "transform": "digits_only" },
+    "counterparty_identifier": { "required": false },
+    "payee_raw":               { "pattern": "\\bMerchant\\s+(.+?)\\s+(?:Want to convert|Not you\\?)", "transform": "trim" },
+    "reference_number":        { "required": false },
+    "date":                    { "pattern": "Your payment on\\s+(\\d{2}-\\d{2}-\\d{4})", "transform": "date:%d-%m-%Y" },
+    "time":                    { "pattern": "Your payment on\\s+\\S+\\s+at\\s+(\\d{1,2}:\\d{2} [AP]M)", "transform": "time:%I:%M %p", "required": false },
+    "balance":                 { "required": false }
+  }
+}

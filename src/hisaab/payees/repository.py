@@ -72,6 +72,11 @@ def create_payee(session: Session, name: str, payee_type: str = "merchant") -> P
     return payee
 
 
+def find_by_name(session: Session, name: str) -> Payee | None:
+    """The payee with this name, ignoring case and spacing, or None."""
+    return _by_name(session, _clean(name))
+
+
 def get_or_create_by_name(session: Session, name: str) -> Payee:
     """The payee with this name (ignoring case and spacing), created as a merchant if new."""
     name = _clean(name)

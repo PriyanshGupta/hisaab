@@ -204,3 +204,31 @@ def test_trace_keeps_the_capture_when_the_transform_rejects_it() -> None:
     _, results = trace(parse_email_spec(SPEC), artifact(BODY.replace("05-10-26", "31-02-26")))
     date: FieldResult = next(r for r in results if r.name == "date")
     assert (date.captured, date.value, date.reason) == ("31-02-26", None, "not a date in the form %d-%m-%y")
+
+
+# --- non-transactional templates ---------------------------------------------------------
+
+NOTICE_BODY: str = ("<p>There is an upcoming E-mandate (Auto payment) of INR 100.00 for STREAMCO. Amount will be "
+                    "debited from your Credit Card ending 4321 on 16/09/2026.</p>")
+
+
+def notice_template() -> EmailTemplate:
+    from tests.test_email_spec import NOTICE
+
+    return EmailTemplate(id="notice", name="Example mandate notice", spec=parse_email_spec(NOTICE))
+
+
+def test_a_notice_that_confirms_is_classified_non_transactional() -> None:
+    result: Interpretation = interpret([notice_template()], artifact(NOTICE_BODY))
+    assert result.template_id == "notice"
+    assert result.extraction is not None and result.extraction["outcome"] == "non_transactional"
+    assert result.extraction["amount"] is None and result.extraction["missing_fields"] == []
+    assert not result.needs_review
+
+
+def test_a_notice_template_declines_a_real_transaction_and_vice_versa() -> None:
+    # same sender and subject in real life (HDFC credit alert vs e-mandate notice)
+    on_debit: Interpretation = interpret([notice_template(), template()], artifact())
+    assert on_debit.template_id == "t-1" and not on_debit.attempts[0].matched
+    on_notice: Interpretation = interpret([template(), notice_template()], artifact(NOTICE_BODY))
+    assert on_notice.template_id == "notice" and not on_notice.attempts[0].matched

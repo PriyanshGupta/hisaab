@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "match": { "sender": "onlinesbicard@sbicard.com", "subject": "^Transaction Alert from .+ SBI Card$" },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "Rs\\.?\\s*([\\d,]+(?:\\.\\d{1,2})?) spent on your SBI Credit Card", "transform": "inr_to_paise" },
+    "currency":                { "const": "INR" },
+    "direction":               { "const": "debit" },
+    "account_identifier":      { "pattern": "SBI Credit Card ending\\s+([X*\\d]+)", "transform": "digits_only" },
+    "counterparty_identifier": { "required": false },
+    "payee_raw":               { "pattern": "Credit Card ending\\s+\\S+\\s+at\\s+(.+?)\\s+on\\s+\\d", "transform": "trim" },
+    "reference_number":        { "required": false },
+    "date":                    { "pattern": "\\bon\\s+(\\d{2}/\\d{2}/\\d{2})\\b", "transform": "date:%d/%m/%y" },
+    "time":                    { "required": false },
+    "balance":                 { "required": false }
+  }
+}

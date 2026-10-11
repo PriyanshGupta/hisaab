@@ -1,0 +1,17 @@
+{
+  "version": 1,
+  "match": { "sender": "scapiacards@federalbank.co.in", "subject": "^Your repayment is successful$" },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "received your payment of\\s+(₹\\s*[\\d,]+(?:\\.\\d{1,2})?)", "transform": "inr_to_paise" },
+    "currency":                { "const": "INR" },
+    "direction":               { "const": "credit" },
+    "account_identifier":      { "pattern": "towards your\\s+(Scapia Federal Credit Card)", "transform": "trim" },
+    "counterparty_identifier": { "required": false },
+    "payee_raw":               { "required": false },
+    "reference_number":        { "required": false },
+    "date":                    { "required": false },
+    "time":                    { "required": false },
+    "balance":                 { "required": false }
+  }
+}

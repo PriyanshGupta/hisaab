@@ -29,8 +29,12 @@ from typing import Any
 
 from hisaab.clock import LOCAL_TZ
 from hisaab.parsing import patterns
-from hisaab.parsing.email_spec import CRITICAL_FIELDS, EmailSpec, FieldSpec
+from hisaab.parsing.email_spec import CONTRACT_FIELDS, CRITICAL_FIELDS, EmailSpec, FieldSpec
 from hisaab.parsing.transforms import TransformError
+
+
+# A failure in any of these means the template does not match (§4.3 step 6; confirm: non_transactional specs).
+GATE_FIELDS: tuple[str, ...] = (*CRITICAL_FIELDS, "confirm")
 
 
 @dataclass(frozen=True)
@@ -74,7 +78,7 @@ class Attempt:
 
     @property
     def matched(self) -> bool:
-        return not any(f.field in CRITICAL_FIELDS for f in self.failures)
+        return not any(f.field in GATE_FIELDS for f in self.failures)
 
 
 @dataclass(frozen=True)
@@ -94,13 +98,35 @@ class Interpretation:
 def interpret(candidates: list[EmailTemplate], artifact: EmailArtifact) -> Interpretation:
     attempts: list[Attempt] = []
     for template in candidates:
+        if template.spec.outcome == "non_transactional":
+            failures: list[FieldFailure] = confirm_failures(template.spec, preprocessed(template.spec, artifact))
+            attempt: Attempt = Attempt(template.id, template.name, tuple(failures))
+            attempts.append(attempt)
+            if attempt.matched:  # a notice: the §10.4 contract with nothing extracted
+                notice: dict[str, Any] = {"outcome": "non_transactional", **dict.fromkeys(CONTRACT_FIELDS),
+                                          "missing_fields": []}
+                return Interpretation(tuple(attempts), notice)
+            continue
         values, failures = _run(template.spec, artifact)
-        attempt: Attempt = Attempt(template.id, template.name, tuple(failures))
+        attempt = Attempt(template.id, template.name, tuple(failures))
         attempts.append(attempt)
         if attempt.matched:
             missing: list[str] = [f.field for f in failures]  # all non-critical here
             return Interpretation(tuple(attempts), {"outcome": "transaction", **values, "missing_fields": missing})
     return Interpretation(tuple(attempts), None)
+
+
+def confirm_failures(spec: EmailSpec, text: str) -> list[FieldFailure]:
+    """A non_transactional spec's gate: one failure per confirm phrase that is not in the text."""
+    failures: list[FieldFailure] = []
+    for pattern in spec.confirm:
+        try:
+            found: bool = patterns.search(pattern, text) is not None
+        except patterns.PatternTimeout:
+            found = False
+        if not found:
+            failures.append(FieldFailure("confirm", f"no match for /{pattern.pattern}/"))
+    return failures
 
 
 @dataclass(frozen=True)
@@ -115,10 +141,15 @@ class FieldResult:
 def trace(spec: EmailSpec, artifact: EmailArtifact) -> tuple[str, list[FieldResult]]:
     """Run one spec over one email: the preprocessed text, and what happened to each field.
     interpret() is built on this, so the authoring harness shows exactly what production does."""
+    text: str = preprocessed(spec, artifact)
+    return text, [_field(field, text, artifact) for field in spec.fields]
+
+
+def preprocessed(spec: EmailSpec, artifact: EmailArtifact) -> str:
     text: str = artifact.body
     for step in spec.preprocess:
         text = step(text)
-    return text, [_field(field, text, artifact) for field in spec.fields]
+    return text
 
 
 def _run(spec: EmailSpec, artifact: EmailArtifact) -> tuple[dict[str, object], list[FieldFailure]]:

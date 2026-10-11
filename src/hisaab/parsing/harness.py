@@ -30,10 +30,12 @@ from typing import Any, Protocol, TextIO
 
 from hisaab.parsing import patterns
 from hisaab.parsing.email_interpreter import (
+    GATE_FIELDS,
     EmailArtifact,
     EmailTemplate,
     FieldResult,
     Interpretation,
+    confirm_failures,
     interpret,
     parse_eml,
     trace,
@@ -103,9 +105,15 @@ def _report(spec: EmailSpec, problems: list[str], artifact: EmailArtifact, show_
         for line in textwrap.wrap(text, 100):
             say(f"    {line}")
     say()
-    by_name: dict[str, FieldResult] = {r.name: r for r in results}
-    for name in CONTRACT_FIELDS:
-        say(f"  {name:24} {_describe(name, by_name.get(name), problems)}")
+    if spec.outcome == "non_transactional":
+        missing: set[str] = {f.reason for f in confirm_failures(spec, text)}
+        for pattern in spec.confirm:
+            ok: bool = f"no match for /{pattern.pattern}/" not in missing
+            say(f"  confirm  {'ok' if ok else 'x '} /{pattern.pattern}/")
+    else:
+        by_name: dict[str, FieldResult] = {r.name: r for r in results}
+        for name in CONTRACT_FIELDS:
+            say(f"  {name:24} {_describe(name, by_name.get(name), problems)}")
     say()
 
     if problems:
@@ -117,10 +125,13 @@ def _report(spec: EmailSpec, problems: list[str], artifact: EmailArtifact, show_
             "email, whatever the fields above show.")
         return False
     if result.extraction is None:
-        failed: list[str] = [f.field for f in result.attempts[0].failures if f.field in CRITICAL_FIELDS]
-        say(f"  NOT MATCHED: critical field {', '.join(failed)} failed. Production would try the next "
+        failed: list[str] = sorted({f.field for f in result.attempts[0].failures if f.field in GATE_FIELDS})
+        say(f"  NOT MATCHED: {', '.join(failed)} failed. Production would try the next "
             "template, then fall through to tier 2.")
         return False
+    if result.extraction["outcome"] == "non_transactional":
+        say("  MATCHED: non-transactional (a notice; no money moved, nothing recorded).")
+        return True
     if result.needs_review:
         say(f"  MATCHED, needs review: missing_fields = {result.extraction['missing_fields']}")
         return False

@@ -19,6 +19,11 @@ interpreter calls it when loading, so no unvalidated spec ever runs.
 alert mail to .bank.in domains with the format unchanged, so one format can
 arrive from an old and a new address, and one spec should serve both.
 
+A spec for an email that moves no money (a pre-debit e-mandate notice, say)
+has "outcome": "non_transactional", a "confirm" list of RE2 patterns that must
+all match the body, and no "fields". The confirm list is that template's gate:
+it is how it tells a notice from a real alert sharing its sender and subject.
+
 Field rules:
 - Every PRD §10.4 contract field is declared, and nothing else. A field the
   format never states is declared {"required": false}, so a forgotten field is
@@ -68,7 +73,9 @@ class EmailSpec:
     senders: tuple[str, ...]  # lower-cased
     subject: Pattern | None  # None only in check_email_spec's partial result
     preprocess: tuple[Callable[[str], str], ...]
-    fields: tuple[FieldSpec, ...]  # in CONTRACT_FIELDS order
+    fields: tuple[FieldSpec, ...]  # in CONTRACT_FIELDS order; empty for a non_transactional spec
+    outcome: str = "transaction"  # or "non_transactional"
+    confirm: tuple[Pattern, ...] = ()  # non_transactional: every one must match the body
 
 
 class InvalidSpec(ValueError):
@@ -117,6 +124,28 @@ def check_email_spec(spec: object) -> tuple[EmailSpec, list[str]]:
             steps.append(preprocessor(name))
         except UnknownTransform:
             problems.append(f"preprocess: unknown preprocessor '{name}'")
+
+    outcome: object = spec.get("outcome", "transaction")
+    confirm: list[Pattern] = []
+    if outcome not in ("transaction", "non_transactional"):
+        problems.append("outcome: must be transaction or non_transactional")
+    if outcome == "non_transactional":
+        confirm_in: object = spec.get("confirm")
+        if not (isinstance(confirm_in, list) and confirm_in):
+            problems.append("confirm: must list the phrases that identify this notice")
+            confirm_in = []
+        for text in confirm_in:
+            try:
+                confirm.append(compile_pattern(text))
+            except PatternError as e:
+                problems.append(f"confirm: {e}")
+        if "fields" in spec:
+            problems.append("fields: a non_transactional spec extracts nothing; remove them")
+        assert isinstance(senders, list)
+        return EmailSpec(tuple(a.strip().lower() for a in senders), subject, tuple(steps), (),
+                         "non_transactional", tuple(confirm)), problems
+    if "confirm" in spec:
+        problems.append('confirm: only for "outcome": "non_transactional"')
 
     fields_in: object = spec.get("fields")
     if not isinstance(fields_in, dict):

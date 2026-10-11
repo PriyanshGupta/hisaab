@@ -1,0 +1,23 @@
+{
+  "version": 1,
+  "artifact_type": "statement",
+  "detect": { "page": 1, "all_of": ["GSTIN of SBI Card", "ACCOUNT SUMMARY"] },
+  "account_kind": "credit_card",
+  "table": {
+    "rows": "line_pattern",
+    "header_row": { "contains": ["Transaction Details", "Amount"] },
+    "line_pattern": "^(?P<date>\\d{2} [A-Z][a-z]{2} \\d{2}) (?P<narration>.+?) (?P<amount>[\\d,]+\\.\\d{2} [CD])$",
+    "ends_at": "^Transactions highlighted in grey"
+  },
+  "row_rules": {
+    "amount_style": "cr_dr_suffix",
+    "unsigned_means": "debit",
+    "continuation": "none",
+    "skip_matching": ["^Date$", "^for Statement Period:", "^TRANSACTIONS FOR "]
+  },
+  "field_transforms": { "date": "date:%d %b %y", "amount": "inr_to_paise" },
+  "declared_balances": {
+    "opening": { "pattern": "\\n([\\d,]+\\.\\d{2}) [\\d,]+\\.\\d{2} [\\d,]+\\.\\d{2} [\\d,]+\\.\\d{2} [\\d,]+\\.\\d{2}\\n", "transform": "inr_to_paise" },
+    "closing": { "pattern": "\\n[\\d,]+\\.\\d{2} [\\d,]+\\.\\d{2} [\\d,]+\\.\\d{2} [\\d,]+\\.\\d{2} ([\\d,]+\\.\\d{2})\\n", "transform": "inr_to_paise" }
+  }
+}

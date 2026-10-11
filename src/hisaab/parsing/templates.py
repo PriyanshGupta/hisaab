@@ -57,10 +57,17 @@ def email_candidates(session: Session, sender: str, subject: str) -> list[EmailT
         .where(ParserTemplate.artifact_type == "email", ParserTemplate.status == "active")
         .order_by(ParserTemplate.priority.desc(), ParserTemplate.promoted_at.desc().nulls_last(), ParserTemplate.id)
     )
+    ordered: list[EmailTemplate] = [EmailTemplate(id=row.id, name=row.name, spec=parse_email_spec(json.loads(row.spec)))
+                                    for row in rows]
+    return select_email_candidates(ordered, sender, subject)
+
+
+def select_email_candidates(templates: list[EmailTemplate], sender: str, subject: str) -> list[EmailTemplate]:
+    """The templates (kept in the order given) that list this sender and whose subject pattern matches."""
     sender = sender.strip().lower()
     found: list[EmailTemplate] = []
-    for row in rows:
-        spec: EmailSpec = parse_email_spec(json.loads(row.spec))
+    for template in templates:
+        spec: EmailSpec = template.spec
         if sender not in spec.senders:
             continue
         try:
@@ -69,7 +76,7 @@ def email_candidates(session: Session, sender: str, subject: str) -> list[EmailT
                 continue
         except patterns.PatternTimeout:
             continue
-        found.append(EmailTemplate(id=row.id, name=row.name, spec=spec))
+        found.append(template)
     return found
 
 

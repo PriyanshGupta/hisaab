@@ -73,4 +73,5 @@ if [[ -d frontend ]] && frontend_is_stale; then
 fi
 
 .venv/bin/alembic upgrade head
+.venv/bin/python -m hisaab sync-seeds  # shipped parser templates + normalization patterns (idempotent)
 exec .venv/bin/python -m hisaab

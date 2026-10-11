@@ -25,7 +25,7 @@ dev = ["pytest>=8.3", "httpx2>=2.13", "mypy>=2.4"]  # starlette 1.7+ TestClient 
 where = ["src"]
 
 [tool.setuptools.package-data]
-hisaab = ["parsing/seed/*.json"]
+hisaab = ["parsing/seed/*.json", "payees/seed_patterns.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

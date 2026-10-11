@@ -1,0 +1,50 @@
+[
+  {"payee": "Swiggy", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "swiggy", "priority": 0},
+    {"match_type": "contains", "pattern": "bundl technologies", "priority": 0}]},
+  {"payee": "Zomato", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "zomato", "priority": 0}]},
+  {"payee": "Blinkit", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "blinkit", "priority": 0},
+    {"match_type": "contains", "pattern": "blink commerce", "priority": 0}]},
+  {"payee": "Swish", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "swishbangalore", "priority": 0}]},
+  {"payee": "Amazon", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "amazon", "priority": 0}]},
+  {"payee": "Google Play", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "google play", "priority": 0}]},
+  {"payee": "Google", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "googleindia", "priority": 0}]},
+  {"payee": "Apple", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "appleservices", "priority": 0},
+    {"match_type": "contains", "pattern": "applemedia", "priority": 0}]},
+  {"payee": "Microsoft", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "microsoft", "priority": 0}]},
+  {"payee": "Netflix", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "netflix", "priority": 0}]},
+  {"payee": "Uber", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "uberindia", "priority": 0}]},
+  {"payee": "Jio", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "jioprepaid", "priority": 0}]},
+  {"payee": "CRED", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "cred club", "priority": 0}]},
+  {"payee": "PVR INOX", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "pvrinox", "priority": 0}]},
+  {"payee": "BookMyShow", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "bookmyshow", "priority": 0},
+    {"match_type": "contains", "pattern": "bigtree entertainment", "priority": 0}]},
+  {"payee": "MakeMyTrip", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "makemytrip", "priority": 0}]},
+  {"payee": "Urban Company", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "urbanclap", "priority": 0}]},
+  {"payee": "Ferns N Petals", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "fnp retail", "priority": 0}]},
+  {"payee": "Smart Bazaar", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "smart bazaar", "priority": 0}]},
+  {"payee": "Wow! Momo", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "wowmomo", "priority": 0}]},
+  {"payee": "Nintendo", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "nintendo", "priority": 0}]},
+  {"payee": "Best Buy", "type": "merchant", "patterns": [
+    {"match_type": "contains", "pattern": "best buy", "priority": 0}]}
+]

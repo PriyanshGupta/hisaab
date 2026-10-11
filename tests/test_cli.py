@@ -1,6 +1,7 @@
 """`python -m hisaab create-admin`: bootstrap the first admin (there is no self-signup)."""
 
 import io
+from pathlib import Path
 from typing import Iterator
 
 import pytest
@@ -90,3 +91,20 @@ def test_subcommand_dispatches_to_cli(monkeypatch: pytest.MonkeyPatch) -> None:
     with pytest.raises(SystemExit) as exit_info:
         entry.main(["create-admin"])
     assert exit_info.value.code == 7
+
+
+def test_sync_seeds_loads_the_shipped_templates_and_reports_counts(
+    settings: Settings, migrated_engine: Engine, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["sync-seeds"], settings=settings) == 0
+    first: str = capsys.readouterr().out
+    assert "templates: " in first and "added" in first
+    assert cli.main(["sync-seeds"], settings=settings) == 0
+    assert "templates: 0 added, 0 updated" in capsys.readouterr().out  # idempotent
+
+
+def test_measure_fixtures_on_an_empty_corpus_reports_nothing_measured_and_fails(
+    tmp_path: Path, capsys: pytest.CaptureFixture[str]
+) -> None:
+    assert cli.main(["measure-fixtures", "--fixtures", str(tmp_path)]) == 1
+    assert "0 transactions" in capsys.readouterr().out

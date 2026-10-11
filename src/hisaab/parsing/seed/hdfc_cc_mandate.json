@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "outcome": "non_transactional",
+  "match": { "sender": "alerts@hdfcbank.bank.in", "subject": "^View: Account update for your HDFC Bank A/c$" },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "confirm": [
+    "There is an upcoming E-mandate \\(Auto payment\\) of",
+    "Amount will be debited from your HDFC Bank Credit Card ending"
+  ]
+}
