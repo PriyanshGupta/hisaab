@@ -14,6 +14,7 @@ dependencies = [
   "alembic>=1.14",
   "pydantic-settings>=2.6",
   "argon2-cffi>=25.1",
+  "google-re2>=1.1",           # template patterns: linear-time matching (tech-design §4.5)
 ]
 
 [project.optional-dependencies]
@@ -21,6 +22,9 @@ dev = ["pytest>=8.3", "httpx2>=2.13"]  # starlette 1.7+ TestClient wants httpx2
 
 [tool.setuptools.packages.find]
 where = ["src"]
+
+[tool.setuptools.package-data]
+hisaab = ["parsing/seed/*.json"]
 
 [tool.pytest.ini_options]
 testpaths = ["tests"]

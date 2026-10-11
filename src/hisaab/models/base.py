@@ -42,9 +42,9 @@ def new_id() -> str:
     return str(uuid.uuid4())
 
 
-def utc_now() -> str:
-    """'YYYY-MM-DDTHH:MM:SS.mmmZ' in UTC."""
-    now = datetime.now(UTC)
+def utc_now(now: datetime | None = None) -> str:
+    """'YYYY-MM-DDTHH:MM:SS.mmmZ' in UTC (of `now`, default the current time)."""
+    now = (now or datetime.now(UTC)).astimezone(UTC)
     return now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
 
 

@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "match": {
+    "sender": "alerts@hdfcbank.bank.in",
+    "subject": "Account update for your HDFC Bank A/c"
+  },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "Rs\\.?\\s*([\\d,]+(?:\\.\\d{1,2})?) has been successfully credited",
+                                 "transform": "inr_to_paise" },
+    "direction":               { "const": "credit" },
+    "currency":                { "const": "INR" },
+    "account_identifier":      { "pattern": "credited to your HDFC Bank account ending in\\s+([X*\\d]+)",
+                                 "transform": "digits_only" },
+    "counterparty_identifier": { "pattern": "\\(VPA:\\s*([^\\s)]+)\\)",
+                                 "transform": "normalize_vpa", "required": false },
+    "payee_raw":               { "pattern": "Sender:\\s*(.+?)\\s*\\(VPA:",
+                                 "transform": "trim" },
+    "reference_number":        { "pattern": "UPI Reference No\\.?:?\\s*(\\d+)" },
+    "date":                    { "pattern": "Date:\\s*(\\d{2}-\\d{2}-\\d{2})\\b",
+                                 "transform": "date:%d-%m-%y" },
+    "time":                    { "required": false },
+    "balance":                 { "required": false }
+  }
+}

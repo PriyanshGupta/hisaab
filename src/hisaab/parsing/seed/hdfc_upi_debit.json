@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "match": {
+    "sender": "alerts@hdfcbank.bank.in",
+    "subject": "You have done a UPI txn"
+  },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "Rs\\.?\\s*([\\d,]+(?:\\.\\d{1,2})?) is debited from your account",
+                                 "transform": "inr_to_paise" },
+    "direction":               { "const": "debit" },
+    "currency":                { "const": "INR" },
+    "account_identifier":      { "pattern": "debited from your account ending\\s+([X*\\d]+)",
+                                 "transform": "digits_only" },
+    "counterparty_identifier": { "pattern": "towards VPA\\s+(\\S+)",
+                                 "transform": "normalize_vpa", "required": false },
+    "payee_raw":               { "pattern": "towards VPA\\s+\\S+\\s+\\((.+?)\\)\\s+on\\s+\\d",
+                                 "transform": "trim" },
+    "reference_number":        { "pattern": "UPI transaction reference no\\.?:?\\s*(\\d+)" },
+    "date":                    { "pattern": "\\bon\\s+(\\d{2}-\\d{2}-\\d{2})\\b",
+                                 "transform": "date:%d-%m-%y" },
+    "time":                    { "required": false },
+    "balance":                 { "required": false }
+  }
+}
