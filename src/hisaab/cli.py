@@ -18,11 +18,11 @@ import sys
 from getpass import getpass
 from pathlib import Path
 
-from sqlalchemy import Engine, inspect
+from sqlalchemy import inspect
 
 from hisaab.auth import users
 from hisaab.config import PROJECT_ROOT, Settings
-from hisaab.db import Database, make_engine
+from hisaab.db import Database
 from hisaab.models import User
 
 
@@ -37,9 +37,9 @@ def _read_password(from_stdin: bool) -> str | None:
 
 
 def _create_admin(args: argparse.Namespace, settings: Settings) -> int:
-    engine: Engine = make_engine(settings.database_path)
+    db: Database = Database(settings.database_path)
     try:
-        if not inspect(engine).has_table("users"):
+        if not inspect(db.write_engine).has_table("users"):  # the write engine creates a missing file
             print(f"Database at {settings.database_path} has no schema. Run: .venv/bin/alembic upgrade head",
                   file=sys.stderr)
             return 1
@@ -47,14 +47,14 @@ def _create_admin(args: argparse.Namespace, settings: Settings) -> int:
         if password is None:
             return 1
         try:
-            with Database(engine).write_session() as session:
+            with db.write_session() as session:
                 user: User = users.create_user(session, args.username, args.display_name, password, role="admin")
                 username: str = user.username
         except users.UserError as exc:
             print(str(exc), file=sys.stderr)
             return 1
     finally:
-        engine.dispose()
+        db.dispose()
     print(f"Created admin '{username}'.")
     return 0
 
@@ -70,12 +70,12 @@ def _export_openapi(args: argparse.Namespace) -> int:
 def _sync_seeds(settings: Settings) -> int:
     from hisaab.seeds import SeedReport, sync_seeds
 
-    engine: Engine = make_engine(settings.database_path)
+    db: Database = Database(settings.database_path)
     try:
-        with Database(engine).write_session() as session:
+        with db.write_session() as session:
             report: SeedReport = sync_seeds(session)
     finally:
-        engine.dispose()
+        db.dispose()
     print(f"templates: {report.templates_added} added, {report.templates_updated} updated; "
           f"payees: {report.payees_added} added; patterns: {report.patterns_added} added, "
           f"{report.patterns_updated} updated")

@@ -83,21 +83,30 @@ def assert_safe_db_location(db_path: Path, mounts_text: str | None = None) -> No
         )
 
 
-def make_engine(db_path: Path, *, enforce_foreign_keys: bool = True) -> Engine:
+def make_engine(db_path: Path, *, enforce_foreign_keys: bool = True, read_only: bool = False,
+                pool_size: int | None = None) -> Engine:
     """Engine for the SQLite file at `db_path`, with every connection configured.
 
     enforce_foreign_keys=False exists for migrations only; see migrations/env.py.
+    read_only=True opens every connection with SQLite's mode=ro: the read pool
+    (tech-design §6.7). That is fixed when the file is opened, so no statement
+    or PRAGMA run later on the connection can make it write.
+    pool_size caps the pool with no overflow: 1 for the single write connection.
     """
     assert_safe_db_location(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine: Engine = create_engine(f"sqlite:///{db_path}")
+    url: str = f"sqlite:///file:{db_path}?mode=ro&uri=true" if read_only else f"sqlite:///{db_path}"
+    pool_args: dict[str, int] = {} if pool_size is None else {"pool_size": pool_size, "max_overflow": 0}
+    engine: Engine = create_engine(url, **pool_args)
     foreign_keys: str = "ON" if enforce_foreign_keys else "OFF"
+    # journal_mode is a property of the file, set by the writer; a read-only connection cannot set it.
+    pragmas: tuple[tuple[str, str], ...] = CONNECTION_PRAGMAS[1:] if read_only else CONNECTION_PRAGMAS
 
     @event.listens_for(engine, "connect")
     def _configure_connection(dbapi_connection: DBAPIConnection, _connection_record: ConnectionPoolEntry) -> None:
         cursor: DBAPICursor = dbapi_connection.cursor()
         try:
-            for name, value in CONNECTION_PRAGMAS:
+            for name, value in pragmas:
                 cursor.execute(f"PRAGMA {name} = {value}")
             cursor.execute(f"PRAGMA foreign_keys = {foreign_keys}")
         finally:
@@ -111,27 +120,37 @@ class WriterBusy(RuntimeError):
 
 
 class Database:
-    """The engine plus the process-wide single writer lock.
+    """The two connection pools plus the process-wide single writer lock.
+
+    Pools (tech-design §6.7): the write engine holds exactly one connection; the
+    read engine's connections are opened read-only, so a handler that reads
+    through read_session() physically cannot write.
 
     Write-path ruling (2026-10-10, amends tech-design §6.7): every write, whether
     a background job or a user action like login or an edit, goes through
-    write_session(), which holds `writer_lock` for the duration of one short
-    transaction. So exactly one writer exists at a time by construction, and
-    SQLite never has to arbitrate between two (its locking stays as a backstop).
-    Jobs (slice 12) take the same lock, releasing it between batches; only a
+    write_session(), which holds `writer_lock` for the duration of one
+    transaction on the one write connection. So exactly one writer exists at a
+    time by construction, and SQLite never has to arbitrate between two (its
+    locking stays as a backstop). Jobs release the lock between batches; only a
     reprocess holds it for a whole run, which is what PRD §10.2 asks for.
-
-    read_session() never commits. Slice 12 gives it a separate read-only pool.
     """
 
-    def __init__(self, engine: Engine) -> None:
-        self.engine: Engine = engine
+    def __init__(self, db_path: Path) -> None:
+        self.write_engine: Engine = make_engine(db_path, pool_size=1)
+        self.read_engine: Engine = make_engine(db_path, read_only=True)
         self.writer_lock: threading.Lock = threading.Lock()
-        self._sessions: sessionmaker[Session] = sessionmaker(bind=engine, expire_on_commit=False)
+        self._writes: sessionmaker[Session] = sessionmaker(bind=self.write_engine, expire_on_commit=False)
+        self._reads: sessionmaker[Session] = sessionmaker(bind=self.read_engine)
+        # The thread inside write_session and its DBAPI connection, for interrupt_writer.
+        self._writer: tuple[int, DBAPIConnection] | None = None
+
+    def dispose(self) -> None:
+        self.write_engine.dispose()
+        self.read_engine.dispose()
 
     @contextmanager
     def read_session(self) -> Iterator[Session]:
-        session: Session = self._sessions()
+        session: Session = self._reads()
         try:
             yield session
         finally:
@@ -144,8 +163,7 @@ class Database:
         if not self.writer_lock.acquire(timeout=timeout):
             raise WriterBusy(f"database writer busy for more than {timeout}s")
         try:
-            with self._sessions.begin() as session:
-                yield session
+            yield from self._transaction()
         finally:
             self.writer_lock.release()
 
@@ -160,7 +178,24 @@ class Database:
             yield None
             return
         try:
-            with self._sessions.begin() as session:
-                yield session
+            yield from self._transaction()
         finally:
             self.writer_lock.release()
+
+    def _transaction(self) -> Iterator[Session]:
+        with self._writes.begin() as session:
+            dbapi: DBAPIConnection | None = session.connection().connection.dbapi_connection
+            assert dbapi is not None  # a checked-out connection always has one
+            self._writer = (threading.get_ident(), dbapi)
+            try:
+                yield session
+            finally:
+                self._writer = None
+
+    def interrupt_writer(self, owner: int) -> None:
+        """Abort the SQL statement now running on the write connection, if thread `owner` is
+        the one writing (a job's watchdog must never abort a user's write). Its transaction
+        then fails and rolls back."""
+        writer: tuple[int, DBAPIConnection] | None = self._writer
+        if writer is not None and writer[0] == owner:
+            writer[1].interrupt()  # sqlite3.Connection.interrupt is thread-safe

@@ -4,7 +4,7 @@ from datetime import date, timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import Connection, Engine, select
+from sqlalchemy import Connection, select
 
 from hisaab.accounts import repository as accounts
 from hisaab.accounts.repository import AccountError, DuplicateIdentifier, DuplicateLast4, NotFound
@@ -14,10 +14,6 @@ from tests import factories as f
 
 ANCHOR: str = "2026-07-11"
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 @pytest.fixture

@@ -16,6 +16,7 @@ dependencies = [
   "argon2-cffi>=25.1",
   "google-re2>=1.1",           # template patterns: linear-time matching (tech-design §4.5)
   "pdfplumber>=0.11",          # statement PDFs: words, rules, passwords (tech-design §4.7)
+  "apscheduler>=3.11,<4",      # scheduled jobs (tech-design §6.7); 4.x is still pre-release
 ]
 
 [project.optional-dependencies]
@@ -40,4 +41,8 @@ plugins = ["pydantic.mypy"]    # pydantic models: field coercion and pydantic-se
 
 [[tool.mypy.overrides]]
 module = ["google_auth_oauthlib.*"]  # the Slice 0 spike's own venv has it; the app's does not
+ignore_missing_imports = true
+
+[[tool.mypy.overrides]]
+module = ["apscheduler.*"]       # ships no type information
 ignore_missing_imports = true

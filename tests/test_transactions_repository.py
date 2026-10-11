@@ -6,7 +6,7 @@ from collections.abc import Callable
 from typing import Any
 
 import pytest
-from sqlalchemy import Connection, Engine, func, select
+from sqlalchemy import Connection, func, select
 from sqlalchemy.orm import Session
 
 from hisaab.accounts import repository as accounts
@@ -19,10 +19,6 @@ from tests import factories as f
 
 DAY: str = "2026-10-05"
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 @pytest.fixture

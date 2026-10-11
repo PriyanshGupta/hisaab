@@ -12,6 +12,7 @@ exactly what the running app serves.
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
+from apscheduler.schedulers.background import BackgroundScheduler
 from fastapi import FastAPI, Request
 from fastapi.responses import JSONResponse
 from sqlalchemy import text
@@ -23,7 +24,10 @@ from hisaab.auth import users
 from hisaab.auth.throttle import LoginThrottle
 from hisaab.categories import repository as categories_repo
 from hisaab.config import Settings
-from hisaab.db import Database, WriterBusy, make_engine
+from hisaab.db import Database, WriterBusy
+from hisaab.jobs.kinds import job_kinds
+from hisaab.jobs.queue import JobQueue
+from hisaab.jobs.scheduler import start_scheduler
 from hisaab.payees import repository as payees_repo
 from hisaab.spa import SpaStaticFiles
 from hisaab.transactions import repository as txns_repo
@@ -38,7 +42,7 @@ def health(request: Request) -> JSONResponse:
     # Liveness plus a real round-trip to SQLite: "process is up" alone would
     # report healthy with an unopenable database file.
     try:
-        with request.app.state.db.engine.connect() as conn:
+        with request.app.state.db.read_engine.connect() as conn:
             conn.execute(text("SELECT 1"))
     except SQLAlchemyError:
         return JSONResponse(status_code=503, content={"status": "error", "database": "unreachable"})
@@ -120,12 +124,21 @@ def create_app(settings: Settings | None = None) -> FastAPI:
 
     @asynccontextmanager
     async def lifespan(app: FastAPI) -> AsyncIterator[None]:
-        yield
-        app.state.db.engine.dispose()
+        jobs: JobQueue = app.state.jobs
+        jobs.recover()  # before anything new is queued: fail what a killed process left running
+        jobs.start()
+        scheduler: BackgroundScheduler = start_scheduler(jobs)
+        try:
+            yield
+        finally:
+            scheduler.shutdown(wait=False)
+            jobs.stop()
+            app.state.db.dispose()
 
     app: FastAPI = FastAPI(title=APP_TITLE, lifespan=lifespan)
     app.state.settings = settings
-    app.state.db = Database(make_engine(settings.database_path))
+    app.state.db = Database(settings.database_path)
+    app.state.jobs = JobQueue(app.state.db, job_kinds())
     # How long a user action waits for the writer lock before answering 503.
     app.state.writer_timeout = 10.0
     app.state.login_throttle = LoginThrottle()

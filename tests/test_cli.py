@@ -43,7 +43,7 @@ def test_password_prompt_requires_matching_confirmation(settings: Settings, migr
     code: int = run(settings, ["create-admin", "--username", "asha", "--display-name", "Asha"])
     assert code == 1
     assert "do not match" in capsys.readouterr().err
-    with Database(migrated_engine).read_session() as s:
+    with Database(settings.database_path).read_session() as s:
         assert users.list_users(s) == []
 
 

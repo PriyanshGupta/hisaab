@@ -12,7 +12,7 @@ from argon2.exceptions import VerifyMismatchError
 from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx2 import Response
-from sqlalchemy import Connection, Engine, select
+from sqlalchemy import Connection, select
 
 from hisaab.accounts import repository as accounts
 from hisaab.auth import passwords
@@ -152,13 +152,10 @@ def test_local_today_is_india_time() -> None:
 
 
 def test_opening_date_limit_uses_india_today(
-    conn: Connection, monkeypatch: pytest.MonkeyPatch, migrated_engine: Engine,
+    conn: Connection, monkeypatch: pytest.MonkeyPatch, db: Database,
 ) -> None:
-    from hisaab.db import Database
-
     uid: str = f.user(conn)["id"]
     conn.commit()
-    db: Database = Database(migrated_engine)
     monkeypatch.setattr(accounts, "local_today", lambda: date(2030, 1, 2))
     with db.write_session() as s:
         accounts.create_account(s, uid, type="cash", display_name="Wallet", opening_balance=0,

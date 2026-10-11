@@ -12,7 +12,6 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import Engine
 
 from hisaab.config import PROJECT_ROOT
 from hisaab.db import Database
@@ -59,10 +58,6 @@ def test_the_specs_match_their_fixtures_subject_and_sender() -> None:
         assert artifact.sender in parsed.senders
         assert parsed.subject is not None and parsed.subject.search(artifact.subject)
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 def route(db: Database, artifact: EmailArtifact) -> Interpretation:

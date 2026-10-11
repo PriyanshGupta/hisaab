@@ -1,17 +1,12 @@
 """Payees: global (shared by every user), names unique ignoring case."""
 
 import pytest
-from sqlalchemy import Engine
 
 from hisaab.db import Database
 from hisaab.models import Payee
 from hisaab.payees import repository as payees
 from hisaab.payees.repository import DuplicatePayee, NotFound, PayeeError
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 def create(db: Database, name: str, type: str = "merchant") -> str:

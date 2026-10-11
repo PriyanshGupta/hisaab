@@ -5,7 +5,7 @@ import json
 from datetime import UTC, datetime, timedelta
 
 import pytest
-from sqlalchemy import Engine, func, select
+from sqlalchemy import func, select
 
 from hisaab.db import Database
 from hisaab.models import ParserTemplate
@@ -17,10 +17,6 @@ from tests.test_email_spec import SPEC
 
 NOW: datetime = datetime(2026, 10, 11, 12, 0, tzinfo=UTC)
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 def save(db: Database, name: str, spec: dict[str, Any] = SPEC, **kw: Any) -> str:

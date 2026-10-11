@@ -10,7 +10,7 @@ from httpx2 import Response
 from sqlalchemy import Connection, Engine
 
 from hisaab.config import PROJECT_ROOT, Settings
-from hisaab.db import make_engine
+from hisaab.db import Database, make_engine
 
 
 @pytest.fixture
@@ -41,6 +41,14 @@ def migrated_engine(settings: Settings) -> Iterator[Engine]:
     engine: Engine = make_engine(settings.database_path)
     yield engine
     engine.dispose()
+
+
+@pytest.fixture
+def db(settings: Settings, migrated_engine: Engine) -> Iterator[Database]:
+    """The app's Database (write pool of one, read-only pool) on the migrated throwaway database."""
+    database: Database = Database(settings.database_path)
+    yield database
+    database.dispose()
 
 
 @pytest.fixture

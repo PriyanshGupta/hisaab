@@ -5,7 +5,7 @@ rule (if its category is active), else uncategorized. Nothing is ever written.""
 from typing import Any
 
 import pytest
-from sqlalchemy import Connection, Engine, func, select
+from sqlalchemy import Connection, func, select
 
 from hisaab.accounts import repository as accounts
 from hisaab.auth import users
@@ -17,10 +17,6 @@ from hisaab.transactions import repository as txns
 from hisaab.transactions.repository import TransactionError
 from tests import factories as f
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 @pytest.fixture

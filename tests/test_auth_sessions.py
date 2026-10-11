@@ -6,7 +6,7 @@ from datetime import UTC, datetime, timedelta
 from typing import Any
 
 import pytest
-from sqlalchemy import Connection, Engine, select
+from sqlalchemy import Connection, select
 from sqlalchemy.orm import Session
 
 from hisaab.auth import sessions
@@ -16,10 +16,6 @@ from tests import factories as f
 
 SECRET: str = "test-session-secret-0123456789abcdef"
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 @pytest.fixture
@@ -132,8 +128,9 @@ def test_touch_slides_expiry_when_due(db: Database, user_id: str) -> None:
 def test_touch_is_skipped_without_waiting_while_writer_is_busy(db: Database, user_id: str) -> None:
     with db.write_session() as s:
         token: str = sessions.create(s, SECRET, user_id)
-    stale: str = iso(now() - timedelta(days=1))
-    set_last_seen(db, token, now() - timedelta(days=1))
+    seen: datetime = now() - timedelta(days=1)  # one clock read: two could straddle a millisecond
+    stale: str = iso(seen)
+    set_last_seen(db, token, seen)
     with db.writer_lock:  # a long job holds the writer
         assert sessions.touch_if_due(db, SECRET, token, stale) is False
     with db.read_session() as s:

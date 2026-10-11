@@ -22,10 +22,6 @@ DEFAULTS: list[str] = ["Food & Dining", "Groceries", "Transport", "Bills & Utili
             "Entertainment", "Lending", "Other"]
 
 
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
-
 
 @pytest.fixture
 def asha(db: Database) -> str:

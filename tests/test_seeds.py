@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import Any
 
 import pytest
-from sqlalchemy import Engine, func, select
+from sqlalchemy import func, select
 
 from hisaab.db import Database
 from hisaab.models import NormalizationPattern, ParserTemplate, Payee
@@ -23,10 +23,6 @@ PATTERNS: list[dict[str, Any]] = [
      "patterns": [{"match_type": "contains", "pattern": "swiggy instamart", "priority": 10}]},
 ]
 
-
-@pytest.fixture
-def db(migrated_engine: Engine) -> Database:
-    return Database(migrated_engine)
 
 
 @pytest.fixture
