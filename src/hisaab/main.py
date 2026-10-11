@@ -16,7 +16,7 @@ from fastapi.responses import JSONResponse
 from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
-from hisaab.api import admin_users, auth
+from hisaab.api import accounts, admin_users, auth
 from hisaab.config import Settings
 from hisaab.db import Database, WriterBusy, make_engine
 from hisaab.spa import SpaStaticFiles
@@ -40,6 +40,7 @@ def health(request: Request):
 def register_routes(app: FastAPI) -> None:
     app.include_router(auth.router)
     app.include_router(admin_users.router)
+    app.include_router(accounts.router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
 
 

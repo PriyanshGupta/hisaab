@@ -118,6 +118,10 @@ a {
 .field__input:focus-visible {
   border-color: var(--accent);
 }
+.field__input::placeholder {
+  color: var(--ink-muted);
+  opacity: 0.7; /* an example, not a value */
+}
 
 /* Something needs attention: ink text on a red wash, red rule on the left. */
 .form-error {

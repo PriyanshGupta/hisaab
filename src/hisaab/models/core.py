@@ -48,8 +48,11 @@ class User(Base):
 class Account(Base):
     __tablename__ = "accounts"
     __table_args__ = (
-        # NULL last4 (cash accounts) never collides: NULLs are distinct in UNIQUE.
-        UniqueConstraint("user_id", "last4"),
+        # One ACTIVE account per last4 per user (ruling 2026-10-11, migration 0002):
+        # archiving frees the last4 so a replacement account can use it. NULL last4
+        # (cash accounts) never collides: NULLs are distinct in a unique index.
+        Index("uq_accounts_active_last4", "user_id", "last4", unique=True,
+              **partial_index_where("archived_at IS NULL")),
         one_of("type", ACCOUNT_TYPES, "type"),
     )
 
@@ -69,7 +72,11 @@ class Account(Base):
 class AccountIdentifier(Base):
     __tablename__ = "account_identifiers"
     __table_args__ = (
-        UniqueConstraint("user_id", "kind", "identifier"),
+        # Unique among ACTIVE identifiers only: archiving an account retires its
+        # identifiers (retired_at), which then never resolve and may be reused,
+        # e.g. a UPI ID re-linked to a new bank account (migration 0002).
+        Index("uq_account_identifiers_active", "user_id", "kind", "identifier", unique=True,
+              **partial_index_where("retired_at IS NULL")),
         one_of("kind", IDENTIFIER_KINDS, "kind"),
         one_of("origin", IDENTIFIER_ORIGINS, "origin"),
         Index("ix_acctid_lookup", "user_id", "identifier"),
@@ -82,6 +89,7 @@ class AccountIdentifier(Base):
     identifier: Mapped[str]  # stored normalized
     origin: Mapped[str]
     created_at: Mapped[str] = created_column()
+    retired_at: Mapped[str | None]  # set when its account is archived; retired identifiers never resolve
 
 
 class Source(Base):

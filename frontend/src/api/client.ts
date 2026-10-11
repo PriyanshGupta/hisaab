@@ -44,10 +44,24 @@ export async function send<T extends { response: Response }>(call: () => Promise
   }
 }
 
+/**
+ * The server's own sentence when it sent one ({"detail": "You already have…"}).
+ * FastAPI's field-validation errors carry a list instead; those become one
+ * generic sentence, since the form has already checked what it can.
+ */
 export function apiError(response: Response, error: unknown): ApiError {
-  const detail =
-    typeof error === "object" && error !== null && "detail" in error && typeof error.detail === "string"
-      ? error.detail
-      : response.statusText;
-  return new ApiError(response.status, detail);
+  const detail = typeof error === "object" && error !== null && "detail" in error ? error.detail : undefined;
+  if (typeof detail === "string") return new ApiError(response.status, detail);
+  if (Array.isArray(detail)) return new ApiError(response.status, "Some details aren't valid. Check the form and try again.");
+  return new ApiError(response.status, response.statusText || `Request failed (${response.status})`);
+}
+
+/** A sentence to show the person for any failed request. */
+export function describeError(error: unknown): string {
+  if (error instanceof NetworkError) return "Can't reach the Hisaab server. Check that it's running, then try again.";
+  if (error instanceof ApiError) {
+    if (error.status === 503) return "Hisaab is busy finishing a long job. Try again in a minute.";
+    return error.message;
+  }
+  return "Something went wrong. Try again.";
 }

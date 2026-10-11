@@ -3,4 +3,7 @@
 // Accounts and the admin screens here; only routes that exist are listed.
 export type NavItem = { to: string; label: string; end?: boolean };
 
-export const NAV_ITEMS: readonly NavItem[] = [{ to: "/", label: "Report", end: true }];
+export const NAV_ITEMS: readonly NavItem[] = [
+  { to: "/", label: "Report", end: true },
+  { to: "/accounts", label: "Accounts" },
+];
