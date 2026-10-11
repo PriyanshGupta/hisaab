@@ -162,3 +162,25 @@ def test_parse_eml_falls_back_to_plain_text():
     msg.set_content("Rs.1,234.50 debited")
     assert parse_eml(msg.as_bytes()).body.strip() == "Rs.1,234.50 debited"
 
+
+
+# --- trace: the per-field record the authoring harness prints ---------------------------
+
+def test_trace_shows_the_preprocessed_text_and_each_fields_capture_and_value():
+    from hisaab.parsing.email_interpreter import trace
+
+    text, results = trace(parse_email_spec(SPEC), artifact(BODY.replace("Ref 9988776655", "")))
+    assert text.startswith("Rs. 1,234.50 debited") or text.startswith("Rs. 1,234.50 debited")
+    by = {r.name: r for r in results}
+    assert (by["amount"].captured, by["amount"].value, by["amount"].reason) == ("1,234.50", 123450, None)
+    assert (by["reference_number"].captured, by["reference_number"].reason) == (None, "no match")
+    assert by["direction"].value == "debit" and by["direction"].captured is None
+    assert by["time"].required is False
+
+
+def test_trace_keeps_the_capture_when_the_transform_rejects_it():
+    from hisaab.parsing.email_interpreter import trace
+
+    _, results = trace(parse_email_spec(SPEC), artifact(BODY.replace("05-10-26", "31-02-26")))
+    date = next(r for r in results if r.name == "date")
+    assert (date.captured, date.value, date.reason) == ("31-02-26", None, "not a date in the form %d-%m-%y")

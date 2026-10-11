@@ -42,7 +42,7 @@ def problems(spec):
 
 def test_a_valid_spec_parses():
     parsed = parse_email_spec(SPEC)
-    assert parsed.sender == "alerts@example-bank.in"  # addresses compare case-insensitively
+    assert parsed.senders == ("alerts@example-bank.in",)  # addresses compare case-insensitively
     assert [f.name for f in parsed.fields] == list(CONTRACT_FIELDS)
     assert CRITICAL_FIELDS == ("amount", "date", "account_identifier")
     amount = next(f for f in parsed.fields if f.name == "amount")
@@ -87,6 +87,20 @@ def test_contract_fields_match_prd_10_4():
 )
 def test_each_rule_names_the_offending_part(spec, fragment):
     assert any(fragment in p for p in problems(spec)), problems(spec)
+
+
+def test_a_format_may_come_from_several_addresses():
+    # ICICI moved card alerts from icicibank.com to icici.bank.in with the format unchanged (ruling 2026-10-11)
+    spec = copy.deepcopy(SPEC)
+    spec["match"]["sender"] = ["Alerts@Example-Bank.in", "alerts@example.bank.in"]
+    assert parse_email_spec(spec).senders == ("alerts@example-bank.in", "alerts@example.bank.in")
+
+
+@pytest.mark.parametrize("sender", [[], ["a@b.in", "nope"], [3], None])
+def test_a_sender_list_must_hold_addresses(sender):
+    spec = copy.deepcopy(SPEC)
+    spec["match"]["sender"] = sender
+    assert any("match.sender" in p for p in problems(spec))
 
 
 def test_date_may_be_declared_absent_and_then_falls_back_to_received_time():

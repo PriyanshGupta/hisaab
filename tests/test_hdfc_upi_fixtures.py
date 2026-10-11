@@ -51,7 +51,7 @@ def test_each_spec_extracts_every_field_of_its_fixture(spec, fixture):
 def test_the_specs_match_their_fixtures_subject_and_sender():
     for spec, fixture in (("hdfc_upi_debit", DEBIT), ("hdfc_upi_credit", CREDIT)):
         parsed, artifact = parse_email_spec(seed(spec)), email(fixture)
-        assert parsed.sender == artifact.sender
+        assert artifact.sender in parsed.senders
         assert parsed.subject.search(artifact.subject)
 
 

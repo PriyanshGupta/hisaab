@@ -27,7 +27,7 @@ from email.utils import parseaddr, parsedate_to_datetime
 
 from hisaab.clock import LOCAL_TZ
 from hisaab.parsing import patterns
-from hisaab.parsing.email_spec import CONTRACT_FIELDS, CRITICAL_FIELDS, EmailSpec, FieldSpec
+from hisaab.parsing.email_spec import CRITICAL_FIELDS, EmailSpec, FieldSpec
 from hisaab.parsing.transforms import TransformError
 
 
@@ -101,40 +101,52 @@ def interpret(candidates: list[EmailTemplate], artifact: EmailArtifact) -> Inter
     return Interpretation(tuple(attempts), None)
 
 
-def _run(spec: EmailSpec, artifact: EmailArtifact) -> tuple[dict, list[FieldFailure]]:
+@dataclass(frozen=True)
+class FieldResult:
+    name: str
+    value: object  # the contract value, or None
+    captured: str | None  # pattern group 1 before the transform (for the authoring harness; never stored)
+    reason: str | None  # why it failed; None when extracted or not in this format
+    required: bool
+
+
+def trace(spec: EmailSpec, artifact: EmailArtifact) -> tuple[str, list[FieldResult]]:
+    """Run one spec over one email: the preprocessed text, and what happened to each field.
+    interpret() is built on this, so the authoring harness shows exactly what production does."""
     text = artifact.body
     for step in spec.preprocess:
         text = step(text)
-    values: dict = {}
-    failures: list[FieldFailure] = []
-    for field in spec.fields:
-        value, reason = _field(field, text, artifact)
-        values[field.name] = value
-        if reason and field.required:
-            failures.append(FieldFailure(field.name, reason))
-    assert list(values) == list(CONTRACT_FIELDS)
+    return text, [_field(field, text, artifact) for field in spec.fields]
+
+
+def _run(spec: EmailSpec, artifact: EmailArtifact) -> tuple[dict, list[FieldFailure]]:
+    _, results = trace(spec, artifact)
+    values = {r.name: r.value for r in results}
+    failures = [FieldFailure(r.name, r.reason) for r in results if r.reason and r.required]
     return values, failures
 
 
-def _field(field: FieldSpec, text: str, artifact: EmailArtifact) -> tuple[object, str | None]:
-    """(value, None) when extracted or not in this format; (None, reason) when it failed."""
+def _field(field: FieldSpec, text: str, artifact: EmailArtifact) -> FieldResult:
+    def result(value=None, captured=None, reason=None):
+        return FieldResult(field.name, value, captured, reason, field.required)
+
     if field.const is not None:
-        return field.const, None
+        return result(field.const)
     if field.pattern is None:
         if field.name == "date":  # format never states a date: Gmail's received time, in India (ruling 2026-10-10)
-            return artifact.received_at.astimezone(LOCAL_TZ).date().isoformat(), None
-        return None, None
+            return result(artifact.received_at.astimezone(LOCAL_TZ).date().isoformat())
+        return result()
     try:
         m = patterns.search(field.pattern, text)
     except patterns.PatternTimeout as e:
-        return None, str(e)
+        return result(reason=str(e))
     captured = m.group(1) if m else None
     if not captured:
-        return None, "no match"
+        return result(captured=captured, reason="no match")
     try:
         value = field.transform(captured) if field.transform else captured
     except TransformError as e:
-        return None, str(e)
+        return result(captured=captured, reason=str(e))
     if value == "":
-        return None, "matched only whitespace"
-    return value, None
+        return result(captured=captured, reason="matched only whitespace")
+    return result(value, captured)

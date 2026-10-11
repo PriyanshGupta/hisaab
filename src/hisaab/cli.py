@@ -1,5 +1,8 @@
 """Command-line administration: `python -m hisaab <command>`.
 
+try-template runs a template spec over fixture emails: the authoring loop
+(parsing/harness.py).
+
 create-admin bootstraps the first admin, since there is no self-signup
 (PRD §6.9). It is also the recovery path if every admin is locked out.
 The password is read by a hidden prompt (or from stdin with --password-stdin,
@@ -70,9 +73,24 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
     create.add_argument("--password-stdin", action="store_true", help="read the password from stdin")
     export = commands.add_parser("export-openapi", help="write the OpenAPI schema (for the frontend client)")
     export.add_argument("output", help="path of the JSON file to write")
+    tryout = commands.add_parser("try-template", help="run a template spec over fixture emails, field by field")
+    tryout.add_argument("spec", help="template spec JSON file")
+    tryout.add_argument("fixtures", nargs="+", help=".eml files to run it on")
+    tryout.add_argument("--text", action="store_true", help="also print the text the patterns run against")
+    skel = commands.add_parser("template-skeleton", help="print a starting template spec for a fixture email")
+    skel.add_argument("fixture", help=".eml file")
     args = parser.parse_args(argv)
     if args.command == "create-admin":
         return _create_admin(args, settings or Settings())
     if args.command == "export-openapi":
         return _export_openapi(args)
+    if args.command == "try-template":
+        from hisaab.parsing.harness import try_template
+
+        return try_template(args.spec, args.fixtures, args.text, sys.stdout)
+    if args.command == "template-skeleton":
+        from hisaab.parsing.harness import skeleton
+
+        print(json.dumps(skeleton(args.fixture), indent=2, ensure_ascii=False))
+        return 0
     return 2  # unreachable: argparse rejects unknown commands

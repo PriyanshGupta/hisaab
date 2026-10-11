@@ -1,0 +1,25 @@
+{
+  "version": 1,
+  "match": {
+    "sender": ["credit_cards@icici.bank.in", "credit_cards@icicibank.com"],
+    "subject": "^Transaction alert for your ICICI Bank Credit Card$"
+  },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "fields": {
+    "amount":                  { "pattern": "has been used for a transaction of INR ([\\d,]+(?:\\.\\d{1,2})?)",
+                                 "transform": "inr_to_paise" },
+    "currency":                { "const": "INR" },
+    "direction":               { "const": "debit" },
+    "account_identifier":      { "pattern": "Credit Card (XX\\d{4}) has been used",
+                                 "transform": "digits_only" },
+    "counterparty_identifier": { "required": false },
+    "payee_raw":               { "pattern": "Info: (.+?)\\. The Available Credit Limit",
+                                 "transform": "trim" },
+    "reference_number":        { "required": false },
+    "date":                    { "pattern": "on ([A-Z][a-z]{2} \\d{1,2}, \\d{4}) at",
+                                 "transform": "date:%b %d, %Y" },
+    "time":                    { "pattern": "at (\\d{2}:\\d{2}:\\d{2})",
+                                 "transform": "time:%H:%M:%S", "required": false },
+    "balance":                 { "required": false }
+  }
+}

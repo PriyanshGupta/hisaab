@@ -3,7 +3,7 @@
 A spec is JSON data:
 
     {"version": 1,
-     "match": {"sender": "alerts@bank.in", "subject": "<RE2 pattern>"},
+     "match": {"sender": "alerts@bank.in", "subject": "<RE2 pattern>"},  # sender may be a list
      "preprocess": ["strip_html", "collapse_whitespace"],
      "fields": {"amount": {"pattern": "Rs\\.([\\d,.]+) is debited", "transform": "inr_to_paise"},
                 "direction": {"const": "debit"},
@@ -14,6 +14,10 @@ A spec is JSON data:
 transforms resolved) or raises InvalidSpec listing every problem at once. It is
 the single gate: templates.save_email_template calls it before storing, and the
 interpreter calls it when loading, so no unvalidated spec ever runs.
+
+`match.sender` is one address or a list (ruling 2026-10-11): banks are moving
+alert mail to .bank.in domains with the format unchanged, so one format can
+arrive from an old and a new address, and one spec should serve both.
 
 Field rules:
 - Every PRD §10.4 contract field is declared, and nothing else. A field the
@@ -60,7 +64,7 @@ class FieldSpec:
 
 @dataclass(frozen=True)
 class EmailSpec:
-    sender: str
+    senders: tuple[str, ...]  # lower-cased
     subject: object  # compiled RE2 pattern
     preprocess: tuple[Callable[[str], str], ...]
     fields: tuple[FieldSpec, ...]  # in CONTRACT_FIELDS order
@@ -73,8 +77,17 @@ class InvalidSpec(ValueError):
 
 
 def parse_email_spec(spec: object) -> EmailSpec:
+    parsed, problems = check_email_spec(spec)
+    if problems:
+        raise InvalidSpec(problems)
+    return parsed
+
+
+def check_email_spec(spec: object) -> tuple[EmailSpec, list[str]]:
+    """Every problem, plus an EmailSpec of the parts that are valid. Only the authoring
+    harness runs a spec that has problems, so a half-written spec still shows results."""
     if not isinstance(spec, dict):
-        raise InvalidSpec(["spec must be a JSON object"])
+        return EmailSpec((), None, (), ()), ["spec must be a JSON object"]
     problems: list[str] = []
 
     if spec.get("version") != 1:
@@ -82,9 +95,11 @@ def parse_email_spec(spec: object) -> EmailSpec:
 
     match = spec.get("match") if isinstance(spec.get("match"), dict) else {}
     sender = match.get("sender")
-    if not isinstance(sender, str) or not re.fullmatch(r"[^@\s]+@[^@\s]+", sender.strip()):
-        problems.append("match.sender: must be an email address")
-        sender = ""
+    senders = [sender] if isinstance(sender, str) else sender
+    if not (isinstance(senders, list) and senders
+            and all(isinstance(a, str) and re.fullmatch(r"[^@\s]+@[^@\s]+", a.strip()) for a in senders)):
+        problems.append("match.sender: must be an email address or a list of them")
+        senders = []
     subject = None
     try:
         subject = compile_pattern(match.get("subject"))
@@ -115,9 +130,8 @@ def parse_email_spec(spec: object) -> EmailSpec:
         if field:
             fields.append(field)
 
-    if problems:
-        raise InvalidSpec(problems)
-    return EmailSpec(sender=sender.strip().lower(), subject=subject, preprocess=tuple(steps), fields=tuple(fields))
+    parsed = EmailSpec(senders=tuple(a.strip().lower() for a in senders), subject=subject, preprocess=tuple(steps), fields=tuple(fields))
+    return parsed, problems
 
 
 def _parse_field(name: str, raw: object, problems: list[str]) -> FieldSpec | None:

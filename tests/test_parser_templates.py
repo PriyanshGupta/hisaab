@@ -92,6 +92,17 @@ def test_candidates_are_ordered_by_priority_then_most_recent_promotion_then_id(d
     assert [c.id for c in candidates(db)] == [c.id for c in candidates(db)]  # same answer every time
 
 
+def test_a_template_listing_several_senders_is_a_candidate_for_each(db):
+    moved = copy.deepcopy(SPEC)
+    moved["match"]["sender"] = ["alerts@example-bank.in", "alerts@example.bank.in"]
+    tid = save(db, "Moved domain", moved)
+    assert [c.id for c in candidates(db, sender="alerts@example.bank.in")] == [tid]
+    assert [c.id for c in candidates(db, sender="Alerts@Example-Bank.in")] == [tid]
+    assert candidates(db, sender="alerts@example.com") == []
+    with db.read_session() as s:
+        assert s.get(ParserTemplate, tid).sender_address == "alerts@example-bank.in"  # the first, for display
+
+
 # --- the failure counter (§4.3 step 9, ruling 2026-10-11) --------------------------------
 
 def run(db, now=NOW):

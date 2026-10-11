@@ -3,8 +3,10 @@ Templates are GLOBAL: one bank format serves every user.
 
 - save_email_template validates the spec before storing it (§4.5), so a
   template with an uncompilable, over-long or ill-typed pattern never exists.
-- email_candidates is §4.3 step 1: active email templates for this sender whose
-  subject pattern matches, in a fully deterministic order.
+- email_candidates is §4.3 step 1: active email templates listing this sender
+  whose subject pattern matches, in a fully deterministic order. A spec may
+  list several senders (ruling 2026-10-11), so sender_address holds only the
+  first, for display; matching reads the spec.
 - record_outcome is §4.3 step 9, the counter automatic demotion reads (§4.10;
   the demote itself is slice 16).
 """
@@ -30,7 +32,7 @@ def save_email_template(
 ) -> ParserTemplate:
     parsed = parse_email_spec(spec)  # raises InvalidSpec listing every problem
     row = ParserTemplate(
-        artifact_type="email", name=name, sender_address=parsed.sender, subject_pattern=spec["match"]["subject"],
+        artifact_type="email", name=name, sender_address=parsed.senders[0], subject_pattern=spec["match"]["subject"],
         spec=json.dumps(spec, ensure_ascii=False), origin=origin, status=status, priority=priority,
         promoted_at=promoted_at,
     )
@@ -42,15 +44,19 @@ def save_email_template(
 def email_candidates(session: Session, sender: str, subject: str) -> list[EmailTemplate]:
     """Order: priority DESC, promoted_at DESC (§4.3), never-promoted seeds after promoted
     ones, then id, so even exact ties resolve the same way every run (PRD §8.4)."""
+    # shortcut: loads every active email template and filters in Python; fine for dozens of
+    # templates, add a sender lookup table if it ever reaches thousands.
     rows = session.scalars(
         select(ParserTemplate)
-        .where(ParserTemplate.artifact_type == "email", ParserTemplate.status == "active",
-               ParserTemplate.sender_address == sender.strip().lower())
+        .where(ParserTemplate.artifact_type == "email", ParserTemplate.status == "active")
         .order_by(ParserTemplate.priority.desc(), ParserTemplate.promoted_at.desc().nulls_last(), ParserTemplate.id)
     )
+    sender = sender.strip().lower()
     found = []
     for row in rows:
         spec = parse_email_spec(json.loads(row.spec))
+        if sender not in spec.senders:
+            continue
         try:
             if patterns.search(spec.subject, subject) is None:  # SQLite has no RE2, so subjects filter here
                 continue
