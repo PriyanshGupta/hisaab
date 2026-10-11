@@ -21,24 +21,27 @@ Three deliberate choices:
    the server never starts on a half-migrated schema (§9.3).
 """
 
+from collections.abc import Sequence
 from logging.config import fileConfig
 from pathlib import Path
+from typing import Any
 
 from alembic import context
-from sqlalchemy import text
+from alembic.config import Config
+from sqlalchemy import Engine, MetaData, Row, text
 
 from hisaab.config import Settings
 from hisaab.db import make_engine
 from hisaab.models import Base
 
-config = context.config
+config: Config = context.config
 if config.config_file_name is not None and not config.attributes.get("skip_logging_config"):
     fileConfig(config.config_file_name, disable_existing_loggers=False)
 
 # Tests inject these through config.attributes; normal runs read .env.
-DATABASE_PATH = Path(config.attributes.get("database_path") or Settings().database_path)
+DATABASE_PATH: Path = Path(config.attributes.get("database_path") or Settings().database_path)
 # The models are the source of truth that autogenerate compares against.
-target_metadata = config.attributes.get("target_metadata", Base.metadata)
+target_metadata: MetaData = config.attributes.get("target_metadata", Base.metadata)
 
 
 def run_migrations_offline() -> None:
@@ -54,13 +57,13 @@ def run_migrations_offline() -> None:
 
 
 def run_migrations_online() -> None:
-    engine = make_engine(DATABASE_PATH, enforce_foreign_keys=False)
+    engine: Engine = make_engine(DATABASE_PATH, enforce_foreign_keys=False)
     try:
         with engine.connect() as connection:
             context.configure(connection=connection, target_metadata=target_metadata, render_as_batch=True)
             with context.begin_transaction():
                 context.run_migrations()
-            violations = connection.execute(text("PRAGMA foreign_key_check")).fetchall()
+            violations: Sequence[Row[Any]] = connection.execute(text("PRAGMA foreign_key_check")).fetchall()
             if violations:
                 raise RuntimeError(f"Migration left foreign key violations: {violations[:10]}")
     finally:

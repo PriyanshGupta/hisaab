@@ -15,17 +15,22 @@ Two further guards:
 """
 
 import concurrent.futures
+from typing import TypeAlias
 
 import re2
 
-MAX_PATTERN_LENGTH = 500
-MATCH_TIMEOUT_SECONDS = 0.1
+Pattern: TypeAlias = re2._Regexp  # a compiled RE2 pattern
+Match: TypeAlias = re2._Match
 
-_OPTIONS = re2.Options()
+MAX_PATTERN_LENGTH: int = 500
+MATCH_TIMEOUT_SECONDS: float = 0.1
+
+_OPTIONS: re2.Options = re2.Options()
 _OPTIONS.log_errors = False  # RE2 otherwise prints every rejected pattern to stderr
 # shortcut: a match that overruns keeps its worker until RE2 finishes (linear, so it does);
 # 4 workers absorb that at household volume. Revisit if timeouts ever show up in diagnostics.
-_POOL = concurrent.futures.ThreadPoolExecutor(max_workers=4, thread_name_prefix="re2")
+_POOL: concurrent.futures.ThreadPoolExecutor = concurrent.futures.ThreadPoolExecutor(
+    max_workers=4, thread_name_prefix="re2")
 
 
 class PatternError(ValueError):
@@ -36,24 +41,24 @@ class PatternTimeout(Exception):
     """A match ran past its deadline; the field counts as failed."""
 
 
-def compile_pattern(pattern: str, *, groups: int = 0) -> re2._Regexp:
+def compile_pattern(pattern: object, *, groups: int = 0) -> Pattern:
     if not isinstance(pattern, str) or not pattern:
         raise PatternError("pattern is empty")
     if len(pattern) > MAX_PATTERN_LENGTH:
         raise PatternError(f"pattern is {len(pattern)} characters; the limit is {MAX_PATTERN_LENGTH}")
     try:
-        compiled = re2.compile(pattern, _OPTIONS)
+        compiled: Pattern = re2.compile(pattern, _OPTIONS)
     except re2.error as e:
-        reason = e.args[0].decode() if e.args and isinstance(e.args[0], bytes) else str(e)
+        reason: str = e.args[0].decode() if e.args and isinstance(e.args[0], bytes) else str(e)
         raise PatternError(f"RE2 cannot compile it: {reason}") from None
     if compiled.groups < groups:
         raise PatternError("pattern needs a capture group (...) around the value")
     return compiled
 
 
-def search(compiled: re2._Regexp, text: str, timeout: float | None = None):
+def search(compiled: Pattern, text: str, timeout: float | None = None) -> Match | None:
     """compiled.search(text), or PatternTimeout after `timeout` seconds (default 100 ms)."""
-    future = _POOL.submit(compiled.search, text)
+    future: concurrent.futures.Future[Match | None] = _POOL.submit(compiled.search, text)
     try:
         return future.result(timeout=MATCH_TIMEOUT_SECONDS if timeout is None else timeout)
     except concurrent.futures.TimeoutError:

@@ -14,10 +14,10 @@ build on exactly what this one created, whatever the models say by then.
 """
 import json
 from datetime import UTC, datetime
-from typing import Sequence, Union
+from typing import Any, Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 
 # revision identifiers, used by Alembic.
@@ -34,7 +34,7 @@ depends_on: Union[str, Sequence[str], None] = None
 # clears that leg's unresolved identifier, so the effective row never shows a
 # leg as both resolved and unresolved. Values are TEXT in transaction_edits;
 # amount is cast back to BIGINT paise.
-CREATE_EFFECTIVE_VIEW = """
+CREATE_EFFECTIVE_VIEW: str = """
 CREATE VIEW transactions_effective AS
 SELECT
   t.id, t.user_id, t.derived_key,
@@ -78,7 +78,7 @@ LEFT JOIN (
 # floats: money in paise, percentages as whole numbers. The PRD's 17 rows map to
 # 16 keys because "discovery sweep lookback" IS backfill_window_months
 # (tech-design §5.3, ruling 2026-10-10): one setting, so the two cannot drift.
-SETTINGS_SEED = {
+SETTINGS_SEED: dict[str, Any] = {
     "backfill_window_months": 3,              # first-run backfill, sender approval, AND sweep lookback
     "sync_min_lookback_hours": 48,
     "sync_interval_hours": 6,
@@ -476,13 +476,13 @@ def upgrade() -> None:
 
     op.execute(CREATE_EFFECTIVE_VIEW)
 
-    settings_table = sa.table(
+    settings_table: sa.TableClause = sa.table(
         "settings",
         sa.column("key", sa.Text), sa.column("user_id", sa.Text),
         sa.column("value", sa.Text), sa.column("updated_at", sa.Text),
     )
-    now = datetime.now(UTC)
-    seeded_at = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
+    now: datetime = datetime.now(UTC)
+    seeded_at: str = now.strftime("%Y-%m-%dT%H:%M:%S.") + f"{now.microsecond // 1000:03d}Z"
     op.bulk_insert(settings_table, [
         {"key": key, "user_id": "", "value": json.dumps(value), "updated_at": seeded_at}
         for key, value in SETTINGS_SEED.items()

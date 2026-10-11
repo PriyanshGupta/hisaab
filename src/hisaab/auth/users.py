@@ -16,13 +16,13 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from hisaab.auth import sessions
-from hisaab.categories import repository as categories
 from hisaab.auth.passwords import hash_password
+from hisaab.categories import repository as categories
 from hisaab.models import User
 from hisaab.models.core import USER_ROLES
 
-USERNAME_PATTERN = re.compile(r"[a-z0-9._-]{3,32}")
-MIN_PASSWORD_LENGTH = 8
+USERNAME_PATTERN: re.Pattern[str] = re.compile(r"[a-z0-9._-]{3,32}")
+MIN_PASSWORD_LENGTH: int = 8
 
 
 class UserError(ValueError):
@@ -42,7 +42,7 @@ def normalize_username(raw: str) -> str:
 
 
 def validate_username(raw: str) -> str:
-    username = normalize_username(raw)
+    username: str = normalize_username(raw)
     if not USERNAME_PATTERN.fullmatch(username):
         raise UserError("Username must be 3-32 characters: letters, digits, '.', '_' or '-'.")
     return username
@@ -78,7 +78,7 @@ def create_user(session: Session, username: str, display_name: str, password: st
         raise UserError("Display name is required.")
     if get_by_username(session, username) is not None:
         raise DuplicateUsername(f"Username '{username}' is already taken.")
-    user = User(username=username, display_name=display_name.strip(), role=role,
+    user: User = User(username=username, display_name=display_name.strip(), role=role,
                 password_hash=hash_password(password))
     session.add(user)
     session.flush()
@@ -96,7 +96,7 @@ def set_password(session: Session, user: User, new_password: str) -> None:
 def set_role(session: Session, user: User, role: str) -> None:
     validate_role(role)
     if user.role == "admin" and role != "admin":
-        admins = session.scalar(select(func.count()).select_from(User).where(User.role == "admin"))
+        admins: int = session.scalar(select(func.count()).select_from(User).where(User.role == "admin")) or 0
         if admins <= 1:
             raise LastAdmin("Cannot demote the last admin.")
     user.role = role

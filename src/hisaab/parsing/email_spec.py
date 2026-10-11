@@ -39,25 +39,26 @@ Field rules:
 import re
 from collections.abc import Callable
 from dataclasses import dataclass
+from typing import Any
 
-from hisaab.parsing.patterns import PatternError, compile_pattern
+from hisaab.parsing.patterns import Pattern, PatternError, compile_pattern
 from hisaab.parsing.transforms import UnknownTransform, field_transform, preprocessor
 
-CONTRACT_FIELDS = (
+CONTRACT_FIELDS: tuple[str, ...] = (
     "amount", "currency", "direction", "account_identifier", "counterparty_identifier",
     "payee_raw", "reference_number", "date", "time", "balance",
 )
-CRITICAL_FIELDS = ("amount", "date", "account_identifier")
-_FIELD_KEYS = {"const", "pattern", "transform", "required"}
+CRITICAL_FIELDS: tuple[str, ...] = ("amount", "date", "account_identifier")
+_FIELD_KEYS: set[str] = {"const", "pattern", "transform", "required"}
 # field -> the transform family that yields its contract type
-_TYPED = {"amount": "inr_to_paise", "balance": "inr_to_paise", "date": "date:", "time": "time:"}
+_TYPED: dict[str, str] = {"amount": "inr_to_paise", "balance": "inr_to_paise", "date": "date:", "time": "time:"}
 
 
 @dataclass(frozen=True)
 class FieldSpec:
     name: str
     const: str | None
-    pattern: object | None  # compiled RE2 pattern
+    pattern: Pattern | None
     transform: Callable[[str], object] | None
     required: bool
 
@@ -65,14 +66,14 @@ class FieldSpec:
 @dataclass(frozen=True)
 class EmailSpec:
     senders: tuple[str, ...]  # lower-cased
-    subject: object  # compiled RE2 pattern
+    subject: Pattern | None  # None only in check_email_spec's partial result
     preprocess: tuple[Callable[[str], str], ...]
     fields: tuple[FieldSpec, ...]  # in CONTRACT_FIELDS order
 
 
 class InvalidSpec(ValueError):
-    def __init__(self, problems: list[str]):
-        self.problems = problems
+    def __init__(self, problems: list[str]) -> None:
+        self.problems: list[str] = problems
         super().__init__("; ".join(problems))
 
 
@@ -93,44 +94,49 @@ def check_email_spec(spec: object) -> tuple[EmailSpec, list[str]]:
     if spec.get("version") != 1:
         problems.append("version: must be 1")
 
-    match = spec.get("match") if isinstance(spec.get("match"), dict) else {}
-    sender = match.get("sender")
-    senders = [sender] if isinstance(sender, str) else sender
+    match_in: object = spec.get("match")
+    match: dict[str, Any] = match_in if isinstance(match_in, dict) else {}
+    sender: object = match.get("sender")
+    senders: object = [sender] if isinstance(sender, str) else sender
     if not (isinstance(senders, list) and senders
             and all(isinstance(a, str) and re.fullmatch(r"[^@\s]+@[^@\s]+", a.strip()) for a in senders)):
         problems.append("match.sender: must be an email address or a list of them")
         senders = []
-    subject = None
+    subject: Pattern | None = None
     try:
         subject = compile_pattern(match.get("subject"))
     except PatternError as e:
         problems.append(f"match.subject: {e}")
 
-    steps = []
-    preprocess = spec.get("preprocess", [])
+    steps: list[Callable[[str], str]] = []
+    preprocess: object = spec.get("preprocess", [])
     for name in preprocess if isinstance(preprocess, list) else [preprocess]:
         try:
+            if not isinstance(name, str):
+                raise UnknownTransform(str(name))
             steps.append(preprocessor(name))
-        except (UnknownTransform, TypeError):
+        except UnknownTransform:
             problems.append(f"preprocess: unknown preprocessor '{name}'")
 
-    fields_in = spec.get("fields")
+    fields_in: object = spec.get("fields")
     if not isinstance(fields_in, dict):
         problems.append("fields: must be an object with one entry per contract field")
         fields_in = {}
     for name in fields_in:
         if name not in CONTRACT_FIELDS:
             problems.append(f"{name}: not a contract field (PRD §10.4)")
-    fields = []
+    fields: list[FieldSpec] = []
     for name in CONTRACT_FIELDS:
         if name not in fields_in:
             problems.append(f'{name}: not declared; use {{"required": false}} if the format never states it')
             continue
-        field = _parse_field(name, fields_in[name], problems)
+        field: FieldSpec | None = _parse_field(name, fields_in[name], problems)
         if field:
             fields.append(field)
 
-    parsed = EmailSpec(senders=tuple(a.strip().lower() for a in senders), subject=subject, preprocess=tuple(steps), fields=tuple(fields))
+    assert isinstance(senders, list)  # reset to [] above unless it is a list of addresses
+    parsed: EmailSpec = EmailSpec(senders=tuple(a.strip().lower() for a in senders), subject=subject,
+                                  preprocess=tuple(steps), fields=tuple(fields))
     return parsed, problems
 
 
@@ -138,12 +144,14 @@ def _parse_field(name: str, raw: object, problems: list[str]) -> FieldSpec | Non
     if not isinstance(raw, dict):
         problems.append(f"{name}: must be an object")
         return None
-    before = len(problems)
+    before: int = len(problems)
     for key in raw:
         if key not in _FIELD_KEYS:
             problems.append(f"{name}: unknown key '{key}'")
-    const, pattern_text, transform_name = raw.get("const"), raw.get("pattern"), raw.get("transform")
-    required = raw.get("required", True)
+    const: object = raw.get("const")
+    pattern_text: object = raw.get("pattern")
+    transform_name: object = raw.get("transform")
+    required: object = raw.get("required", True)
     if not isinstance(required, bool):
         problems.append(f"{name}: required must be true or false")
 
@@ -154,7 +162,8 @@ def _parse_field(name: str, raw: object, problems: list[str]) -> FieldSpec | Non
     if const is None and pattern_text is None and required is not False:
         problems.append(f'{name}: no pattern or const; mark it {{"required": false}} if the format never states it')
 
-    pattern = transform = None
+    pattern: Pattern | None = None
+    transform: Callable[[str], object] | None = None
     if pattern_text is not None:
         try:
             pattern = compile_pattern(pattern_text, groups=1)
@@ -162,16 +171,18 @@ def _parse_field(name: str, raw: object, problems: list[str]) -> FieldSpec | Non
             problems.append(f"{name}: {e}")
     if transform_name is not None:
         try:
-            transform = field_transform(transform_name)
-        except (UnknownTransform, TypeError, AttributeError):
+            transform = field_transform(transform_name) if isinstance(transform_name, str) else None
+            if transform is None:
+                raise UnknownTransform(str(transform_name))
+        except UnknownTransform:
             problems.append(f"{name}: unknown transform '{transform_name}'")
 
     if name in CRITICAL_FIELDS:
-        date_never_stated = name == "date" and raw == {"required": False}
+        date_never_stated: bool = name == "date" and raw == {"required": False}
         if not date_never_stated and (pattern_text is None or required is not True):
             problems.append(f"{name}: critical field, needs a required pattern")
     if name in _TYPED:
-        family = _TYPED[name]
+        family: str = _TYPED[name]
         if const is not None:
             problems.append(f"{name}: cannot be a const; it needs a pattern and {family}")
         elif pattern_text is not None and not (isinstance(transform_name, str) and transform_name.startswith(family)):
@@ -185,4 +196,5 @@ def _parse_field(name: str, raw: object, problems: list[str]) -> FieldSpec | Non
 
     if len(problems) > before:
         return None
+    assert (const is None or isinstance(const, str)) and isinstance(required, bool)  # both checked above
     return FieldSpec(name=name, const=const, pattern=pattern, transform=transform, required=required)

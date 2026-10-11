@@ -14,29 +14,31 @@ Path traversal is handled by StaticFiles itself, which refuses anything
 resolving outside the directory.
 """
 
+import os
+
 from starlette.exceptions import HTTPException
 from starlette.responses import Response
 from starlette.staticfiles import StaticFiles
 from starlette.types import Scope
 
-INDEX = "index.html"
+INDEX: str = "index.html"
 
 
 def _is_client_route(path: str) -> bool:
     if path == "api" or path.startswith("api/"):
         return False
-    last_segment = path.rsplit("/", 1)[-1]
+    last_segment: str = path.rsplit("/", 1)[-1]
     return "." not in last_segment
 
 
 class SpaStaticFiles(StaticFiles):
-    def __init__(self, directory):
+    def __init__(self, directory: str | os.PathLike[str]) -> None:
         super().__init__(directory=directory, html=True)
 
     async def get_response(self, path: str, scope: Scope) -> Response:
-        serving_index = path in (".", "", INDEX)
+        serving_index: bool = path in (".", "", INDEX)
         try:
-            response = await super().get_response(path, scope)
+            response: Response = await super().get_response(path, scope)
         except HTTPException as exc:
             if exc.status_code != 404 or not _is_client_route(path):
                 raise

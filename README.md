@@ -24,7 +24,10 @@ curl http://localhost:8765/health
 
 ```bash
 .venv/bin/pytest
+.venv/bin/mypy              # strict type check of src, tests and migrations (config in pyproject.toml)
 ```
+
+Every function and variable is type-annotated; `tests/test_annotations.py` fails on an unannotated variable.
 
 ## Two rules that prevent real damage
 

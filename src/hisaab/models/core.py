@@ -12,30 +12,32 @@ Invariants SQLite cannot express (leg validity per kind, cross-user
 integrity) are enforced in the repository layer and by tests (§3.9).
 """
 
+from typing import Any
+
 from sqlalchemy import BigInteger, CheckConstraint, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hisaab.models.base import Base, created_column, id_column, one_of, partial_index_where, updated_column
 
-USER_ROLES = ("admin", "member")
-ACCOUNT_TYPES = ("bank", "credit_card", "cash")
-IDENTIFIER_KINDS = ("last4", "card_last4", "vpa", "other")
-IDENTIFIER_ORIGINS = ("account_setup", "review_assignment")
-SOURCE_KINDS = ("email", "statement", "manual")
-PROCESSING_STATES = ("pending", "parsed", "pending_llm", "failed", "non_transactional")
-TRANSACTION_KINDS = ("expense", "income", "transfer", "refund", "adjustment", "lending")
-TRANSACTION_STATUSES = ("confirmed", "needs_review", "reversed")
-PAYEE_TYPES = ("merchant", "person")
-OBSERVATION_SOURCES = ("email", "statement", "manual")
-DELTA_STATUSES = ("open", "accepted", "investigated")
+USER_ROLES: tuple[str, ...] = ("admin", "member")
+ACCOUNT_TYPES: tuple[str, ...] = ("bank", "credit_card", "cash")
+IDENTIFIER_KINDS: tuple[str, ...] = ("last4", "card_last4", "vpa", "other")
+IDENTIFIER_ORIGINS: tuple[str, ...] = ("account_setup", "review_assignment")
+SOURCE_KINDS: tuple[str, ...] = ("email", "statement", "manual")
+PROCESSING_STATES: tuple[str, ...] = ("pending", "parsed", "pending_llm", "failed", "non_transactional")
+TRANSACTION_KINDS: tuple[str, ...] = ("expense", "income", "transfer", "refund", "adjustment", "lending")
+TRANSACTION_STATUSES: tuple[str, ...] = ("confirmed", "needs_review", "reversed")
+PAYEE_TYPES: tuple[str, ...] = ("merchant", "person")
+OBSERVATION_SOURCES: tuple[str, ...] = ("email", "statement", "manual")
+DELTA_STATUSES: tuple[str, ...] = ("open", "accepted", "investigated")
 
 # Edit fields whose effective value can never be NULL (see TransactionEdit).
-NON_NULLABLE_EDIT_FIELDS = ("amount", "kind", "transaction_date", "review_acknowledged")
+NON_NULLABLE_EDIT_FIELDS: tuple[str, ...] = ("amount", "kind", "transaction_date", "review_acknowledged")
 
 
 class User(Base):
-    __tablename__ = "users"
-    __table_args__ = (one_of("role", USER_ROLES, "role"),)
+    __tablename__: str = "users"
+    __table_args__: tuple[Any, ...] = (one_of("role", USER_ROLES, "role"),)
 
     id: Mapped[str] = id_column()
     username: Mapped[str] = mapped_column(unique=True)
@@ -46,8 +48,8 @@ class User(Base):
 
 
 class Account(Base):
-    __tablename__ = "accounts"
-    __table_args__ = (
+    __tablename__: str = "accounts"
+    __table_args__: tuple[Any, ...] = (
         # One ACTIVE account per last4 per user (ruling 2026-10-11, migration 0002):
         # archiving frees the last4 so a replacement account can use it. NULL last4
         # (cash accounts) never collides: NULLs are distinct in a unique index.
@@ -70,8 +72,8 @@ class Account(Base):
 
 
 class AccountIdentifier(Base):
-    __tablename__ = "account_identifiers"
-    __table_args__ = (
+    __tablename__: str = "account_identifiers"
+    __table_args__: tuple[Any, ...] = (
         # Unique among ACTIVE identifiers only: archiving an account retires its
         # identifiers (retired_at), which then never resolve and may be reused,
         # e.g. a UPI ID re-linked to a new bank account (migration 0002).
@@ -93,8 +95,8 @@ class AccountIdentifier(Base):
 
 
 class Source(Base):
-    __tablename__ = "sources"
-    __table_args__ = (
+    __tablename__: str = "sources"
+    __table_args__: tuple[Any, ...] = (
         # NULL external_message_id (manual, statement) never collides.
         UniqueConstraint("user_id", "external_message_id"),
         one_of("kind", SOURCE_KINDS, "kind"),
@@ -119,8 +121,8 @@ class Source(Base):
 
 
 class Payee(Base):  # GLOBAL
-    __tablename__ = "payees"
-    __table_args__ = (one_of("type", PAYEE_TYPES, "type"),)
+    __tablename__: str = "payees"
+    __table_args__: tuple[Any, ...] = (one_of("type", PAYEE_TYPES, "type"),)
 
     id: Mapped[str] = id_column()
     normalized_name: Mapped[str] = mapped_column(unique=True)
@@ -129,8 +131,8 @@ class Payee(Base):  # GLOBAL
 
 
 class Category(Base):
-    __tablename__ = "categories"
-    __table_args__ = (UniqueConstraint("user_id", "name"),)
+    __tablename__: str = "categories"
+    __table_args__: tuple[Any, ...] = (UniqueConstraint("user_id", "name"),)
 
     id: Mapped[str] = id_column()
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
@@ -140,8 +142,8 @@ class Category(Base):
 
 
 class Transaction(Base):
-    __tablename__ = "transactions"
-    __table_args__ = (
+    __tablename__: str = "transactions"
+    __table_args__: tuple[Any, ...] = (
         UniqueConstraint("user_id", "derived_key"),
         CheckConstraint("amount > 0", name="amount_positive"),
         CheckConstraint(
@@ -195,8 +197,8 @@ class Transaction(Base):
 
 
 class TransactionSource(Base):
-    __tablename__ = "transaction_sources"
-    __table_args__ = (Index("ix_tsrc_source", "source_id"),)
+    __tablename__: str = "transaction_sources"
+    __table_args__: tuple[Any, ...] = (Index("ix_tsrc_source", "source_id"),)
 
     # Link rows only, so they may cascade with their transaction.
     transaction_id: Mapped[str] = mapped_column(ForeignKey("transactions.id", ondelete="CASCADE"), primary_key=True)
@@ -212,8 +214,8 @@ class TransactionEdit(Base):
     what happens to them (route to review, or warn-then-delete per §10.6).
     """
 
-    __tablename__ = "transaction_edits"
-    __table_args__ = (
+    __tablename__: str = "transaction_edits"
+    __table_args__: tuple[Any, ...] = (
         UniqueConstraint("transaction_id", "field"),
         # new_value NULL means "edited to null", which is meaningless for these.
         CheckConstraint(
@@ -234,7 +236,7 @@ class TransactionEdit(Base):
 
 
 class PayeeCategory(Base):
-    __tablename__ = "payee_categories"
+    __tablename__: str = "payee_categories"
 
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     payee_id: Mapped[str] = mapped_column(ForeignKey("payees.id"), primary_key=True)
@@ -244,8 +246,8 @@ class PayeeCategory(Base):
 
 
 class BalanceObservation(Base):
-    __tablename__ = "balance_observations"
-    __table_args__ = (one_of("source", OBSERVATION_SOURCES, "source"),)
+    __tablename__: str = "balance_observations"
+    __table_args__: tuple[Any, ...] = (one_of("source", OBSERVATION_SOURCES, "source"),)
 
     id: Mapped[str] = id_column()
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
@@ -258,8 +260,8 @@ class BalanceObservation(Base):
 
 
 class BalanceDelta(Base):
-    __tablename__ = "balance_deltas"
-    __table_args__ = (
+    __tablename__: str = "balance_deltas"
+    __table_args__: tuple[Any, ...] = (
         one_of("status", DELTA_STATUSES, "status"),
         Index("ix_deltas_open", "user_id", "status", **partial_index_where("status = 'open'")),
     )

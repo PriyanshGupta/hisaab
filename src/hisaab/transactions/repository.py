@@ -20,31 +20,42 @@ leave invalid legs is refused.
 import hashlib
 import json
 import re
+from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date
+from typing import Any, TypeAlias
 
-from sqlalchemy import delete, func, select
+from sqlalchemy import Row, Select, delete, func, select
 from sqlalchemy.orm import Session
 
 from hisaab.accounts import repository as accounts
 from hisaab.categories import repository as categories
 from hisaab.categories.resolution import categorized
 from hisaab.clock import local_today
-from hisaab.models import Account, Source, Transaction, TransactionEdit, TransactionEffective, TransactionSource, utc_now
+from hisaab.models import (
+    Account,
+    Payee,
+    Source,
+    Transaction,
+    TransactionEdit,
+    TransactionEffective,
+    TransactionSource,
+    utc_now,
+)
 from hisaab.models.core import TRANSACTION_KINDS
 from hisaab.payees import repository as payees
 from hisaab.transactions.legs import UNRESOLVED, LegError, validate_legs
 
 # Kinds a person types in. Adjustments are written by reconciliation (slice 20).
-MANUAL_KINDS = ("expense", "income", "transfer", "refund")
+MANUAL_KINDS: tuple[str, ...] = ("expense", "income", "transfer", "refund")
 # Fields the overlay corrects. Slice 17 adds review_acknowledged (the
 # transaction_edits schema already allows it).
-EDITABLE_FIELDS = ("amount", "kind", "transaction_date", "from_account_id", "to_account_id",
+EDITABLE_FIELDS: tuple[str, ...] = ("amount", "kind", "transaction_date", "from_account_id", "to_account_id",
                    "payee_id", "category_override_id")
-MANUAL_DISCRIMINATOR = "0"  # a manual Source yields exactly one transaction
+MANUAL_DISCRIMINATOR: str = "0"  # a manual Source yields exactly one transaction
 
-_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
-_TIME = re.compile(r"([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?")
+_ISO_DATE: re.Pattern[str] = re.compile(r"\d{4}-\d{2}-\d{2}")
+_TIME: re.Pattern[str] = re.compile(r"([01]\d|2[0-3]):[0-5]\d(:[0-5]\d)?")
 
 
 class TransactionError(ValueError):
@@ -60,6 +71,10 @@ class EditsWouldBeLost(TransactionError):
 
 class NotFound(LookupError):
     pass
+
+
+# An effective transaction with its category_id, category_source, payee_name and provenance.
+_ListQuery: TypeAlias = Select[tuple[TransactionEffective, str | None, str | None, str | None, str]]
 
 
 @dataclass
@@ -79,7 +94,7 @@ def derived_key(user_id: str, anchor_ingest_seq: int, discriminator: str) -> str
 
 # --- validation ----------------------------------------------------------------
 
-def _check_amount(value) -> int:
+def _check_amount(value: object) -> int:
     if not isinstance(value, int) or isinstance(value, bool):
         raise TransactionError("Amount must be a whole number of paise.")
     if value <= 0:
@@ -89,11 +104,11 @@ def _check_amount(value) -> int:
     return value
 
 
-def _check_date(value) -> str:
+def _check_date(value: object) -> str:
     try:
         if not isinstance(value, str) or not _ISO_DATE.fullmatch(value):
             raise ValueError
-        parsed = date.fromisoformat(value)
+        parsed: date = date.fromisoformat(value)
     except ValueError:
         raise TransactionError("Date must be a real date (YYYY-MM-DD).") from None
     if parsed > local_today():
@@ -101,10 +116,10 @@ def _check_date(value) -> str:
     return value
 
 
-def _check_kind(value) -> str:
+def _check_kind(value: object) -> str:
     if value == "lending":
         raise LegError("Lending is not supported yet; record it as an expense.")
-    if value not in TRANSACTION_KINDS:
+    if not isinstance(value, str) or value not in TRANSACTION_KINDS:
         raise TransactionError(f"Unknown kind '{value}'.")
     return value
 
@@ -112,7 +127,7 @@ def _check_kind(value) -> str:
 def _usable_account(session: Session, user_id: str, account_id: str) -> Account:
     """An account the user may put a transaction on now: theirs and not archived."""
     try:
-        account = accounts.get_account(session, user_id, account_id)
+        account: Account = accounts.get_account(session, user_id, account_id)
     except accounts.NotFound:
         raise TransactionError("No such account.") from None
     if account.archived_at is not None:
@@ -123,7 +138,7 @@ def _usable_account(session: Session, user_id: str, account_id: str) -> Account:
 def _leg(session: Session, user_id: str, account_id: str | None, unresolved: str | None) -> str | None:
     """A leg as legs.validate_legs sees it: account type, UNRESOLVED, or None (external)."""
     if account_id is not None:
-        account = session.scalars(
+        account: Account | None = session.scalars(
             select(Account).where(Account.id == account_id, Account.user_id == user_id)
         ).one_or_none()
         if account is None:
@@ -135,14 +150,16 @@ def _leg(session: Session, user_id: str, account_id: str | None, unresolved: str
 # --- reads ----------------------------------------------------------------------
 
 def _own_transaction(session: Session, user_id: str, txn_id: str) -> Transaction:
-    txn = session.scalars(select(Transaction).where(Transaction.id == txn_id, Transaction.user_id == user_id)).one_or_none()
+    txn: Transaction | None = session.scalars(
+        select(Transaction).where(Transaction.id == txn_id, Transaction.user_id == user_id)
+    ).one_or_none()
     if txn is None:
         raise NotFound("No such transaction")
     return txn
 
 
 def get_effective(session: Session, user_id: str, txn_id: str) -> TransactionEffective:
-    row = session.scalars(
+    row: TransactionEffective | None = session.scalars(
         select(TransactionEffective).where(TransactionEffective.id == txn_id, TransactionEffective.user_id == user_id)
     ).one_or_none()
     if row is None:
@@ -161,14 +178,14 @@ def _edits(session: Session, user_id: str, txn_ids: list[str]) -> dict[str, list
     return grouped
 
 
-def _listed(session: Session, user_id: str, query) -> list[ListedTransaction]:
-    rows = session.execute(query).all()
-    edits = _edits(session, user_id, [r.TransactionEffective.id for r in rows])
+def _listed(session: Session, user_id: str, query: _ListQuery) -> list[ListedTransaction]:
+    rows: Sequence[Row[Any]] = session.execute(query).all()
+    edits: dict[str, list[TransactionEdit]] = _edits(session, user_id, [r.TransactionEffective.id for r in rows])
     return [ListedTransaction(r.TransactionEffective, r.provenance, edits[r.TransactionEffective.id],
                               r.category_id, r.category_source, r.payee_name) for r in rows]
 
 
-def _with_provenance(user_id: str):
+def _with_provenance(user_id: str) -> _ListQuery:
     return (categorized(user_id).add_columns(Source.kind.label("provenance"))
             .join(Source, Source.id == TransactionEffective.primary_source_id))
 
@@ -180,7 +197,8 @@ def list_transactions(session: Session, user_id: str, limit: int = 200) -> list[
 
 
 def get_listed(session: Session, user_id: str, txn_id: str) -> ListedTransaction:
-    found = _listed(session, user_id, _with_provenance(user_id).where(TransactionEffective.id == txn_id))
+    found: list[ListedTransaction] = _listed(
+        session, user_id, _with_provenance(user_id).where(TransactionEffective.id == txn_id))
     if not found:
         raise NotFound("No such transaction")
     return found[0]
@@ -211,30 +229,30 @@ def create_manual(
     transaction_date = _check_date(transaction_date)
     if transaction_time is not None and not _TIME.fullmatch(transaction_time):
         raise TransactionError("Time must be HH:MM.")
-    from_type = _usable_account(session, user_id, from_account_id).type if from_account_id else None
-    to_type = _usable_account(session, user_id, to_account_id).type if to_account_id else None
+    from_type: str | None = _usable_account(session, user_id, from_account_id).type if from_account_id else None
+    to_type: str | None = _usable_account(session, user_id, to_account_id).type if to_account_id else None
     validate_legs(kind, from_type, to_type, same_account=from_account_id is not None and from_account_id == to_account_id)
     payee_raw = (payee_raw or "").strip() or None
     if category_id is not None:
         _canonical(session, user_id, "category_override_id", category_id)  # theirs and active, before any write
     try:
-        payee = payees.get_or_create_by_name(session, payee_raw) if payee_raw else None
+        payee: Payee | None = payees.get_or_create_by_name(session, payee_raw) if payee_raw else None
     except payees.PayeeError as exc:
         raise TransactionError(str(exc)) from None
 
-    entered = {"kind": kind, "amount": amount, "transaction_date": transaction_date,
+    entered: dict[str, str | int | None] = {"kind": kind, "amount": amount, "transaction_date": transaction_date,
                "transaction_time": transaction_time, "from_account_id": from_account_id,
                "to_account_id": to_account_id, "payee_raw": payee_raw, "category_id": category_id}
-    content = json.dumps(entered, sort_keys=True, separators=(",", ":")).encode()
-    now = utc_now()
+    content: bytes = json.dumps(entered, sort_keys=True, separators=(",", ":")).encode()
+    now: str = utc_now()
     # ingest_seq is global and monotonic; safe because every write holds the writer lock.
-    seq = (session.scalar(select(func.max(Source.ingest_seq))) or 0) + 1
-    source = Source(ingest_seq=seq, user_id=user_id, kind="manual", content=content,
+    seq: int = (session.scalar(select(func.max(Source.ingest_seq))) or 0) + 1
+    source: Source = Source(ingest_seq=seq, user_id=user_id, kind="manual", content=content,
                     content_hash=hashlib.sha256(content).hexdigest(), received_at=now, ingested_at=now,
                     processing_state="parsed")
     session.add(source)
     session.flush()
-    txn = Transaction(
+    txn: Transaction = Transaction(
         user_id=user_id, derived_key=derived_key(user_id, seq, MANUAL_DISCRIMINATOR), amount=amount, kind=kind,
         from_account_id=from_account_id, to_account_id=to_account_id, payee_raw=payee_raw,
         payee_id=payee.id if payee else None,
@@ -247,7 +265,7 @@ def create_manual(
     session.add(TransactionSource(transaction_id=txn.id, source_id=source.id))
     session.flush()
     if category_id is not None:
-        rule = categories.payee_rule(session, user_id, payee.id) if payee else None
+        rule: str | None = categories.payee_rule(session, user_id, payee.id) if payee else None
         if payee and rule is None:
             categories.set_payee_category(session, user_id, payee.id, category_id)  # learn
         elif rule != category_id:
@@ -262,11 +280,11 @@ def create_manual(
 def _source_value(txn: Transaction, field: str) -> str | None:
     if field == "category_override_id":
         return None  # no source ever says a category; it exists only as an edit (tech-design §3.5)
-    value = getattr(txn, field)
+    value: object = getattr(txn, field)
     return None if value is None else str(value)
 
 
-def _canonical(session: Session, user_id: str, field: str, value) -> str | None:
+def _canonical(session: Session, user_id: str, field: str, value: object) -> str | None:
     """The value as stored in transaction_edits.new_value, validated."""
     if field not in EDITABLE_FIELDS:
         raise TransactionError(f"'{field}' can't be edited.")
@@ -278,6 +296,8 @@ def _canonical(session: Session, user_id: str, field: str, value) -> str | None:
         return _check_date(value)
     if value is None:
         return None
+    if not isinstance(value, str):
+        raise TransactionError(f"'{field}' must be an id.")
     if field == "payee_id":
         try:
             return payees.get_payee(session, value).id  # payees are global
@@ -295,26 +315,30 @@ def _canonical(session: Session, user_id: str, field: str, value) -> str | None:
 
 def _check_effective(session: Session, user_id: str, txn: Transaction, values: dict[str, str | None]) -> None:
     """Validate the transaction as it would read with `values` (field -> canonical) overlaid."""
-    def get(field):
+    def get(field: str) -> str | None:
         return values[field] if field in values else _source_value(txn, field)
 
-    from_id, to_id = get("from_account_id"), get("to_account_id")
+    from_id: str | None = get("from_account_id")
+    to_id: str | None = get("to_account_id")
     # Assigning a leg's account clears its unresolved identifier (as the view does).
-    from_leg = _leg(session, user_id, from_id, None if "from_account_id" in values else txn.unresolved_from_identifier)
-    to_leg = _leg(session, user_id, to_id, None if "to_account_id" in values else txn.unresolved_to_identifier)
-    validate_legs(get("kind"), from_leg, to_leg, same_account=from_id is not None and from_id == to_id)
+    from_leg: str | None = _leg(
+        session, user_id, from_id, None if "from_account_id" in values else txn.unresolved_from_identifier)
+    to_leg: str | None = _leg(
+        session, user_id, to_id, None if "to_account_id" in values else txn.unresolved_to_identifier)
+    validate_legs(get("kind") or "", from_leg, to_leg, same_account=from_id is not None and from_id == to_id)
 
 
-def apply_edits(session: Session, user_id: str, txn_id: str, changes: dict) -> None:
+def apply_edits(session: Session, user_id: str, txn_id: str, changes: dict[str, object]) -> None:
     """Set several fields' effective values at once; validated together, written together."""
-    txn = _own_transaction(session, user_id, txn_id)
-    existing = {e.field: e for e in _edits(session, user_id, [txn_id])[txn_id]}
-    wanted = {field: _canonical(session, user_id, field, value) for field, value in changes.items()}
+    txn: Transaction = _own_transaction(session, user_id, txn_id)
+    existing: dict[str, TransactionEdit] = {e.field: e for e in _edits(session, user_id, [txn_id])[txn_id]}
+    wanted: dict[str, str | None] = {
+        field: _canonical(session, user_id, field, value) for field, value in changes.items()}
     _check_effective(session, user_id, txn, {f: e.new_value for f, e in existing.items()} | wanted)
 
     for field, new_value in wanted.items():
-        source_value = _source_value(txn, field)
-        edit = existing.get(field)
+        source_value: str | None = _source_value(txn, field)
+        edit: TransactionEdit | None = existing.get(field)
         if new_value == source_value:  # back to what the source said: no correction left
             if edit is not None:
                 session.delete(edit)
@@ -328,12 +352,12 @@ def apply_edits(session: Session, user_id: str, txn_id: str, changes: dict) -> N
 
 def revert(session: Session, user_id: str, txn_id: str, fields: list[str]) -> None:
     """Undo corrections: those fields read the source's value again."""
-    txn = _own_transaction(session, user_id, txn_id)
+    txn: Transaction = _own_transaction(session, user_id, txn_id)
     for field in fields:
         if field not in EDITABLE_FIELDS:
             raise TransactionError(f"'{field}' can't be edited.")
-    existing = {e.field: e for e in _edits(session, user_id, [txn_id])[txn_id]}
-    remaining = {f: e.new_value for f, e in existing.items() if f not in fields}
+    existing: dict[str, TransactionEdit] = {e.field: e for e in _edits(session, user_id, [txn_id])[txn_id]}
+    remaining: dict[str, str | None] = {f: e.new_value for f, e in existing.items() if f not in fields}
     _check_effective(session, user_id, txn, remaining)
     for field in fields:
         if field in existing:
@@ -349,11 +373,12 @@ def delete_manual(session: Session, user_id: str, txn_id: str, *, confirm_edits_
     Corrections on it would be lost, so they need explicit confirmation; the
     transaction_edits FK deliberately has no cascade (ruling 2026-10-10).
     """
-    txn = _own_transaction(session, user_id, txn_id)
-    source = session.get(Source, txn.primary_source_id)
+    txn: Transaction = _own_transaction(session, user_id, txn_id)
+    source: Source | None = session.get(Source, txn.primary_source_id)
+    assert source is not None  # primary_source_id is a NOT NULL foreign key
     if source.kind != "manual":
         raise TransactionError("Only manual entries can be deleted. Bank alerts and statements stay as received.")
-    fields = [e.field for e in _edits(session, user_id, [txn_id])[txn_id]]
+    fields: list[str] = [e.field for e in _edits(session, user_id, [txn_id])[txn_id]]
     if fields and not confirm_edits_lost:
         raise EditsWouldBeLost(fields)
     # Explicit order: no ORM relationships tell SQLAlchemy which rows depend on which.

@@ -16,7 +16,7 @@ from hisaab.accounts.identifiers import IdentifierError, normalize, normalize_fo
     ("vpa", "9876543210@paytm", "9876543210@paytm"),
     ("other", "  HDFC   Bank  Loan ", "hdfc bank loan"),
 ])
-def test_normalize_on_write(kind, raw, expected):
+def test_normalize_on_write(kind: str, raw: str, expected: str) -> None:
     assert normalize(kind, raw) == expected
 
 
@@ -31,7 +31,7 @@ def test_normalize_on_write(kind, raw, expected):
     ("other", "   "),
     ("bogus", "x"),
 ])
-def test_normalize_rejects_invalid(kind, raw):
+def test_normalize_rejects_invalid(kind: str, raw: str) -> None:
     with pytest.raises(IdentifierError):
         normalize(kind, raw)
 
@@ -44,9 +44,9 @@ def test_normalize_rejects_invalid(kind, raw):
     ("**** **** **** 8830", "8830"),
     ("HDFC Bank Loan", "hdfc bank loan"),
 ])
-def test_lookup_form_matches_write_form(raw, expected):
+def test_lookup_form_matches_write_form(raw: str, expected: str) -> None:
     assert normalize_for_lookup(raw) == expected
 
 
-def test_lookup_of_garbage_returns_none():
+def test_lookup_of_garbage_returns_none() -> None:
     assert normalize_for_lookup("   ") is None

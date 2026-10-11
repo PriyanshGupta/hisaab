@@ -16,26 +16,26 @@ import threading
 import time
 from collections.abc import Callable
 
-MAX_FAILURES = 10
-LOCKOUT_SECONDS = 15 * 60
+MAX_FAILURES: int = 10
+LOCKOUT_SECONDS: int = 15 * 60
 
 
 class LoginThrottle:
-    def __init__(self, clock: Callable[[], float] = time.monotonic, max_tracked: int = 10_000):
-        self._clock = clock
-        self._max_tracked = max_tracked
+    def __init__(self, clock: Callable[[], float] = time.monotonic, max_tracked: int = 10_000) -> None:
+        self._clock: Callable[[], float] = clock
+        self._max_tracked: int = max_tracked
         self._entries: dict[str, tuple[int, float]] = {}  # username -> (failures in a row, last failure)
-        self._lock = threading.Lock()
+        self._lock: threading.Lock = threading.Lock()
 
     def is_locked(self, username: str) -> bool:
         with self._lock:
-            entry = self._entries.get(username)
+            entry: tuple[int, float] | None = self._entries.get(username)
             return (entry is not None and entry[0] >= MAX_FAILURES
                     and self._clock() - entry[1] < LOCKOUT_SECONDS)
 
     def record_failure(self, username: str) -> None:
         with self._lock:
-            now = self._clock()
+            now: float = self._clock()
             count, last = self._entries.get(username, (0, now))
             if now - last >= LOCKOUT_SECONDS:
                 count = 0  # the earlier failures are old news
@@ -53,5 +53,6 @@ class LoginThrottle:
         # entries are dropped, which can end a lock early; add per-IP limits if the
         # app is ever exposed beyond the LAN.
         if len(self._entries) > self._max_tracked:
-            newest = sorted(self._entries.items(), key=lambda kv: kv[1][1])[-self._max_tracked:]
+            newest: list[tuple[str, tuple[int, float]]] = sorted(
+                self._entries.items(), key=lambda kv: kv[1][1])[-self._max_tracked:]
             self._entries = dict(newest)

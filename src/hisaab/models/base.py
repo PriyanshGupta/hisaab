@@ -14,6 +14,7 @@ the two ever disagree.
 
 import uuid
 from datetime import UTC, datetime
+from typing import Any, ClassVar
 
 from sqlalchemy import CheckConstraint, Integer, LargeBinary, MetaData, Text, text
 from sqlalchemy.orm import DeclarativeBase, MappedColumn, mapped_column
@@ -23,7 +24,7 @@ from sqlalchemy.orm import DeclarativeBase, MappedColumn, mapped_column
 # effectively permanent. CHECK constraints must be given a short `name`, which
 # this convention expands to ck_<table>_<name>; that full name is also what
 # SQLite prints in "CHECK constraint failed: ..." errors.
-NAMING_CONVENTION = {
+NAMING_CONVENTION: dict[str, str] = {
     "ix": "ix_%(column_0_label)s",
     "uq": "uq_%(table_name)s_%(column_0_N_name)s",
     "ck": "ck_%(table_name)s_%(constraint_name)s",
@@ -33,9 +34,9 @@ NAMING_CONVENTION = {
 
 
 class Base(DeclarativeBase):
-    metadata = MetaData(naming_convention=NAMING_CONVENTION)
+    metadata: ClassVar[MetaData] = MetaData(naming_convention=NAMING_CONVENTION)
     # Plain `str` columns are TEXT (not VARCHAR); money columns opt into BigInteger explicitly.
-    type_annotation_map = {str: Text, int: Integer, bytes: LargeBinary}
+    type_annotation_map: ClassVar[dict[Any, Any]] = {str: Text, int: Integer, bytes: LargeBinary}
 
 
 def new_id() -> str:
@@ -50,22 +51,22 @@ def utc_now(now: datetime | None = None) -> str:
 
 def one_of(column: str, values: tuple[str, ...], name: str) -> CheckConstraint:
     """CHECK (column IN (...)), the schema's enum representation (portable, no native enums)."""
-    allowed = ", ".join(f"'{v}'" for v in values)
+    allowed: str = ", ".join(f"'{v}'" for v in values)
     return CheckConstraint(f"{column} IN ({allowed})", name=name)
 
 
-def id_column() -> MappedColumn:
+def id_column() -> MappedColumn[str]:
     return mapped_column(Text, primary_key=True, default=new_id)
 
 
-def created_column() -> MappedColumn:
+def created_column() -> MappedColumn[str]:
     return mapped_column(Text, default=utc_now)
 
 
-def updated_column() -> MappedColumn:
+def updated_column() -> MappedColumn[str]:
     return mapped_column(Text, default=utc_now, onupdate=utc_now)
 
 
-def partial_index_where(predicate: str) -> dict:
+def partial_index_where(predicate: str) -> dict[str, Any]:
     """Index kwargs for a partial index, on both SQLite and (future) Postgres."""
     return {"sqlite_where": text(predicate), "postgresql_where": text(predicate)}

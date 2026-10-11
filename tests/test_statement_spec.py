@@ -1,12 +1,18 @@
 """Statement template specs (tech-design §4.6, amended 2026-10-11: two row modes) and save-time validation."""
 
 import copy
+from typing import Any
 
 import pytest
 
-from hisaab.parsing.statement_spec import InvalidStatementSpec, check_statement_spec, parse_statement_spec
+from hisaab.parsing.statement_spec import (
+    InvalidStatementSpec,
+    StatementSpec,
+    check_statement_spec,
+    parse_statement_spec,
+)
 
-RULED = {
+RULED: dict[str, Any] = {
     "version": 1,
     "artifact_type": "statement",
     "detect": {"page": 1, "all_of": ["Example Bank", "Statement of account"], "none_of": ["Credit Card"]},
@@ -30,7 +36,7 @@ RULED = {
     },
 }
 
-LINES = {
+LINES: dict[str, Any] = {
     "version": 1,
     "artifact_type": "statement",
     "detect": {"all_of": ["Example Card Statement"]},
@@ -54,10 +60,10 @@ LINES = {
 }
 
 
-def changed(spec, path, value):
+def changed(spec: dict[str, Any], path: str, value: object) -> dict[str, Any]:
     spec = copy.deepcopy(spec)
     *parents, last = path.split(".")
-    node = spec
+    node: dict[str, Any] = spec
     for key in parents:
         node = node[key]
     if value is None:
@@ -67,21 +73,21 @@ def changed(spec, path, value):
     return spec
 
 
-def problems(spec):
+def problems(spec: object) -> list[str]:
     with pytest.raises(InvalidStatementSpec) as e:
         parse_statement_spec(spec)
     return e.value.problems
 
 
-def test_both_row_modes_parse():
-    ruled = parse_statement_spec(RULED)
+def test_both_row_modes_parse() -> None:
+    ruled: StatementSpec = parse_statement_spec(RULED)
     assert ruled.table.rows == "ruled" and [c.field for c in ruled.table.columns][:2] == ["date", "narration"]
-    lines = parse_statement_spec(LINES)
+    lines: StatementSpec = parse_statement_spec(LINES)
     assert lines.table.rows == "line_pattern" and lines.account_kind == "credit_card"
     assert lines.detect_page == 1  # default
 
 
-def test_declared_balances_are_optional():
+def test_declared_balances_are_optional() -> None:
     assert parse_statement_spec(changed(RULED, "declared_balances", None)).declared == {}
 
 
@@ -114,23 +120,23 @@ def test_declared_balances_are_optional():
         (changed(RULED, "declared_balances.opening", {"pattern": "x", "transform": "inr_to_paise"}), "declared_balances.opening"),
     ],
 )
-def test_each_rule_names_the_offending_part(spec, fragment):
-    found = problems(spec)
+def test_each_rule_names_the_offending_part(spec: dict[str, Any], fragment: str) -> None:
+    found: list[str] = problems(spec)
     assert any(fragment in p for p in found), found
 
 
-def test_the_amount_style_decides_which_fields_the_rows_need():
+def test_the_amount_style_decides_which_fields_the_rows_need() -> None:
     # separate_debit_credit needs debit and credit columns; a single-column style needs amount
-    found = problems(changed(RULED, "row_rules.amount_style", "cr_dr_suffix") | {})
+    found: list[str] = problems(changed(RULED, "row_rules.amount_style", "cr_dr_suffix") | {})
     assert any("amount" in p for p in found)
-    no_credit = copy.deepcopy(RULED)
+    no_credit: dict[str, Any] = copy.deepcopy(RULED)
     no_credit["table"]["columns"] = [c for c in RULED["table"]["columns"] if c["field"] != "credit"]
     assert any("credit" in p for p in problems(no_credit))
-    no_date = changed(LINES, "table.line_pattern", r"^(?P<narration>.+?)\s+(?P<amount>\S+)$")
+    no_date: dict[str, Any] = changed(LINES, "table.line_pattern", r"^(?P<narration>.+?)\s+(?P<amount>\S+)$")
     assert any("date" in p for p in problems(no_date))
 
 
-def test_problems_are_collected_not_first_only():
-    spec = changed(changed(RULED, "version", 9), "account_kind", "wallet")
+def test_problems_are_collected_not_first_only() -> None:
+    spec: dict[str, Any] = changed(changed(RULED, "version", 9), "account_kind", "wallet")
     _, found = check_statement_spec(spec)
     assert len(found) == 2

@@ -19,11 +19,13 @@ Everything here is pure: no database, no clock. Candidate selection and the
 failure counter (§4.3 steps 1 and 9) live in templates.py.
 """
 
-import email
 from dataclasses import dataclass
 from datetime import datetime
 from email import policy
+from email.message import EmailMessage, MIMEPart
+from email.parser import BytesParser
 from email.utils import parseaddr, parsedate_to_datetime
+from typing import Any
 
 from hisaab.clock import LOCAL_TZ
 from hisaab.parsing import patterns
@@ -41,8 +43,8 @@ class EmailArtifact:
 
 def parse_eml(raw: bytes) -> EmailArtifact:
     """An RFC 822 message: an .eml fixture, or Gmail's format=raw after base64url decoding."""
-    msg = email.message_from_bytes(raw, policy=policy.default)
-    part = msg.get_body(preferencelist=("html", "plain"))
+    msg: EmailMessage = BytesParser(policy=policy.default).parsebytes(raw)
+    part: MIMEPart | None = msg.get_body(preferencelist=("html", "plain"))
     return EmailArtifact(
         sender=parseaddr(str(msg["From"] or ""))[1].strip().lower(),
         subject=str(msg["Subject"] or ""),
@@ -78,7 +80,7 @@ class Attempt:
 @dataclass(frozen=True)
 class Interpretation:
     attempts: tuple[Attempt, ...]  # every template tried, in order: the tier-1 diagnostic (§4.8)
-    extraction: dict | None  # the §10.4 contract, or None: no template matched, go to tier 2
+    extraction: dict[str, Any] | None  # the §10.4 contract, or None: no template matched, go to tier 2
 
     @property
     def template_id(self) -> str | None:
@@ -90,13 +92,13 @@ class Interpretation:
 
 
 def interpret(candidates: list[EmailTemplate], artifact: EmailArtifact) -> Interpretation:
-    attempts = []
+    attempts: list[Attempt] = []
     for template in candidates:
         values, failures = _run(template.spec, artifact)
-        attempt = Attempt(template.id, template.name, tuple(failures))
+        attempt: Attempt = Attempt(template.id, template.name, tuple(failures))
         attempts.append(attempt)
         if attempt.matched:
-            missing = [f.field for f in failures]  # all non-critical here
+            missing: list[str] = [f.field for f in failures]  # all non-critical here
             return Interpretation(tuple(attempts), {"outcome": "transaction", **values, "missing_fields": missing})
     return Interpretation(tuple(attempts), None)
 
@@ -113,21 +115,21 @@ class FieldResult:
 def trace(spec: EmailSpec, artifact: EmailArtifact) -> tuple[str, list[FieldResult]]:
     """Run one spec over one email: the preprocessed text, and what happened to each field.
     interpret() is built on this, so the authoring harness shows exactly what production does."""
-    text = artifact.body
+    text: str = artifact.body
     for step in spec.preprocess:
         text = step(text)
     return text, [_field(field, text, artifact) for field in spec.fields]
 
 
-def _run(spec: EmailSpec, artifact: EmailArtifact) -> tuple[dict, list[FieldFailure]]:
+def _run(spec: EmailSpec, artifact: EmailArtifact) -> tuple[dict[str, object], list[FieldFailure]]:
     _, results = trace(spec, artifact)
-    values = {r.name: r.value for r in results}
-    failures = [FieldFailure(r.name, r.reason) for r in results if r.reason and r.required]
+    values: dict[str, object] = {r.name: r.value for r in results}
+    failures: list[FieldFailure] = [FieldFailure(r.name, r.reason) for r in results if r.reason and r.required]
     return values, failures
 
 
 def _field(field: FieldSpec, text: str, artifact: EmailArtifact) -> FieldResult:
-    def result(value=None, captured=None, reason=None):
+    def result(value: object = None, captured: str | None = None, reason: str | None = None) -> FieldResult:
         return FieldResult(field.name, value, captured, reason, field.required)
 
     if field.const is not None:
@@ -137,14 +139,14 @@ def _field(field: FieldSpec, text: str, artifact: EmailArtifact) -> FieldResult:
             return result(artifact.received_at.astimezone(LOCAL_TZ).date().isoformat())
         return result()
     try:
-        m = patterns.search(field.pattern, text)
+        m: patterns.Match | None = patterns.search(field.pattern, text)
     except patterns.PatternTimeout as e:
         return result(reason=str(e))
-    captured = m.group(1) if m else None
+    captured: str | None = m.group(1) if m else None
     if not captured:
         return result(captured=captured, reason="no match")
     try:
-        value = field.transform(captured) if field.transform else captured
+        value: object = field.transform(captured) if field.transform else captured
     except TransformError as e:
         return result(captured=captured, reason=str(e))
     if value == "":

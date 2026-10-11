@@ -2,19 +2,22 @@
 
 import json
 import re
+from typing import Any, Sequence
 
 from alembic import command
 from alembic.autogenerate import compare_metadata
+from alembic.config import Config
 from alembic.migration import MigrationContext
-from sqlalchemy import text
+from sqlalchemy import Connection, CursorResult, Engine, Row, text
 
+from hisaab.config import Settings
 from tests.conftest import alembic_config
 
-GLOBAL_TABLES = {
+GLOBAL_TABLES: set[str] = {
     "payees", "parser_templates", "extraction_cache",
     "format_sightings", "normalization_patterns", "senders",
 }
-ALL_TABLES = GLOBAL_TABLES | {
+ALL_TABLES: set[str] = GLOBAL_TABLES | {
     # §3.2 core
     "users", "accounts", "account_identifiers", "sources", "transactions",
     "transaction_sources", "transaction_edits", "payee_categories", "categories",
@@ -26,7 +29,7 @@ ALL_TABLES = GLOBAL_TABLES | {
 }
 
 # §3.8: name -> (table, [(column, descending)], partial-predicate or None)
-EXPECTED_INDEXES = {
+EXPECTED_INDEXES: dict[str, tuple[str, list[tuple[str, int]], str | None]] = {
     "ix_txn_user_date": ("transactions", [("user_id", 0), ("transaction_date", 0)], None),
     "ix_txn_user_status": ("transactions", [("user_id", 0), ("status", 0)], "status = 'needs_review'"),
     "ix_txn_user_payee": ("transactions", [("user_id", 0), ("payee_id", 0)], None),
@@ -45,7 +48,7 @@ EXPECTED_INDEXES = {
     "ix_deltas_open": ("balance_deltas", [("user_id", 0), ("status", 0)], "status = 'open'"),
 }
 
-EXPECTED_SETTINGS = {
+EXPECTED_SETTINGS: dict[str, Any] = {
     "backfill_window_months": 3,
     "sync_min_lookback_hours": 48,
     "sync_interval_hours": 6,
@@ -66,7 +69,7 @@ EXPECTED_SETTINGS = {
 
 # Every row of PRD §10.1, in order, mapped to the settings key that carries it.
 # Sweep lookback deliberately shares the backfill key (tech-design §5.3).
-PRD_10_1_ROWS = {
+PRD_10_1_ROWS: dict[str, str] = {
     "Backfill window": "backfill_window_months",
     "Sync minimum lookback": "sync_min_lookback_hours",
     "Automatic sync interval": "sync_interval_hours",
@@ -87,25 +90,25 @@ PRD_10_1_ROWS = {
 }
 
 
-def _objects(conn, kind):
-    rows = conn.execute(
+def _objects(conn: Connection, kind: str) -> set[str]:
+    rows: CursorResult[Any] = conn.execute(
         text("SELECT name FROM sqlite_master WHERE type = :k AND name NOT LIKE 'sqlite_%' AND name <> 'alembic_version'"),
         {"k": kind},
     )
     return {r[0] for r in rows}
 
 
-def test_migration_creates_exactly_the_23_tables(conn):
+def test_migration_creates_exactly_the_23_tables(conn: Connection) -> None:
     assert _objects(conn, "table") == ALL_TABLES
     assert len(ALL_TABLES) == 23
 
 
-def test_migration_creates_the_effective_view(conn):
+def test_migration_creates_the_effective_view(conn: Connection) -> None:
     assert _objects(conn, "view") == {"transactions_effective"}
 
 
-def test_only_documented_tables_lack_a_user_id_column(conn):
-    lacking = {
+def test_only_documented_tables_lack_a_user_id_column(conn: Connection) -> None:
+    lacking: set[str] = {
         t for t in ALL_TABLES
         if "user_id" not in {r[1] for r in conn.execute(text(f"PRAGMA table_info({t})"))}
     }
@@ -114,12 +117,12 @@ def test_only_documented_tables_lack_a_user_id_column(conn):
     assert lacking == GLOBAL_TABLES | {"users", "transaction_sources", "sender_candidates"}
 
 
-def _normalize_sql(s):
+def _normalize_sql(s: str) -> str:
     return re.sub(r"\s+", " ", s).replace('"', "")
 
 
-def test_every_index_from_tech_design_3_8(conn):
-    named = {
+def test_every_index_from_tech_design_3_8(conn: Connection) -> None:
+    named: dict[Any, tuple[Any, Any]] = {
         r[0]: (r[1], r[2])
         for r in conn.execute(text("SELECT name, tbl_name, sql FROM sqlite_master WHERE type='index' AND name LIKE 'ix_%'"))
     }
@@ -127,25 +130,25 @@ def test_every_index_from_tech_design_3_8(conn):
     for name, (table, columns, predicate) in EXPECTED_INDEXES.items():
         actual_table, sql = named[name]
         assert actual_table == table, name
-        key_columns = [
+        key_columns: list[tuple[Any, Any]] = [
             (r[2], r[3]) for r in conn.execute(text(f"PRAGMA index_xinfo({name})")) if r[5] == 1  # r[5]: key column
         ]
         assert key_columns == columns, name
-        partial = next(r[4] for r in conn.execute(text(f"PRAGMA index_list({table})")) if r[1] == name)
+        partial: Any = next(r[4] for r in conn.execute(text(f"PRAGMA index_list({table})")) if r[1] == name)
         assert partial == (predicate is not None), name
         if predicate:
             assert f"WHERE {predicate}" in _normalize_sql(sql), (name, sql)
 
 
-def test_models_match_migration(conn):
+def test_models_match_migration(conn: Connection) -> None:
     from hisaab.models import Base
 
-    diff = compare_metadata(MigrationContext.configure(conn), Base.metadata)
+    diff: Any = compare_metadata(MigrationContext.configure(conn), Base.metadata)
     assert diff == []
 
 
-def test_downgrade_then_upgrade_round_trips(migrated_engine, settings):
-    cfg = alembic_config(settings.database_path)
+def test_downgrade_then_upgrade_round_trips(migrated_engine: Engine, settings: Settings) -> None:
+    cfg: Config = alembic_config(settings.database_path)
     command.downgrade(cfg, "base")
     with migrated_engine.connect() as c:
         assert _objects(c, "table") == set()
@@ -155,7 +158,7 @@ def test_downgrade_then_upgrade_round_trips(migrated_engine, settings):
         assert _objects(c, "table") == ALL_TABLES
 
 
-def _contains_float(value):
+def _contains_float(value: object) -> bool:
     if isinstance(value, float):
         return True
     if isinstance(value, dict):
@@ -165,14 +168,14 @@ def _contains_float(value):
     return False
 
 
-def test_settings_seeded_with_every_prd_10_1_tunable(conn):
-    rows = conn.execute(text("SELECT key, user_id, value, updated_at FROM settings")).all()
+def test_settings_seeded_with_every_prd_10_1_tunable(conn: Connection) -> None:
+    rows: Sequence[Row[Any]] = conn.execute(text("SELECT key, user_id, value, updated_at FROM settings")).all()
     assert {r.key: json.loads(r.value) for r in rows} == EXPECTED_SETTINGS
     assert all(r.user_id == "" for r in rows)  # app-level rows
     assert all(r.updated_at.endswith("Z") for r in rows)
     assert not any(_contains_float(json.loads(r.value)) for r in rows)  # no floats, ever
 
 
-def test_every_prd_10_1_row_maps_to_a_seeded_key():
+def test_every_prd_10_1_row_maps_to_a_seeded_key() -> None:
     assert len(PRD_10_1_ROWS) == 17
     assert set(PRD_10_1_ROWS.values()) == set(EXPECTED_SETTINGS)

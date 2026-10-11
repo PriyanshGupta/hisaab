@@ -14,10 +14,11 @@ Forms:
 """
 
 import re
+from collections.abc import Callable
 
-_VPA = re.compile(r"[a-z0-9._-]+@[a-z0-9.-]+")
+_VPA: re.Pattern[str] = re.compile(r"[a-z0-9._-]+@[a-z0-9.-]+")
 # Digits plus the masking characters banks print around them.
-_MASKED_DIGITS = re.compile(r"[0-9Xx*•\-\s]+")
+_MASKED_DIGITS: re.Pattern[str] = re.compile(r"[0-9Xx*•\-\s]+")
 
 
 class IdentifierError(ValueError):
@@ -25,27 +26,27 @@ class IdentifierError(ValueError):
 
 
 def _last4(raw: str) -> str:
-    digits = re.sub(r"\D", "", raw)
+    digits: str = re.sub(r"\D", "", raw)
     if len(digits) < 4:
         raise IdentifierError("Enter the last 4 digits of the account or card number.")
     return digits[-4:]
 
 
 def _vpa(raw: str) -> str:
-    value = raw.strip().lower()
+    value: str = raw.strip().lower()
     if not _VPA.fullmatch(value):
         raise IdentifierError(f"'{raw.strip()}' isn't a UPI ID. A UPI ID looks like name@bank.")
     return value
 
 
 def _other(raw: str) -> str:
-    value = " ".join(raw.split()).lower()
+    value: str = " ".join(raw.split()).lower()
     if not value:
         raise IdentifierError("The identifier is empty.")
     return value
 
 
-_BY_KIND = {"last4": _last4, "card_last4": _last4, "vpa": _vpa, "other": _other}
+_BY_KIND: dict[str, Callable[[str], str]] = {"last4": _last4, "card_last4": _last4, "vpa": _vpa, "other": _other}
 
 
 def normalize(kind: str, raw: str) -> str:
@@ -62,7 +63,7 @@ def normalize_for_lookup(raw: str) -> str | None:
     last 4 digits. Anything else -> 'other'. Returns None for input that can't
     be any identifier, so it simply matches nothing.
     """
-    value = raw.strip()
+    value: str = raw.strip()
     if not value:
         return None
     try:

@@ -9,7 +9,7 @@ from hisaab.config import Settings
 
 
 def serve() -> None:
-    settings = Settings()
+    settings: Settings = Settings()
     uvicorn.run("hisaab.main:create_app", factory=True, host=settings.host, port=settings.port)
 
 

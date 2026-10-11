@@ -24,10 +24,13 @@ Rules owned here:
   somewhere silently (PRD §3.3), and they become reusable by a new account.
 """
 
+import enum
 import re
+from collections.abc import Sequence
 from datetime import date
+from typing import Final
 
-from sqlalchemy import select, update
+from sqlalchemy import Select, select, update
 from sqlalchemy.orm import Session
 
 from hisaab.accounts.identifiers import IdentifierError, normalize, normalize_for_lookup
@@ -36,15 +39,23 @@ from hisaab.models import Account, AccountIdentifier, utc_now
 from hisaab.models.core import ACCOUNT_TYPES
 
 # The identifier each account type registers for itself at creation.
-SETUP_IDENTIFIER_KIND = {"bank": "last4", "credit_card": "card_last4"}
+SETUP_IDENTIFIER_KIND: dict[str, str] = {"bank": "last4", "credit_card": "card_last4"}
 # Kinds a user may add to an account afterwards.
-USER_IDENTIFIER_KINDS = ("vpa", "other")
+USER_IDENTIFIER_KINDS: tuple[str, ...] = ("vpa", "other")
 
-_ISO_DATE = re.compile(r"\d{4}-\d{2}-\d{2}")
+_ISO_DATE: re.Pattern[str] = re.compile(r"\d{4}-\d{2}-\d{2}")
 # ₹10 lakh crore. Far beyond any household balance, inside SQLite's BIGINT and
 # below JavaScript's exact-integer limit (~9e15), and the same cap money.ts uses.
-MAX_ABS_PAISE = 10**15
-_UNSET = object()
+MAX_ABS_PAISE: int = 10**15
+
+
+class _Unset(enum.Enum):
+    """An argument the caller left out (None is a real value, e.g. "no institution")."""
+
+    UNSET = "unset"
+
+
+_UNSET: Final = _Unset.UNSET
 
 
 class AccountError(ValueError):
@@ -96,7 +107,7 @@ def _check_date(value: str) -> str:
     try:
         if not _ISO_DATE.fullmatch(value or ""):
             raise ValueError
-        parsed = date.fromisoformat(value)
+        parsed: date = date.fromisoformat(value)
     except ValueError:
         raise AccountError("Opening balance date must be a real date (YYYY-MM-DD).") from None
     if parsed > local_today():  # India's date, not the (possibly UTC) server's
@@ -120,7 +131,7 @@ def _check_last4(account_type: str, last4: str | None) -> str | None:
 # --- reads -------------------------------------------------------------------
 
 def get_account(session: Session, user_id: str, account_id: str) -> Account:
-    account = session.scalars(
+    account: Account | None = session.scalars(
         select(Account).where(Account.id == account_id, Account.user_id == user_id)
     ).one_or_none()
     if account is None:
@@ -131,7 +142,7 @@ def get_account(session: Session, user_id: str, account_id: str) -> Account:
 def list_accounts(session: Session, user_id: str, include_archived: bool = False) -> list[Account]:
     """The user's accounts in creation order. Archived ones only when asked for:
     they must not appear in selection lists (PRD §6.6)."""
-    query = select(Account).where(Account.user_id == user_id)
+    query: Select[tuple[Account]] = select(Account).where(Account.user_id == user_id)
     if not include_archived:
         query = query.where(Account.archived_at.is_(None))
     return list(session.scalars(query.order_by(Account.created_at, Account.id)))
@@ -153,10 +164,10 @@ def resolve_identifier(session: Session, user_id: str, raw: str) -> Account | No
     caller records the raw string as an unresolved leg and the transaction goes
     to review. It is never attached to a guessed or default account (PRD §3.3).
     """
-    canonical = normalize_for_lookup(raw)
+    canonical: str | None = normalize_for_lookup(raw)
     if canonical is None:
         return None
-    matches = session.scalars(
+    matches: Sequence[Account] = session.scalars(
         select(Account)
         .join(AccountIdentifier, AccountIdentifier.account_id == Account.id)
         .where(
@@ -175,7 +186,7 @@ def resolve_identifier(session: Session, user_id: str, raw: str) -> Account | No
 # --- writes ------------------------------------------------------------------
 
 def _active_account(session: Session, user_id: str, account_id: str) -> Account:
-    account = get_account(session, user_id, account_id)
+    account: Account = get_account(session, user_id, account_id)
     if account.archived_at is not None:
         raise AccountError("This account is archived and can't be changed.")
     return account
@@ -193,20 +204,20 @@ def create_account(
     institution: str | None = None,
 ) -> Account:
     _check_type(type)
-    name = _check_name(display_name)
-    canonical_last4 = _check_last4(type, last4)
-    balance = _check_balance(type, opening_balance)
-    anchor = _check_date(opening_balance_date)
+    name: str = _check_name(display_name)
+    canonical_last4: str | None = _check_last4(type, last4)
+    balance: int = _check_balance(type, opening_balance)
+    anchor: str = _check_date(opening_balance_date)
 
     if canonical_last4 is not None:
-        holder = session.scalars(
+        holder: Account | None = session.scalars(
             select(Account).where(Account.user_id == user_id, Account.last4 == canonical_last4,
                                   Account.archived_at.is_(None))
         ).one_or_none()
         if holder is not None:
             raise DuplicateLast4(f"You already have an account ending {canonical_last4}: {holder.display_name}.")
 
-    account = Account(
+    account: Account = Account(
         user_id=user_id, type=type, display_name=name, institution=(institution or "").strip() or None,
         last4=canonical_last4, opening_balance=balance, opening_balance_date=anchor,
     )
@@ -226,14 +237,14 @@ def update_account(
     user_id: str,
     account_id: str,
     *,
-    display_name=_UNSET,
-    institution=_UNSET,
-    opening_balance=_UNSET,
-    opening_balance_date=_UNSET,
+    display_name: str | _Unset = _UNSET,
+    institution: str | None | _Unset = _UNSET,
+    opening_balance: int | _Unset = _UNSET,
+    opening_balance_date: str | _Unset = _UNSET,
 ) -> Account:
     """Rename, or correct the opening anchor. Type and last4 are fixed: a
     different card is a different account."""
-    account = _active_account(session, user_id, account_id)
+    account: Account = _active_account(session, user_id, account_id)
     if display_name is not _UNSET:
         account.display_name = _check_name(display_name)
     if institution is not _UNSET:
@@ -247,9 +258,9 @@ def update_account(
 
 def archive_account(session: Session, user_id: str, account_id: str) -> Account:
     """Archive (idempotent). The row and its transactions stay; identifiers retire."""
-    account = get_account(session, user_id, account_id)
+    account: Account = get_account(session, user_id, account_id)
     if account.archived_at is None:
-        now = utc_now()
+        now: str = utc_now()
         account.archived_at = now
         session.execute(
             update(AccountIdentifier)
@@ -261,14 +272,14 @@ def archive_account(session: Session, user_id: str, account_id: str) -> Account:
 
 
 def add_identifier(session: Session, user_id: str, account_id: str, kind: str, raw: str) -> AccountIdentifier:
-    account = _active_account(session, user_id, account_id)
+    account: Account = _active_account(session, user_id, account_id)
     if kind not in USER_IDENTIFIER_KINDS:
         raise AccountError("Add UPI IDs or other references here; last 4 digits are set when the account is created.")
     try:
-        canonical = normalize(kind, raw)
+        canonical: str = normalize(kind, raw)
     except IdentifierError as exc:
         raise AccountError(str(exc)) from None
-    holder = session.scalars(
+    holder: Account | None = session.scalars(
         select(Account)
         .join(AccountIdentifier, AccountIdentifier.account_id == Account.id)
         .where(AccountIdentifier.user_id == user_id, AccountIdentifier.kind == kind,
@@ -276,7 +287,7 @@ def add_identifier(session: Session, user_id: str, account_id: str, kind: str, r
     ).first()
     if holder is not None:
         raise DuplicateIdentifier(f"{canonical} is already on {holder.display_name}.")
-    identifier = AccountIdentifier(account_id=account.id, user_id=user_id, kind=kind,
+    identifier: AccountIdentifier = AccountIdentifier(account_id=account.id, user_id=user_id, kind=kind,
                                    identifier=canonical, origin="account_setup")
     session.add(identifier)
     session.flush()
@@ -285,7 +296,7 @@ def add_identifier(session: Session, user_id: str, account_id: str, kind: str, r
 
 def remove_identifier(session: Session, user_id: str, account_id: str, identifier_id: str) -> None:
     _active_account(session, user_id, account_id)
-    identifier = session.scalars(
+    identifier: AccountIdentifier | None = session.scalars(
         select(AccountIdentifier).where(
             AccountIdentifier.id == identifier_id, AccountIdentifier.account_id == account_id,
             AccountIdentifier.user_id == user_id, AccountIdentifier.retired_at.is_(None),

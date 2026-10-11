@@ -19,7 +19,7 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
-dev = ["pytest>=8.3", "httpx2>=2.13"]  # starlette 1.7+ TestClient wants httpx2
+dev = ["pytest>=8.3", "httpx2>=2.13", "mypy>=2.4"]  # starlette 1.7+ TestClient wants httpx2
 
 [tool.setuptools.packages.find]
 where = ["src"]
@@ -30,3 +30,14 @@ hisaab = ["parsing/seed/*.json"]
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 addopts = "-ra"
+
+[tool.mypy]
+python_version = "3.14"
+strict = true
+mypy_path = ["typings", "src"]   # our stub for google-re2 (no type information); src so tests see hisaab
+files = ["src", "tests", "migrations", "spikes/slice0_oauth/authorize.py"]
+plugins = ["pydantic.mypy"]    # pydantic models: field coercion and pydantic-settings init arguments
+
+[[tool.mypy.overrides]]
+module = ["google_auth_oauthlib.*"]  # the Slice 0 spike's own venv has it; the app's does not
+ignore_missing_imports = true

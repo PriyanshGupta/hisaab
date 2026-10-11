@@ -12,10 +12,10 @@ from functools import cache
 from argon2 import PasswordHasher
 from argon2.exceptions import InvalidHashError, VerificationError, VerifyMismatchError
 
-_hasher = PasswordHasher()
+_hasher: PasswordHasher = PasswordHasher()
 # Each Argon2 run takes 64 MiB. The web server runs up to 40 requests at once,
 # so without this cap a burst of logins could claim ~2.5 GiB of the laptop's RAM.
-_argon2_slots = threading.BoundedSemaphore(2)
+_argon2_slots: threading.BoundedSemaphore = threading.BoundedSemaphore(2)
 
 
 def hash_password(password: str) -> str:

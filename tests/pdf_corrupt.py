@@ -9,7 +9,7 @@ original length (zlib stops at its own end marker and ignores the padding).
 import re
 import zlib
 
-_STREAM = re.compile(rb"(stream\r?\n)(.*?)(\r?\nendstream)", re.S)
+_STREAM: re.Pattern[bytes] = re.compile(rb"(stream\r?\n)(.*?)(\r?\nendstream)", re.S)
 
 
 def replace_drawn_text(data: bytes, old: str, new: str) -> bytes:
@@ -18,26 +18,26 @@ def replace_drawn_text(data: bytes, old: str, new: str) -> bytes:
     if len(old) != len(new):
         raise ValueError("old and new must be the same length")
     target, replacement = b"(" + old.encode() + b")", b"(" + new.encode() + b")"
-    hits = 0
+    hits: int = 0
 
-    def fix(m: re.Match) -> bytes:
+    def fix(m: re.Match[bytes]) -> bytes:
         nonlocal hits
-        packed = m.group(2)
+        packed: bytes = m.group(2)
         try:
-            text = zlib.decompress(packed)
+            text: bytes = zlib.decompress(packed)
         except zlib.error:
             return m.group(0)
         if target not in text:
             return m.group(0)
         hits += text.count(target)
-        edited = text.replace(target, replacement)
+        edited: bytes = text.replace(target, replacement)
         for level in (9, 8, 7, 6, 5, 4, 3, 2, 1):
-            repacked = zlib.compress(edited, level)
+            repacked: bytes = zlib.compress(edited, level)
             if len(repacked) <= len(packed):
                 return m.group(1) + repacked + b"\0" * (len(packed) - len(repacked)) + m.group(3)
         raise ValueError("edited stream does not fit back in place")
 
-    out = _STREAM.sub(fix, data)
+    out: bytes = _STREAM.sub(fix, data)
     if hits != 1:
         raise ValueError(f"'{old}' is drawn {hits} times, expected exactly once")
     assert len(out) == len(data)

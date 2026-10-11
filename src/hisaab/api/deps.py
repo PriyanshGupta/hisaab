@@ -10,10 +10,12 @@ from dataclasses import dataclass
 from fastapi import Depends, HTTPException, Request, Response, status
 
 from hisaab.auth import sessions, users
+from hisaab.config import Settings
 from hisaab.db import Database
+from hisaab.models import User, UserSession
 
-SESSION_COOKIE = "hisaab_session"
-COOKIE_MAX_AGE = int(sessions.SESSION_TTL.total_seconds())
+SESSION_COOKIE: str = "hisaab_session"
+COOKIE_MAX_AGE: int = int(sessions.SESSION_TTL.total_seconds())
 
 
 @dataclass(frozen=True)
@@ -25,11 +27,14 @@ class CurrentUser:
 
 
 def get_db(request: Request) -> Database:
-    return request.app.state.db
+    db: Database = request.app.state.db
+    return db
 
 
 def session_secret(request: Request) -> str:
-    return request.app.state.settings.session_secret.get_secret_value()
+    settings: Settings = request.app.state.settings
+    assert settings.session_secret is not None  # create_app refuses to start without one
+    return settings.session_secret.get_secret_value()
 
 
 def set_session_cookie(response: Response, token: str) -> None:
@@ -42,27 +47,27 @@ def clear_session_cookie(response: Response) -> None:
     response.delete_cookie(SESSION_COOKIE, httponly=True, samesite="lax", path="/")
 
 
-_UNAUTHENTICATED = HTTPException(status.HTTP_401_UNAUTHORIZED, "Not logged in")
+_UNAUTHENTICATED: HTTPException = HTTPException(status.HTTP_401_UNAUTHORIZED, "Not logged in")
 
 
 def current_user(request: Request, response: Response, db: Database = Depends(get_db)) -> CurrentUser:
-    token = request.cookies.get(SESSION_COOKIE)
+    token: str | None = request.cookies.get(SESSION_COOKIE)
     if not token:
         raise _UNAUTHENTICATED
-    secret = session_secret(request)
-    found, last_seen_at = None, None
+    secret: str = session_secret(request)
+    found: tuple[CurrentUser, str] | None = None  # the user, and when this session was last seen
     with db.read_session() as s:  # values are copied out: ORM objects die with the session
-        row = sessions.resolve(s, secret, token)
-        user = users.get(s, row.user_id) if row else None
-        if user is not None:
-            found = CurrentUser(user.id, user.username, user.display_name, user.role)
-            last_seen_at = row.last_seen_at
+        row: UserSession | None = sessions.resolve(s, secret, token)
+        user: User | None = users.get(s, row.user_id) if row else None
+        if row is not None and user is not None:
+            found = (CurrentUser(user.id, user.username, user.display_name, user.role), row.last_seen_at)
     if found is None:
         sessions.purge_if_expired(db, secret, token)  # no-op unless the row exists but expired
         raise _UNAUTHENTICATED
+    current, last_seen_at = found
     if sessions.touch_if_due(db, secret, token, last_seen_at):
         set_session_cookie(response, token)
-    return found
+    return current
 
 
 def require_admin(user: CurrentUser = Depends(current_user)) -> CurrentUser:

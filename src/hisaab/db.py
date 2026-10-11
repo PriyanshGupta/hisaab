@@ -24,7 +24,9 @@ from contextlib import contextmanager
 from pathlib import Path
 
 from sqlalchemy import Engine, create_engine, event
+from sqlalchemy.engine.interfaces import DBAPIConnection, DBAPICursor
 from sqlalchemy.orm import Session, sessionmaker
+from sqlalchemy.pool import ConnectionPoolEntry
 
 # (name, value). foreign_keys is handled separately because migrations turn it off.
 CONNECTION_PRAGMAS: tuple[tuple[str, str], ...] = (
@@ -35,10 +37,11 @@ CONNECTION_PRAGMAS: tuple[tuple[str, str], ...] = (
 
 # Filesystems on which SQLite locking cannot be trusted. 9p/drvfs/v9fs are how
 # WSL2 mounts Windows drives; the rest are network or FUSE (e.g. ntfs-3g) mounts.
-UNSAFE_FILESYSTEMS = frozenset({"9p", "drvfs", "v9fs", "cifs", "smb3", "smbfs", "nfs", "nfs4", "fuseblk"})
+UNSAFE_FILESYSTEMS: frozenset[str] = frozenset(
+    {"9p", "drvfs", "v9fs", "cifs", "smb3", "smbfs", "nfs", "nfs4", "fuseblk"})
 
 # Belt and braces: WSL mounts drive letters at /mnt/<letter>, whatever /proc/mounts says.
-_WINDOWS_DRIVE = re.compile(r"^/mnt/[a-zA-Z](/|$)")
+_WINDOWS_DRIVE: re.Pattern[str] = re.compile(r"^/mnt/[a-zA-Z](/|$)")
 
 
 class UnsafeDatabaseLocation(RuntimeError):
@@ -54,12 +57,13 @@ def filesystem_type(path: Path, mounts_text: str | None = None) -> str:
     """Filesystem type of the mount containing `path` (longest mount-point match)."""
     if mounts_text is None:
         mounts_text = Path("/proc/mounts").read_text()
-    best_mount, best_type = None, "unknown"
+    best_mount: Path | None = None
+    best_type: str = "unknown"
     for line in mounts_text.splitlines():
-        fields = line.split()
+        fields: list[str] = line.split()
         if len(fields) < 3:
             continue
-        mount_point = Path(_unescape_mount_field(fields[1]))
+        mount_point: Path = Path(_unescape_mount_field(fields[1]))
         if path.is_relative_to(mount_point) and (
             best_mount is None or len(mount_point.parts) > len(best_mount.parts)
         ):
@@ -69,8 +73,8 @@ def filesystem_type(path: Path, mounts_text: str | None = None) -> str:
 
 def assert_safe_db_location(db_path: Path, mounts_text: str | None = None) -> None:
     # resolve() follows symlinks, so /home/u/data -> /mnt/c/... is judged by its target.
-    resolved = db_path.expanduser().resolve()
-    fstype = filesystem_type(resolved, mounts_text)
+    resolved: Path = db_path.expanduser().resolve()
+    fstype: str = filesystem_type(resolved, mounts_text)
     if fstype in UNSAFE_FILESYSTEMS or _WINDOWS_DRIVE.match(str(resolved)):
         raise UnsafeDatabaseLocation(
             f"Refusing to use database at {resolved} (filesystem: {fstype}). "
@@ -86,12 +90,12 @@ def make_engine(db_path: Path, *, enforce_foreign_keys: bool = True) -> Engine:
     """
     assert_safe_db_location(db_path)
     db_path.parent.mkdir(parents=True, exist_ok=True)
-    engine = create_engine(f"sqlite:///{db_path}")
-    foreign_keys = "ON" if enforce_foreign_keys else "OFF"
+    engine: Engine = create_engine(f"sqlite:///{db_path}")
+    foreign_keys: str = "ON" if enforce_foreign_keys else "OFF"
 
     @event.listens_for(engine, "connect")
-    def _configure_connection(dbapi_connection, _connection_record):
-        cursor = dbapi_connection.cursor()
+    def _configure_connection(dbapi_connection: DBAPIConnection, _connection_record: ConnectionPoolEntry) -> None:
+        cursor: DBAPICursor = dbapi_connection.cursor()
         try:
             for name, value in CONNECTION_PRAGMAS:
                 cursor.execute(f"PRAGMA {name} = {value}")
@@ -120,14 +124,14 @@ class Database:
     read_session() never commits. Slice 12 gives it a separate read-only pool.
     """
 
-    def __init__(self, engine: Engine):
-        self.engine = engine
-        self.writer_lock = threading.Lock()
-        self._sessions = sessionmaker(bind=engine, expire_on_commit=False)
+    def __init__(self, engine: Engine) -> None:
+        self.engine: Engine = engine
+        self.writer_lock: threading.Lock = threading.Lock()
+        self._sessions: sessionmaker[Session] = sessionmaker(bind=engine, expire_on_commit=False)
 
     @contextmanager
     def read_session(self) -> Iterator[Session]:
-        session = self._sessions()
+        session: Session = self._sessions()
         try:
             yield session
         finally:

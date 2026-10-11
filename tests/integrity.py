@@ -11,7 +11,7 @@ has no check here, so a new table or column can't silently escape the scan.
 
 from dataclasses import dataclass
 
-from sqlalchemy import text
+from sqlalchemy import Connection, text
 
 
 @dataclass(frozen=True)
@@ -70,11 +70,11 @@ CHECKS: list[Check] = [
 ]
 
 
-def cross_user_violations(conn) -> dict[str, list[int]]:
+def cross_user_violations(conn: Connection) -> dict[str, list[int]]:
     """{check name: offending rowids} for every check that found something."""
-    found = {}
+    found: dict[str, list[int]] = {}
     for check in CHECKS:
-        rows = [r[0] for r in conn.execute(text(check.sql))]
+        rows: list[int] = [r[0] for r in conn.execute(text(check.sql))]
         if rows:
             found[check.name] = rows
     return found

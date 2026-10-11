@@ -28,7 +28,7 @@ from hisaab.models.parsing import (
 )
 from hisaab.models.views import ReadOnlyViewError, TransactionEffective
 
-__all__ = [
+__all__: list[str] = [
     "Account", "AccountIdentifier", "BalanceDelta", "BalanceObservation", "Base", "Category",
     "ExtractionCache", "FormatSighting", "GmailConnection", "Job", "NormalizationPattern",
     "ParserTemplate", "Payee", "PayeeCategory", "ReadOnlyViewError", "Sender", "SenderCandidate",

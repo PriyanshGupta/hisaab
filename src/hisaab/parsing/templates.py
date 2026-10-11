@@ -16,27 +16,28 @@ Templates are GLOBAL: one bank format serves every user.
 
 import json
 from datetime import UTC, datetime, timedelta
+from typing import Any
 
-from sqlalchemy import select
+from sqlalchemy import ScalarResult, select
 from sqlalchemy.orm import Session
 
 from hisaab.models import ParserTemplate
 from hisaab.models.base import utc_now
 from hisaab.parsing import patterns
 from hisaab.parsing.email_interpreter import EmailTemplate, Interpretation
-from hisaab.parsing.email_spec import parse_email_spec
+from hisaab.parsing.email_spec import EmailSpec, parse_email_spec
 from hisaab.parsing.statement_interpreter import StatementTemplate
 from hisaab.parsing.statement_spec import parse_statement_spec
 
-FAILURE_WINDOW = timedelta(days=30)  # PRD §10.1: 3 consecutive failures within 30 days demotes
+FAILURE_WINDOW: timedelta = timedelta(days=30)  # PRD §10.1: 3 consecutive failures within 30 days demotes
 
 
 def save_email_template(
-    session: Session, *, name: str, spec: dict, origin: str = "human", status: str = "proposed",
+    session: Session, *, name: str, spec: dict[str, Any], origin: str = "human", status: str = "proposed",
     priority: int = 0, promoted_at: str | None = None,
 ) -> ParserTemplate:
-    parsed = parse_email_spec(spec)  # raises InvalidSpec listing every problem
-    row = ParserTemplate(
+    parsed: EmailSpec = parse_email_spec(spec)  # raises InvalidSpec listing every problem
+    row: ParserTemplate = ParserTemplate(
         artifact_type="email", name=name, sender_address=parsed.senders[0], subject_pattern=spec["match"]["subject"],
         spec=json.dumps(spec, ensure_ascii=False), origin=origin, status=status, priority=priority,
         promoted_at=promoted_at,
@@ -51,19 +52,20 @@ def email_candidates(session: Session, sender: str, subject: str) -> list[EmailT
     ones, then id, so even exact ties resolve the same way every run (PRD §8.4)."""
     # shortcut: loads every active email template and filters in Python; fine for dozens of
     # templates, add a sender lookup table if it ever reaches thousands.
-    rows = session.scalars(
+    rows: ScalarResult[ParserTemplate] = session.scalars(
         select(ParserTemplate)
         .where(ParserTemplate.artifact_type == "email", ParserTemplate.status == "active")
         .order_by(ParserTemplate.priority.desc(), ParserTemplate.promoted_at.desc().nulls_last(), ParserTemplate.id)
     )
     sender = sender.strip().lower()
-    found = []
+    found: list[EmailTemplate] = []
     for row in rows:
-        spec = parse_email_spec(json.loads(row.spec))
+        spec: EmailSpec = parse_email_spec(json.loads(row.spec))
         if sender not in spec.senders:
             continue
         try:
-            if patterns.search(spec.subject, subject) is None:  # SQLite has no RE2, so subjects filter here
+            # SQLite has no RE2, so subjects filter here (a parsed spec always has one)
+            if spec.subject is None or patterns.search(spec.subject, subject) is None:
                 continue
         except patterns.PatternTimeout:
             continue
@@ -72,11 +74,11 @@ def email_candidates(session: Session, sender: str, subject: str) -> list[EmailT
 
 
 def save_statement_template(
-    session: Session, *, name: str, spec: dict, status: str = "proposed", priority: int = 0,
+    session: Session, *, name: str, spec: dict[str, Any], status: str = "proposed", priority: int = 0,
     promoted_at: str | None = None,
 ) -> ParserTemplate:
     parse_statement_spec(spec)  # raises InvalidStatementSpec listing every problem
-    row = ParserTemplate(  # statement templates are human-authored only (tech-design §10 amendment 2)
+    row: ParserTemplate = ParserTemplate(  # statement templates are human-authored only (tech-design §10 amendment 2)
         artifact_type="statement", name=name, spec=json.dumps(spec, ensure_ascii=False), origin="human",
         status=status, priority=priority, promoted_at=promoted_at,
     )
@@ -86,7 +88,7 @@ def save_statement_template(
 
 
 def statement_candidates(session: Session) -> list[StatementTemplate]:
-    rows = session.scalars(
+    rows: ScalarResult[ParserTemplate] = session.scalars(
         select(ParserTemplate)
         .where(ParserTemplate.artifact_type == "statement", ParserTemplate.status == "active")
         .order_by(ParserTemplate.priority.desc(), ParserTemplate.promoted_at.desc().nulls_last(), ParserTemplate.id)
@@ -103,13 +105,17 @@ def record_outcome(session: Session, result: Interpretation, now: datetime | Non
     starts a new streak at 1."""
     now = now or datetime.now(UTC)
     if result.extraction is not None:
-        winner = session.get(ParserTemplate, result.template_id)
-        winner.consecutive_failures, winner.failure_window_started_at = 0, None
+        winner: ParserTemplate | None = session.get(ParserTemplate, result.template_id)
+        if winner is not None:  # None only if the template was deleted mid-run
+            winner.consecutive_failures, winner.failure_window_started_at = 0, None
         return
-    stamp, window_floor = utc_now(now), utc_now(now - FAILURE_WINDOW)
+    stamp: str = utc_now(now)
+    window_floor: str = utc_now(now - FAILURE_WINDOW)
     for attempt in result.attempts:
-        row = session.get(ParserTemplate, attempt.template_id)
-        started = row.failure_window_started_at
+        row: ParserTemplate | None = session.get(ParserTemplate, attempt.template_id)
+        if row is None:
+            continue
+        started: str | None = row.failure_window_started_at
         if row.consecutive_failures and started and started > window_floor:
             row.consecutive_failures += 1
         else:

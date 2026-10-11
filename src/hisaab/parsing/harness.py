@@ -26,11 +26,25 @@ import json
 import re
 import textwrap
 from pathlib import Path
-from typing import TextIO
+from typing import Any, Protocol, TextIO
 
 from hisaab.parsing import patterns
-from hisaab.parsing.email_interpreter import EmailTemplate, interpret, parse_eml, trace
-from hisaab.parsing.email_spec import CONTRACT_FIELDS, CRITICAL_FIELDS, check_email_spec
+from hisaab.parsing.email_interpreter import (
+    EmailArtifact,
+    EmailTemplate,
+    FieldResult,
+    Interpretation,
+    interpret,
+    parse_eml,
+    trace,
+)
+from hisaab.parsing.email_spec import CONTRACT_FIELDS, CRITICAL_FIELDS, EmailSpec, check_email_spec
+
+
+class Say(Protocol):
+    """Prints one line of the report (no argument: a blank line)."""
+
+    def __call__(self, line: str = "") -> None: ...
 
 
 def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out: TextIO,
@@ -39,7 +53,7 @@ def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out:
         print(line, file=out)
 
     try:
-        raw = json.loads(Path(spec_path).read_text())
+        raw: object = json.loads(Path(spec_path).read_text())
     except OSError as e:
         say(f"Can't read {spec_path}: {e.strerror}")
         return 2
@@ -58,10 +72,10 @@ def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out:
             say(f"  - {p}")
         say("Fields with problems are not run below.")
 
-    worst = 0
+    worst: int = 0
     for path in fixture_paths:
         try:
-            artifact = parse_eml(Path(path).read_bytes())
+            artifact: EmailArtifact = parse_eml(Path(path).read_bytes())
         except OSError as e:
             say(f"\nCan't read {path}: {e.strerror}")
             return 2
@@ -69,17 +83,17 @@ def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out:
             say(f"\nCan't read {path} as an email: {e}")
             return 2
         say(f"\n=== {path}")
-        ok = _report(spec, problems, artifact, show_text, say)
+        ok: bool = _report(spec, problems, artifact, show_text, say)
         worst = max(worst, 0 if ok else 1)
     return worst
 
 
-def _report(spec, problems, artifact, show_text, say) -> bool:
-    sender_ok = artifact.sender in spec.senders
+def _report(spec: EmailSpec, problems: list[str], artifact: EmailArtifact, show_text: bool, say: Say) -> bool:
+    sender_ok: bool = artifact.sender in spec.senders
     say(f"  sender   {artifact.sender}  {'ok' if sender_ok else f'not in spec {list(spec.senders)}'}")
-    subject_ok = spec.subject is not None and _matches(spec.subject, artifact.subject)
+    subject_ok: bool = spec.subject is not None and _matches(spec.subject, artifact.subject)
     say(f"  subject  {artifact.subject!r}  {'ok' if subject_ok else 'does not match the spec subject pattern'}")
-    tried = sender_ok and subject_ok
+    tried: bool = sender_ok and subject_ok
     if not tried:
         say("  -> production would never try this template on this email")
 
@@ -89,7 +103,7 @@ def _report(spec, problems, artifact, show_text, say) -> bool:
         for line in textwrap.wrap(text, 100):
             say(f"    {line}")
     say()
-    by_name = {r.name: r for r in results}
+    by_name: dict[str, FieldResult] = {r.name: r for r in results}
     for name in CONTRACT_FIELDS:
         say(f"  {name:24} {_describe(name, by_name.get(name), problems)}")
     say()
@@ -97,13 +111,13 @@ def _report(spec, problems, artifact, show_text, say) -> bool:
     if problems:
         say("  NOT MATCHED: the spec has problems (above), so it cannot run in production.")
         return False
-    result = interpret([EmailTemplate("harness", "harness", spec)], artifact)
+    result: Interpretation = interpret([EmailTemplate("harness", "harness", spec)], artifact)
     if not tried:
         say("  NOT TRIED: the sender or subject does not match, so production never runs this template on this "
             "email, whatever the fields above show.")
         return False
     if result.extraction is None:
-        failed = [f.field for f in result.attempts[0].failures if f.field in CRITICAL_FIELDS]
+        failed: list[str] = [f.field for f in result.attempts[0].failures if f.field in CRITICAL_FIELDS]
         say(f"  NOT MATCHED: critical field {', '.join(failed)} failed. Production would try the next "
             "template, then fall through to tier 2.")
         return False
@@ -114,9 +128,9 @@ def _report(spec, problems, artifact, show_text, say) -> bool:
     return True
 
 
-def skeleton(fixture_path: str) -> dict:
-    artifact = parse_eml(Path(fixture_path).read_bytes())
-    empty = ""  # try-template lists these as "pattern is empty": the to-do list
+def skeleton(fixture_path: str) -> dict[str, Any]:
+    artifact: EmailArtifact = parse_eml(Path(fixture_path).read_bytes())
+    empty: str = ""  # try-template lists these as "pattern is empty": the to-do list
     return {
         "version": 1,
         "match": {"sender": artifact.sender, "subject": f"^{re.escape(artifact.subject).replace('\\ ', ' ')}$"},
@@ -136,13 +150,13 @@ def skeleton(fixture_path: str) -> dict:
     }
 
 
-def _describe(name: str, r, problems: list[str]) -> str:
+def _describe(name: str, r: FieldResult | None, problems: list[str]) -> str:
     if r is None:
-        mine = [p.split(": ", 1)[1] for p in problems if p.startswith(f"{name}: ")]
+        mine: list[str] = [p.split(": ", 1)[1] for p in problems if p.startswith(f"{name}: ")]
         return f"?  not run: {'; '.join(mine) or 'spec problem'}"
     if r.reason:
-        label = "critical" if name in CRITICAL_FIELDS else ("required" if r.required else "optional, so null")
-        captured = f'"{r.captured}": ' if r.captured else ""
+        label: str = "critical" if name in CRITICAL_FIELDS else ("required" if r.required else "optional, so null")
+        captured: str = f'"{r.captured}": ' if r.captured else ""
         return f"x  {label}: {captured}{r.reason}"
     if r.captured is not None:
         return f'ok "{r.captured}" -> {r.value!r}'
@@ -151,7 +165,7 @@ def _describe(name: str, r, problems: list[str]) -> str:
     return "-  not in this format"
 
 
-def _matches(compiled, subject: str) -> bool:
+def _matches(compiled: patterns.Pattern, subject: str) -> bool:
     try:
         return patterns.search(compiled, subject) is not None
     except patterns.PatternTimeout:

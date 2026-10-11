@@ -20,11 +20,11 @@ from sqlalchemy.orm import Session
 
 from hisaab.models import Category, Payee, PayeeCategory
 
-DEFAULT_CATEGORIES = (
+DEFAULT_CATEGORIES: tuple[str, ...] = (
     "Food & Dining", "Groceries", "Transport", "Bills & Utilities", "Rent",
     "Shopping", "Health", "Entertainment", "Lending", "Other",
 )
-MAX_NAME_LENGTH = 40
+MAX_NAME_LENGTH: int = 40
 
 
 class CategoryError(ValueError):
@@ -46,8 +46,8 @@ def _iso(moment: datetime) -> str:
 def seed_defaults(session: Session, user_id: str) -> None:
     # One millisecond apart, ending now, so listing by created_at keeps the PRD's
     # order and anything the user creates afterwards lists after them.
-    end = datetime.now(UTC)
-    last = len(DEFAULT_CATEGORIES) - 1
+    end: datetime = datetime.now(UTC)
+    last: int = len(DEFAULT_CATEGORIES) - 1
     for i, name in enumerate(DEFAULT_CATEGORIES):
         session.add(Category(user_id=user_id, name=name, created_at=_iso(end - timedelta(milliseconds=last - i))))
     session.flush()
@@ -61,7 +61,7 @@ def list_categories(session: Session, user_id: str) -> list[Category]:
 
 
 def get_category(session: Session, user_id: str, category_id: str) -> Category:
-    category = session.scalars(
+    category: Category | None = session.scalars(
         select(Category).where(Category.id == category_id, Category.user_id == user_id)
     ).one_or_none()
     if category is None:
@@ -71,19 +71,19 @@ def get_category(session: Session, user_id: str, category_id: str) -> Category:
 
 def active_category(session: Session, user_id: str, category_id: str) -> Category:
     """A category the user may assign now: theirs and not archived."""
-    category = get_category(session, user_id, category_id)
+    category: Category = get_category(session, user_id, category_id)
     if category.archived_at is not None:
         raise CategoryError(f"{category.name} is archived. Restore it first.")
     return category
 
 
 def _check_name(session: Session, user_id: str, raw: str, exclude_id: str | None = None) -> str:
-    name = " ".join((raw or "").split())
+    name: str = " ".join((raw or "").split())
     if not name:
         raise CategoryError("Give the category a name.")
     if len(name) > MAX_NAME_LENGTH:
         raise CategoryError(f"Keep category names to {MAX_NAME_LENGTH} characters.")
-    clash = session.scalars(
+    clash: Category | None = session.scalars(
         select(Category).where(Category.user_id == user_id, func.lower(Category.name) == name.lower(),
                                Category.id != (exclude_id or ""))
     ).first()
@@ -95,27 +95,27 @@ def _check_name(session: Session, user_id: str, raw: str, exclude_id: str | None
 
 
 def create_category(session: Session, user_id: str, name: str) -> Category:
-    category = Category(user_id=user_id, name=_check_name(session, user_id, name))
+    category: Category = Category(user_id=user_id, name=_check_name(session, user_id, name))
     session.add(category)
     session.flush()
     return category
 
 
 def rename_category(session: Session, user_id: str, category_id: str, name: str) -> Category:
-    category = get_category(session, user_id, category_id)
+    category: Category = get_category(session, user_id, category_id)
     category.name = _check_name(session, user_id, name, exclude_id=category.id)
     return category
 
 
 def archive_category(session: Session, user_id: str, category_id: str) -> Category:
-    category = get_category(session, user_id, category_id)
+    category: Category = get_category(session, user_id, category_id)
     if category.archived_at is None:
         category.archived_at = _iso(datetime.now(UTC))
     return category
 
 
 def restore_category(session: Session, user_id: str, category_id: str) -> Category:
-    category = get_category(session, user_id, category_id)
+    category: Category = get_category(session, user_id, category_id)
     category.archived_at = None
     return category
 
@@ -142,7 +142,7 @@ def set_payee_category(session: Session, user_id: str, payee_id: str, category_i
                                                     PayeeCategory.payee_id == payee_id))
         return
     active_category(session, user_id, category_id)
-    rule = session.get(PayeeCategory, (user_id, payee_id))
+    rule: PayeeCategory | None = session.get(PayeeCategory, (user_id, payee_id))
     if rule is None:
         session.add(PayeeCategory(user_id=user_id, payee_id=payee_id, category_id=category_id))
     else:

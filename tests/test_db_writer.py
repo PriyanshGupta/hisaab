@@ -2,31 +2,32 @@
 
 import threading
 import time
+from threading import Event, Thread
 
 import pytest
-from sqlalchemy import select
+from sqlalchemy import Connection, Engine, select
 
 from hisaab.db import Database, WriterBusy
 from hisaab.models import Payee
 
 
 @pytest.fixture
-def db(migrated_engine):
+def db(migrated_engine: Engine) -> Database:
     return Database(migrated_engine)
 
 
-def _payee(name):
+def _payee(name: str) -> Payee:
     return Payee(normalized_name=name, type="merchant")
 
 
-def test_write_session_commits_on_success(db):
+def test_write_session_commits_on_success(db: Database) -> None:
     with db.write_session() as s:
         s.add(_payee("Committed"))
     with db.read_session() as s:
         assert s.scalars(select(Payee.normalized_name)).all() == ["Committed"]
 
 
-def test_write_session_rolls_back_on_exception(db):
+def test_write_session_rolls_back_on_exception(db: Database) -> None:
     with pytest.raises(RuntimeError):
         with db.write_session() as s:
             s.add(_payee("Rolled back"))
@@ -36,23 +37,23 @@ def test_write_session_rolls_back_on_exception(db):
         assert s.scalars(select(Payee)).all() == []
 
 
-def test_writers_are_serialized(db):
-    order = []
-    first_inside = threading.Event()
+def test_writers_are_serialized(db: Database) -> None:
+    order: list[str] = []
+    first_inside: Event = threading.Event()
 
-    def first():
+    def first() -> None:
         with db.write_session():
             order.append("first-start")
             first_inside.set()
             time.sleep(0.15)
             order.append("first-end")
 
-    def second():
+    def second() -> None:
         first_inside.wait()
         with db.write_session():
             order.append("second")
 
-    threads = [threading.Thread(target=first), threading.Thread(target=second)]
+    threads: list[Thread] = [threading.Thread(target=first), threading.Thread(target=second)]
     for t in threads:
         t.start()
     for t in threads:
@@ -60,29 +61,30 @@ def test_writers_are_serialized(db):
     assert order == ["first-start", "first-end", "second"]
 
 
-def test_try_write_session_yields_none_without_waiting_while_lock_is_held(db):
+def test_try_write_session_yields_none_without_waiting_while_lock_is_held(db: Database) -> None:
     with db.writer_lock:
-        started = time.perf_counter()
+        started: float = time.perf_counter()
         with db.try_write_session() as s:
             assert s is None
         assert time.perf_counter() - started < 0.5  # "didn't wait": waiting would mean seconds; 50 ms was flaky under load
 
 
-def test_try_write_session_writes_when_lock_is_free(db):
+def test_try_write_session_writes_when_lock_is_free(db: Database) -> None:
     with db.try_write_session() as s:
+        assert s is not None  # nothing else holds the lock
         s.add(_payee("Best effort"))
     with db.read_session() as s:
         assert s.scalars(select(Payee.normalized_name)).one() == "Best effort"
 
 
-def test_write_session_times_out_with_writer_busy(db):
+def test_write_session_times_out_with_writer_busy(db: Database) -> None:
     with db.writer_lock:
         with pytest.raises(WriterBusy):
             with db.write_session(timeout=0.05):
                 pass
 
 
-def test_read_session_never_commits(db, conn):
+def test_read_session_never_commits(db: Database, conn: Connection) -> None:
     with db.read_session() as s:
         s.add(_payee("Never saved"))
         s.flush()

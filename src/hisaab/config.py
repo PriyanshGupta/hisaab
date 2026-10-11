@@ -13,16 +13,17 @@ name stays inert to Claude Code even if that happens.
 """
 
 from pathlib import Path
+from typing import ClassVar
 
 from pydantic import SecretStr, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 # src/hisaab/config.py -> parents[2] is the repository root.
-PROJECT_ROOT = Path(__file__).resolve().parents[2]
+PROJECT_ROOT: Path = Path(__file__).resolve().parents[2]
 
 
 class Settings(BaseSettings):
-    model_config = SettingsConfigDict(
+    model_config: ClassVar[SettingsConfigDict] = SettingsConfigDict(
         env_file=PROJECT_ROOT / ".env",
         env_file_encoding="utf-8",
         env_prefix="HISAAB_",

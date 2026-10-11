@@ -1,12 +1,20 @@
 """Email template specs are validated when saved (tech-design §4.2, §4.5): a bad spec never gets stored."""
 
 import copy
+from typing import Any
 
 import pytest
 
-from hisaab.parsing.email_spec import CONTRACT_FIELDS, CRITICAL_FIELDS, InvalidSpec, parse_email_spec
+from hisaab.parsing.email_spec import (
+    CONTRACT_FIELDS,
+    CRITICAL_FIELDS,
+    EmailSpec,
+    FieldSpec,
+    InvalidSpec,
+    parse_email_spec,
+)
 
-SPEC = {
+SPEC: dict[str, Any] = {
     "version": 1,
     "match": {"sender": "Alerts@Example-Bank.in", "subject": "^Debit alert"},
     "preprocess": ["strip_html", "collapse_whitespace"],
@@ -25,8 +33,8 @@ SPEC = {
 }
 
 
-def with_field(name, value):
-    spec = copy.deepcopy(SPEC)
+def with_field(name: str, value: dict[str, Any] | None) -> dict[str, Any]:
+    spec: dict[str, Any] = copy.deepcopy(SPEC)
     if value is None:
         del spec["fields"][name]
     else:
@@ -34,22 +42,22 @@ def with_field(name, value):
     return spec
 
 
-def problems(spec):
+def problems(spec: object) -> list[str]:
     with pytest.raises(InvalidSpec) as e:
         parse_email_spec(spec)
     return e.value.problems
 
 
-def test_a_valid_spec_parses():
-    parsed = parse_email_spec(SPEC)
+def test_a_valid_spec_parses() -> None:
+    parsed: EmailSpec = parse_email_spec(SPEC)
     assert parsed.senders == ("alerts@example-bank.in",)  # addresses compare case-insensitively
     assert [f.name for f in parsed.fields] == list(CONTRACT_FIELDS)
     assert CRITICAL_FIELDS == ("amount", "date", "account_identifier")
-    amount = next(f for f in parsed.fields if f.name == "amount")
-    assert amount.required and amount.transform("Rs. 1,000.00") == 100000
+    amount: FieldSpec = next(f for f in parsed.fields if f.name == "amount")
+    assert amount.required and amount.transform is not None and amount.transform("Rs. 1,000.00") == 100000
 
 
-def test_contract_fields_match_prd_10_4():
+def test_contract_fields_match_prd_10_4() -> None:
     assert set(CONTRACT_FIELDS) == {"amount", "currency", "direction", "account_identifier",
                                     "counterparty_identifier", "payee_raw", "reference_number",
                                     "date", "time", "balance"}
@@ -85,39 +93,39 @@ def test_contract_fields_match_prd_10_4():
         (with_field("currency", {"const": "rupees"}), "currency: const must be a 3-letter code"),
     ],
 )
-def test_each_rule_names_the_offending_part(spec, fragment):
+def test_each_rule_names_the_offending_part(spec: dict[str, Any], fragment: str) -> None:
     assert any(fragment in p for p in problems(spec)), problems(spec)
 
 
-def test_a_format_may_come_from_several_addresses():
+def test_a_format_may_come_from_several_addresses() -> None:
     # ICICI moved card alerts from icicibank.com to icici.bank.in with the format unchanged (ruling 2026-10-11)
-    spec = copy.deepcopy(SPEC)
+    spec: dict[str, Any] = copy.deepcopy(SPEC)
     spec["match"]["sender"] = ["Alerts@Example-Bank.in", "alerts@example.bank.in"]
     assert parse_email_spec(spec).senders == ("alerts@example-bank.in", "alerts@example.bank.in")
 
 
 @pytest.mark.parametrize("sender", [[], ["a@b.in", "nope"], [3], None])
-def test_a_sender_list_must_hold_addresses(sender):
-    spec = copy.deepcopy(SPEC)
+def test_a_sender_list_must_hold_addresses(sender: list[Any] | list[int] | list[str] | None) -> None:
+    spec: dict[str, Any] = copy.deepcopy(SPEC)
     spec["match"]["sender"] = sender
     assert any("match.sender" in p for p in problems(spec))
 
 
-def test_date_may_be_declared_absent_and_then_falls_back_to_received_time():
-    parsed = parse_email_spec(with_field("date", {"required": False}))
-    date = next(f for f in parsed.fields if f.name == "date")
+def test_date_may_be_declared_absent_and_then_falls_back_to_received_time() -> None:
+    parsed: EmailSpec = parse_email_spec(with_field("date", {"required": False}))
+    date: FieldSpec = next(f for f in parsed.fields if f.name == "date")
     assert date.pattern is None and not date.required
 
 
-def test_all_problems_are_reported_together():
-    spec = copy.deepcopy(SPEC)
+def test_all_problems_are_reported_together() -> None:
+    spec: dict[str, Any] = copy.deepcopy(SPEC)
     spec["version"] = 3
     spec["fields"]["direction"] = {"const": "sideways"}
     del spec["fields"]["time"]
-    found = problems(spec)
+    found: list[str] = problems(spec)
     assert len(found) == 3
 
 
-def test_a_non_object_spec_is_refused():
+def test_a_non_object_spec_is_refused() -> None:
     assert problems([]) == ["spec must be a JSON object"]
     assert any("fields" in p for p in problems({**SPEC, "fields": []}))

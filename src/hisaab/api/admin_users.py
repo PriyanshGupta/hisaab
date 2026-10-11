@@ -9,13 +9,14 @@ Rule violations (users.UserError) become 409/422 in main._register_error_handler
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
+from sqlalchemy.orm import Session
 
 from hisaab.api.deps import get_db, require_admin
 from hisaab.auth import users
 from hisaab.db import Database
 from hisaab.models import User
 
-router = APIRouter(prefix="/api/admin/users", tags=["admin"], dependencies=[Depends(require_admin)])
+router: APIRouter = APIRouter(prefix="/api/admin/users", tags=["admin"], dependencies=[Depends(require_admin)])
 
 
 class ManagedUser(BaseModel):
@@ -46,35 +47,35 @@ class UserChange(BaseModel):
     role: str
 
 
-def _get_or_404(session, user_id: str) -> User:
-    user = users.get(session, user_id)
+def _get_or_404(session: Session, user_id: str) -> User:
+    user: User | None = users.get(session, user_id)
     if user is None:
         raise HTTPException(status.HTTP_404_NOT_FOUND, "No such user")
     return user
 
 
 @router.get("", response_model=list[ManagedUser])
-def list_users(db: Database = Depends(get_db)):
+def list_users(db: Database = Depends(get_db)) -> list[ManagedUser]:
     with db.read_session() as s:
         return [ManagedUser.of(u) for u in users.list_users(s)]
 
 
 @router.post("", response_model=ManagedUser, status_code=status.HTTP_201_CREATED)
-def create_user(body: NewUser, request: Request, db: Database = Depends(get_db)):
+def create_user(body: NewUser, request: Request, db: Database = Depends(get_db)) -> ManagedUser:
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         return ManagedUser.of(users.create_user(s, body.username, body.display_name, body.password, body.role))
 
 
 @router.post("/{user_id}/password", status_code=status.HTTP_204_NO_CONTENT)
-def reset_password(user_id: str, body: NewPassword, request: Request, db: Database = Depends(get_db)):
+def reset_password(user_id: str, body: NewPassword, request: Request, db: Database = Depends(get_db)) -> Response:
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         users.set_password(s, _get_or_404(s, user_id), body.password)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
 
 
 @router.patch("/{user_id}", response_model=ManagedUser)
-def change_user(user_id: str, body: UserChange, request: Request, db: Database = Depends(get_db)):
+def change_user(user_id: str, body: UserChange, request: Request, db: Database = Depends(get_db)) -> ManagedUser:
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
-        user = _get_or_404(s, user_id)
+        user: User = _get_or_404(s, user_id)
         users.set_role(s, user, body.role)
         return ManagedUser.of(user)

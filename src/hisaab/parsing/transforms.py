@@ -41,15 +41,15 @@ class UnknownTransform(ValueError):
 
 # --- field transforms ---------------------------------------------------------------
 
-_CURRENCY_PREFIX = re.compile(r"^(?:Rs\.?|INR|₹)\s*", re.IGNORECASE)  # \s covers U+00A0 and U+202F
+_CURRENCY_PREFIX: re.Pattern[str] = re.compile(r"^(?:Rs\.?|INR|₹)\s*", re.IGNORECASE)  # \s covers U+00A0 and U+202F
 # Plain digits; Indian grouping, 1-2 digits then pairs then a final three ("1,23,456");
 # or Western grouping, threes ("123,456"). Ill-formed grouping is a mis-capture and fails.
-_RUPEES = re.compile(r"(\d+|\d{1,2}(?:,\d{2})*,\d{3}|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?")
+_RUPEES: re.Pattern[str] = re.compile(r"(\d+|\d{1,2}(?:,\d{2})*,\d{3}|\d{1,3}(?:,\d{3})+)(?:\.(\d{1,2}))?")
 
 
 def inr_to_paise(raw: str) -> int:
     """'₹1,23,456.78' -> 12345678. String arithmetic only: no float ever touches money."""
-    m = _RUPEES.fullmatch(_CURRENCY_PREFIX.sub("", raw.strip()))
+    m: re.Match[str] | None = _RUPEES.fullmatch(_CURRENCY_PREFIX.sub("", raw.strip()))
     if not m:
         raise TransformError("not a rupee amount")
     rupees, paise = m.group(1).replace(",", ""), (m.group(2) or "").ljust(2, "0")
@@ -58,7 +58,7 @@ def inr_to_paise(raw: str) -> int:
 
 def digits_only(raw: str) -> str:
     """'XX1234' -> '1234': drops the masking banks print around account and card digits."""
-    digits = re.sub(r"\D", "", raw)
+    digits: str = re.sub(r"\D", "", raw)
     if not digits:
         raise TransformError("no digits")
     return digits
@@ -93,7 +93,7 @@ FIELD_TRANSFORMS: dict[str, Callable[[str], object]] = {
     "upper": str.upper,
     "trim": str.strip,
 }
-_PARAMETERISED = {"date": _date, "time": _time}
+_PARAMETERISED: dict[str, Callable[[str, str], str]] = {"date": _date, "time": _time}
 
 
 def field_transform(name: str) -> Callable[[str], object]:
@@ -107,8 +107,8 @@ def field_transform(name: str) -> Callable[[str], object]:
 
 # --- preprocessors ------------------------------------------------------------------
 
-_BLOCK_TAGS = {"br", "p", "div", "tr", "td", "th", "li", "table", "h1", "h2", "h3", "h4", "h5", "h6"}
-_HIDDEN_TAGS = {"head", "style", "script"}
+_BLOCK_TAGS: set[str] = {"br", "p", "div", "tr", "td", "th", "li", "table", "h1", "h2", "h3", "h4", "h5", "h6"}
+_HIDDEN_TAGS: set[str] = {"head", "style", "script"}
 
 
 class _TextExtractor(HTMLParser):
@@ -120,25 +120,25 @@ class _TextExtractor(HTMLParser):
         self.parts: list[str] = []
         self.hidden = 0
 
-    def handle_starttag(self, tag, attrs):
+    def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
         if tag in _HIDDEN_TAGS:
             self.hidden += 1
         elif tag in _BLOCK_TAGS:
             self.parts.append(" ")
 
-    def handle_endtag(self, tag):
+    def handle_endtag(self, tag: str) -> None:
         if tag in _HIDDEN_TAGS:
             self.hidden = max(0, self.hidden - 1)
         elif tag in _BLOCK_TAGS:
             self.parts.append(" ")
 
-    def handle_data(self, data):
+    def handle_data(self, data: str) -> None:
         if not self.hidden:
             self.parts.append(data)
 
 
 def strip_html(html: str) -> str:
-    parser = _TextExtractor()
+    parser: _TextExtractor = _TextExtractor()
     parser.feed(html)
     parser.close()
     return "".join(parser.parts)

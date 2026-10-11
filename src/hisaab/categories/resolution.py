@@ -17,19 +17,19 @@ a screen can say "uncategorized: its category is archived" rather than just "non
 Reports (slice 18) build on this same select.
 """
 
-from sqlalchemy import Select, and_, case, literal, select
+from sqlalchemy import ColumnElement, Select, and_, case, literal, select
 from sqlalchemy.orm import aliased
 
 from hisaab.models import Category, Payee, PayeeCategory
 from hisaab.models import TransactionEffective as T
 
 
-def categorized(user_id: str) -> Select:
+def categorized(user_id: str) -> Select[tuple[T, str | None, str | None, str | None]]:
     """The user's effective transactions with category_id, category_source and payee_name."""
-    override_cat = aliased(Category)
-    rule_cat = aliased(Category)
-    rule = aliased(PayeeCategory)
-    has_override = T.category_override_id.is_not(None)
+    override_cat: type[Category] = aliased(Category)
+    rule_cat: type[Category] = aliased(Category)
+    rule: type[PayeeCategory] = aliased(PayeeCategory)
+    has_override: ColumnElement[bool] = T.category_override_id.is_not(None)
     return (
         select(
             T,

@@ -4,25 +4,27 @@ Global tables (no user_id; shared by every user by design, PRD §5.2):
 parser_templates, extraction_cache, format_sightings, normalization_patterns, senders.
 """
 
+from typing import Any
+
 from sqlalchemy import BigInteger, ForeignKey, Index, UniqueConstraint
 from sqlalchemy.orm import Mapped, mapped_column
 
 from hisaab.models.base import Base, created_column, id_column, one_of
 
-ARTIFACT_TYPES = ("email", "statement")
-TEMPLATE_ORIGINS = ("human", "llm_proposed")
-TEMPLATE_STATUSES = ("proposed", "validated", "active", "demoted")
-EXTRACTION_OUTCOMES = ("transaction", "non_transactional", "unparseable")
-SIGHTING_STATES = ("accumulating", "proposed", "promoted", "excluded_non_transactional")
-MATCH_TYPES = ("exact", "contains", "regex")
-PATTERN_ORIGINS = ("seed", "admin")
-SENDER_STATUSES = ("active", "candidate", "ignored")
-GMAIL_STATUSES = ("connected", "needs_reauth", "disconnected")
+ARTIFACT_TYPES: tuple[str, ...] = ("email", "statement")
+TEMPLATE_ORIGINS: tuple[str, ...] = ("human", "llm_proposed")
+TEMPLATE_STATUSES: tuple[str, ...] = ("proposed", "validated", "active", "demoted")
+EXTRACTION_OUTCOMES: tuple[str, ...] = ("transaction", "non_transactional", "unparseable")
+SIGHTING_STATES: tuple[str, ...] = ("accumulating", "proposed", "promoted", "excluded_non_transactional")
+MATCH_TYPES: tuple[str, ...] = ("exact", "contains", "regex")
+PATTERN_ORIGINS: tuple[str, ...] = ("seed", "admin")
+SENDER_STATUSES: tuple[str, ...] = ("active", "candidate", "ignored")
+GMAIL_STATUSES: tuple[str, ...] = ("connected", "needs_reauth", "disconnected")
 
 
 class ParserTemplate(Base):  # GLOBAL
-    __tablename__ = "parser_templates"
-    __table_args__ = (
+    __tablename__: str = "parser_templates"
+    __table_args__: tuple[Any, ...] = (
         one_of("artifact_type", ARTIFACT_TYPES, "artifact_type"),
         one_of("origin", TEMPLATE_ORIGINS, "origin"),
         one_of("status", TEMPLATE_STATUSES, "status"),
@@ -47,8 +49,8 @@ class ParserTemplate(Base):  # GLOBAL
 
 
 class ExtractionCache(Base):  # GLOBAL
-    __tablename__ = "extraction_cache"
-    __table_args__ = (one_of("outcome", EXTRACTION_OUTCOMES, "outcome"),)
+    __tablename__: str = "extraction_cache"
+    __table_args__: tuple[Any, ...] = (one_of("outcome", EXTRACTION_OUTCOMES, "outcome"),)
 
     content_hash: Mapped[str] = mapped_column(primary_key=True)
     outcome: Mapped[str]
@@ -59,8 +61,8 @@ class ExtractionCache(Base):  # GLOBAL
 
 
 class FormatSighting(Base):  # GLOBAL
-    __tablename__ = "format_sightings"
-    __table_args__ = (one_of("state", SIGHTING_STATES, "state"),)
+    __tablename__: str = "format_sightings"
+    __table_args__: tuple[Any, ...] = (one_of("state", SIGHTING_STATES, "state"),)
 
     id: Mapped[str] = id_column()
     fingerprint: Mapped[str] = mapped_column(unique=True)
@@ -76,8 +78,8 @@ class FormatSighting(Base):  # GLOBAL
 
 
 class NormalizationPattern(Base):  # GLOBAL
-    __tablename__ = "normalization_patterns"
-    __table_args__ = (
+    __tablename__: str = "normalization_patterns"
+    __table_args__: tuple[Any, ...] = (
         one_of("match_type", MATCH_TYPES, "match_type"),
         one_of("origin", PATTERN_ORIGINS, "origin"),
     )
@@ -95,8 +97,8 @@ Index("ix_normpat_priority", NormalizationPattern.priority.desc(), Normalization
 
 
 class Sender(Base):  # GLOBAL
-    __tablename__ = "senders"
-    __table_args__ = (one_of("status", SENDER_STATUSES, "status"),)
+    __tablename__: str = "senders"
+    __table_args__: tuple[Any, ...] = (one_of("status", SENDER_STATUSES, "status"),)
 
     id: Mapped[str] = id_column()
     email_address: Mapped[str] = mapped_column(unique=True)
@@ -107,8 +109,8 @@ class Sender(Base):  # GLOBAL
 
 
 class SenderCandidate(Base):
-    __tablename__ = "sender_candidates"
-    __table_args__ = (UniqueConstraint("discovered_by_user_id", "sender_address"),)
+    __tablename__: str = "sender_candidates"
+    __table_args__: tuple[Any, ...] = (UniqueConstraint("discovered_by_user_id", "sender_address"),)
 
     id: Mapped[str] = id_column()
     discovered_by_user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))
@@ -120,8 +122,8 @@ class SenderCandidate(Base):
 
 
 class GmailConnection(Base):
-    __tablename__ = "gmail_connections"
-    __table_args__ = (one_of("status", GMAIL_STATUSES, "status"),)
+    __tablename__: str = "gmail_connections"
+    __table_args__: tuple[Any, ...] = (one_of("status", GMAIL_STATUSES, "status"),)
 
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     email_address: Mapped[str]
@@ -133,7 +135,7 @@ class GmailConnection(Base):
 
 
 class StatementStaging(Base):
-    __tablename__ = "statement_staging"
+    __tablename__: str = "statement_staging"
 
     id: Mapped[str] = id_column()
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"))

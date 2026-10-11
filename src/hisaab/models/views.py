@@ -13,14 +13,16 @@ Writes are impossible in SQLite anyway (a view without INSTEAD OF triggers),
 but the flush guard below fails earlier and with a clear message.
 """
 
+from typing import ClassVar
+
 from sqlalchemy import BigInteger, Column, MetaData, Table, Text, event
-from sqlalchemy.orm import Session
+from sqlalchemy.orm import Mapped, Session, UOWTransaction
 
 from hisaab.models.base import Base
 
-view_metadata = MetaData()
+view_metadata: MetaData = MetaData()
 
-transactions_effective = Table(
+transactions_effective: Table = Table(
     "transactions_effective",
     view_metadata,
     Column("id", Text, primary_key=True),
@@ -58,7 +60,35 @@ transactions_effective = Table(
 
 
 class TransactionEffective(Base):
-    __table__ = transactions_effective
+    __table__: ClassVar[Table] = transactions_effective
+
+    # Typing only: these name the view's columns above, no new columns are created.
+    id: Mapped[str]
+    user_id: Mapped[str]
+    derived_key: Mapped[str]
+    amount: Mapped[int]
+    kind: Mapped[str]
+    payee_id: Mapped[str | None]
+    transaction_date: Mapped[str]
+    from_account_id: Mapped[str | None]
+    to_account_id: Mapped[str | None]
+    unresolved_from_identifier: Mapped[str | None]
+    unresolved_to_identifier: Mapped[str | None]
+    category_override_id: Mapped[str | None]
+    review_acknowledged: Mapped[str | None]
+    status: Mapped[str]
+    review_reason: Mapped[str | None]
+    payee_raw: Mapped[str | None]
+    primary_source_id: Mapped[str]
+    reference_number: Mapped[str | None]
+    transaction_time: Mapped[str | None]
+    posted_date: Mapped[str | None]
+    reverses_transaction_id: Mapped[str | None]
+    refunds_transaction_id: Mapped[str | None]
+    derived_kind: Mapped[str]
+    derived_amount: Mapped[int]
+    created_at: Mapped[str]
+    updated_at: Mapped[str]
 
 
 class ReadOnlyViewError(RuntimeError):
@@ -66,7 +96,7 @@ class ReadOnlyViewError(RuntimeError):
 
 
 @event.listens_for(Session, "before_flush")
-def _refuse_view_writes(session, _flush_context, _instances):
+def _refuse_view_writes(session: Session, _flush_context: UOWTransaction, _instances: object) -> None:
     for obj in (*session.new, *session.dirty, *session.deleted):
         if isinstance(obj, TransactionEffective):
             raise ReadOnlyViewError(

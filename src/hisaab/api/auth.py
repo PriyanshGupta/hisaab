@@ -14,9 +14,11 @@ from hisaab.api.deps import (
 )
 from hisaab.auth import sessions, users
 from hisaab.auth.passwords import burn_verify_time, hash_password, verify_password
+from hisaab.auth.throttle import LoginThrottle
 from hisaab.db import Database
+from hisaab.models import User
 
-router = APIRouter(prefix="/api/auth", tags=["auth"])
+router: APIRouter = APIRouter(prefix="/api/auth", tags=["auth"])
 
 
 class LoginRequest(BaseModel):
@@ -31,24 +33,24 @@ class SessionUser(BaseModel):
     role: str
 
 
-_BAD_LOGIN = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid username or password")
-_LOCKED = HTTPException(
+_BAD_LOGIN: HTTPException = HTTPException(status.HTTP_401_UNAUTHORIZED, "Invalid username or password")
+_LOCKED: HTTPException = HTTPException(
     status.HTTP_429_TOO_MANY_REQUESTS,
     "Too many wrong passwords for this username. Try again in 15 minutes.",
 )
 
 
 @router.post("/login", response_model=SessionUser)
-def login(body: LoginRequest, request: Request, response: Response, db: Database = Depends(get_db)):
-    throttle = request.app.state.login_throttle
-    username = users.normalize_username(body.username)
+def login(body: LoginRequest, request: Request, response: Response, db: Database = Depends(get_db)) -> SessionUser:
+    throttle: LoginThrottle = request.app.state.login_throttle
+    username: str = users.normalize_username(body.username)
     if throttle.is_locked(username):
         raise _LOCKED  # checked first, so a locked username costs no Argon2 time
 
     # 1. Read and verify outside the writer lock: Argon2 takes ~50 ms by design.
     with db.read_session() as s:
-        user = users.get_by_username(s, username)
-        found = (user.id, user.password_hash) if user else None
+        user: User | None = users.get_by_username(s, username)
+        found: tuple[str, str] | None = (user.id, user.password_hash) if user else None
     if found is None:
         burn_verify_time(body.password)  # same cost as a real check: no username probing
         throttle.record_failure(username)
@@ -59,22 +61,25 @@ def login(body: LoginRequest, request: Request, response: Response, db: Database
         throttle.record_failure(username)
         raise _BAD_LOGIN
     throttle.record_success(username)
-    new_hash = hash_password(body.password) if needs_rehash else None
+    new_hash: str | None = hash_password(body.password) if needs_rehash else None
 
     # 2. One short write under the writer lock (WriterBusy -> 503, see main.py).
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         user = users.get(s, user_id)
+        if user is None:  # deleted between the check and now
+            raise _BAD_LOGIN
         if new_hash:
             user.password_hash = new_hash
-        token = sessions.create(s, session_secret(request), user_id)
-        out = SessionUser(id=user.id, username=user.username, display_name=user.display_name, role=user.role)
+        token: str = sessions.create(s, session_secret(request), user_id)
+        out: SessionUser = SessionUser(
+            id=user.id, username=user.username, display_name=user.display_name, role=user.role)
     set_session_cookie(response, token)
     return out
 
 
 @router.post("/logout", status_code=status.HTTP_204_NO_CONTENT)
-def logout(request: Request, response: Response, db: Database = Depends(get_db)):
-    token = request.cookies.get(SESSION_COOKIE)
+def logout(request: Request, response: Response, db: Database = Depends(get_db)) -> Response:
+    token: str | None = request.cookies.get(SESSION_COOKIE)
     if token:
         # Never wait for the writer (a reprocess can hold it for minutes): clearing
         # the cookie is what signs this browser out. If the row can't be deleted
@@ -88,5 +93,5 @@ def logout(request: Request, response: Response, db: Database = Depends(get_db))
 
 
 @router.get("/me", response_model=SessionUser)
-def me(user: CurrentUser = Depends(current_user)):
+def me(user: CurrentUser = Depends(current_user)) -> SessionUser:
     return SessionUser(id=user.id, username=user.username, display_name=user.display_name, role=user.role)

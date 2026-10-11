@@ -17,10 +17,11 @@ Income never lands on a card: card credits (cashback, rewards) are refunds (§3.
 The database enforces only the transfer rule (a CHECK); this is the rest.
 """
 
-UNRESOLVED = "unresolved"
-INTERNAL = {"bank", "credit_card", "cash", UNRESOLVED}
+UNRESOLVED: str = "unresolved"
+INTERNAL: set[str | None] = {"bank", "credit_card", "cash", UNRESOLVED}
 
-_RULES = {  # kind -> (allowed from-legs, allowed to-legs); None means external
+# kind -> (allowed from-legs, allowed to-legs); None means external
+_RULES: dict[str, tuple[set[str | None], set[str | None]]] = {
     "expense": (INTERNAL, {None}),
     "income": ({None}, {"bank", "cash", UNRESOLVED}),
     "transfer": (INTERNAL, INTERNAL),
@@ -28,7 +29,7 @@ _RULES = {  # kind -> (allowed from-legs, allowed to-legs); None means external
     "adjustment": ({None}, INTERNAL),
 }
 
-_DESCRIBE = {
+_DESCRIBE: dict[str, str] = {
     "expense": "An expense is paid from one of your accounts to someone outside.",
     "income": "Income comes from outside into a bank account or cash.",
     "transfer": "A transfer moves money between two different accounts of yours.",

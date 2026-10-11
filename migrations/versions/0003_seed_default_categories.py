@@ -16,15 +16,15 @@ import uuid
 from datetime import UTC, datetime, timedelta
 from typing import Sequence, Union
 
-from alembic import op
 import sqlalchemy as sa
+from alembic import op
 
 revision: str = '0003'
 down_revision: Union[str, Sequence[str], None] = '0002'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 
-DEFAULT_CATEGORIES = (
+DEFAULT_CATEGORIES: tuple[str, ...] = (
     "Food & Dining", "Groceries", "Transport", "Bills & Utilities", "Rent",
     "Shopping", "Health", "Entertainment", "Lending", "Other",
 )
@@ -35,15 +35,15 @@ def _iso(moment: datetime) -> str:
 
 
 def upgrade() -> None:
-    conn = op.get_bind()
-    users_without = [r[0] for r in conn.execute(sa.text(
+    conn: sa.Connection = op.get_bind()
+    users_without: list[str] = [r[0] for r in conn.execute(sa.text(
         "SELECT id FROM users WHERE NOT EXISTS (SELECT 1 FROM categories c WHERE c.user_id = users.id)"
     ))]
-    categories = sa.table("categories", sa.column("id", sa.Text), sa.column("user_id", sa.Text),
+    categories: sa.TableClause = sa.table("categories", sa.column("id", sa.Text), sa.column("user_id", sa.Text),
                           sa.column("name", sa.Text), sa.column("created_at", sa.Text))
-    end = datetime.now(UTC)
-    last = len(DEFAULT_CATEGORIES) - 1
-    rows = [
+    end: datetime = datetime.now(UTC)
+    last: int = len(DEFAULT_CATEGORIES) - 1
+    rows: list[dict[str, str]] = [
         {"id": str(uuid.uuid4()), "user_id": user_id, "name": name,
          "created_at": _iso(end - timedelta(milliseconds=last - i))}  # 1 ms apart, ending now
         for user_id in users_without

@@ -8,7 +8,7 @@ date.today(), which on a UTC server is still yesterday until 05:30 in India.
 from datetime import UTC, date, datetime
 from zoneinfo import ZoneInfo
 
-LOCAL_TZ = ZoneInfo("Asia/Kolkata")
+LOCAL_TZ: ZoneInfo = ZoneInfo("Asia/Kolkata")
 
 
 def local_today(now: datetime | None = None) -> date:

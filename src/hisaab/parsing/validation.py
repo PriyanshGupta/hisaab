@@ -14,30 +14,40 @@ Outcomes: passed (|gap| <= tolerance, ₹1 by default per PRD §10.1), failed
 come to less than the statement says), unavailable.
 """
 
+from typing import TYPE_CHECKING, Any
+
 from hisaab.parsing import patterns
+from hisaab.parsing.statement_spec import StatementSpec
 from hisaab.parsing.transforms import TransformError
 
+if TYPE_CHECKING:  # statement_interpreter imports this module; annotations are lazy, so no cycle at runtime
+    from hisaab.parsing.statement_interpreter import StatementResult
 
-def declared_balances(spec, text: str) -> dict:
-    found = {"opening": None, "closing": None}
+
+def declared_balances(spec: StatementSpec, text: str) -> dict[str, int | None]:
+    found: dict[str, int | None] = {"opening": None, "closing": None}
     for name, ex in spec.declared.items():
         try:
-            m = patterns.search(ex.pattern, text)
-            if m and m.group(1):
-                found[name] = ex.transform(m.group(1))
+            m: patterns.Match | None = patterns.search(ex.pattern, text)
+            captured: str | None = m.group(1) if m else None
+            value: object = ex.transform(captured) if captured else None
+            if isinstance(value, int):  # inr_to_paise, enforced by statement_spec
+                found[name] = value
         except (patterns.PatternTimeout, TransformError):
             pass
     return found
 
 
-def validate(spec, text: str, result, *, template_id=None, template_name=None, tolerance_paise: int = 100) -> dict:
-    declared = declared_balances(spec, text)
-    credits = sum(r.amount for r in result.rows if r.direction == "credit")
-    debits = sum(r.amount for r in result.rows if r.direction == "debit")
-    computed_closing = gap = None
-    outcome = "unavailable"
+def validate(spec: StatementSpec, text: str, result: StatementResult, *, template_id: str | None = None,
+             template_name: str | None = None, tolerance_paise: int = 100) -> dict[str, Any]:
+    declared: dict[str, int | None] = declared_balances(spec, text)
+    credits: int = sum(r.amount for r in result.rows if r.direction == "credit")
+    debits: int = sum(r.amount for r in result.rows if r.direction == "debit")
+    computed_closing: int | None = None
+    gap: int | None = None
+    outcome: str = "unavailable"
     if declared["opening"] is not None and declared["closing"] is not None:
-        change = debits - credits if spec.account_kind == "credit_card" else credits - debits
+        change: int = debits - credits if spec.account_kind == "credit_card" else credits - debits
         computed_closing = declared["opening"] + change
         gap = declared["closing"] - computed_closing
         outcome = "passed" if abs(gap) <= tolerance_paise else "failed"

@@ -19,8 +19,9 @@ from dataclasses import dataclass
 
 import pdfplumber
 from pdfminer.pdfdocument import PDFPasswordIncorrect
+from pdfplumber.page import Page as PdfPage
 
-LINE_TOLERANCE = 3  # points: words whose tops differ by less sit on one line
+LINE_TOLERANCE: float = 3  # points: words whose tops differ by less sit on one line
 
 
 class PdfError(ValueError):
@@ -79,7 +80,7 @@ def read_pdf(data: bytes, password: str | None = None) -> list[Page]:
         with pdfplumber.open(io.BytesIO(data), password=password or "") as pdf:
             return [_page(i + 1, p) for i, p in enumerate(pdf.pages)]
     except Exception as e:  # pdfplumber wraps every pdfminer failure in PdfminerException
-        cause = e.args[0] if e.args else None
+        cause: object = e.args[0] if e.args else None
         if isinstance(cause, PDFPasswordIncorrect) or isinstance(e, PDFPasswordIncorrect):
             if password:
                 raise WrongPassword("That password doesn't open this statement.") from None
@@ -87,11 +88,11 @@ def read_pdf(data: bytes, password: str | None = None) -> list[Page]:
         raise NotAPdf("This file isn't a PDF that can be read.") from None
 
 
-def _page(number: int, page) -> Page:
-    words = []
+def _page(number: int, page: PdfPage) -> Page:
+    words: list[Word] = []
     for w in page.extract_words(extra_attrs=["fontname"]):  # a font change always starts a new word
         # A symbol font draws ₹ with the character code of "C" (HDFC card statement).
-        text = "₹" if "rupee" in (w.get("fontname") or "").lower() else w["text"]
+        text: str = "₹" if "rupee" in (w.get("fontname") or "").lower() else w["text"]
         words.append(Word(text, w["x0"], w["x1"], w["top"], w["bottom"]))
     words.sort(key=lambda w: (w.top, w.x0))
     lines: list[list[Word]] = []
@@ -100,12 +101,12 @@ def _page(number: int, page) -> Page:
             lines[-1].append(word)
         else:
             lines.append([word])
-    built = []
+    built: list[Line] = []
     for group in lines:
         group.sort(key=lambda w: w.x0)
         built.append(Line(" ".join(w.text for w in group), group[0].top, max(w.bottom for w in group),
                           tuple(group)))
-    rules = [Rule(ln["x0"], ln["top"], ln["bottom"]) for ln in page.lines if abs(ln["x1"] - ln["x0"]) < 1]
+    rules: list[Rule] = [Rule(ln["x0"], ln["top"], ln["bottom"]) for ln in page.lines if abs(ln["x1"] - ln["x0"]) < 1]
     rules += [Rule((r["x0"] + r["x1"]) / 2, r["top"], r["bottom"]) for r in page.rects if r["width"] <= 2]
     rules.sort(key=lambda r: (r.x, r.top))
     return Page(number, tuple(built), tuple(rules))
