@@ -96,6 +96,7 @@ test("filing every Swiggy transaction under a category sets the payee rule", asy
   await user.selectOptions(screen.getByLabelText("Category"), "c-food");
   await user.click(screen.getByRole("button", { name: "Use for all Swiggy" }));
   expect(api.bodiesFor("PUT /api/payees/p-1/category")).toEqual([{ category_id: "c-food" }]);
+  expect(await screen.findByRole("status")).toHaveTextContent("Saved: every Swiggy payment is now Food & Dining.");
 });
 
 test("a one-off category is an override that can be undone", async () => {
@@ -110,6 +111,7 @@ test("a one-off category is an override that can be undone", async () => {
     edits: [{ field: "category_override_id", prior_value: null, new_value: "c-gifts" }] })] });
   await user.click(screen.getByRole("button", { name: "Use for this one" }));
   expect(api.bodiesFor("PATCH /api/transactions/t-1")).toEqual([{ category_override_id: "c-gifts" }]);
+  expect(await screen.findByRole("status")).toHaveTextContent("Saved: this payment is now Gifts.");
   expect(await screen.findByText("Gifts, set for this transaction only.")).toBeInTheDocument();
 
   api.set("POST /api/transactions/t-1/revert", { status: 200, body: txn() });

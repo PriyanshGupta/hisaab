@@ -197,9 +197,16 @@ def with_provenance(user_id: str) -> _ListQuery:
             .join(Source, Source.id == TransactionEffective.primary_source_id))
 
 
-def list_transactions(session: Session, user_id: str, limit: int = 200) -> list[ListedTransaction]:
-    """The user's transactions, newest first, with provenance, category and corrections attached."""
-    return _listed(session, user_id, with_provenance(user_id).order_by(
+def list_transactions(session: Session, user_id: str, limit: int = 200, start: str | None = None,
+                      end: str | None = None) -> list[ListedTransaction]:
+    """The user's transactions, newest first, with provenance, category and corrections attached; optionally
+    only those dated start..end (both included, either end open)."""
+    query: _ListQuery = with_provenance(user_id)
+    if start is not None:
+        query = query.where(TransactionEffective.transaction_date >= start)
+    if end is not None:
+        query = query.where(TransactionEffective.transaction_date <= end)
+    return _listed(session, user_id, query.order_by(
         TransactionEffective.transaction_date.desc(), TransactionEffective.created_at.desc()).limit(limit))
 
 

@@ -168,7 +168,7 @@ def _label(identifier: str) -> str:
     return f"ending {identifier}" if identifier.isdigit() else identifier
 
 
-def _own_leg(t: Any) -> Literal["from", "to"]:
+def own_leg(t: Any) -> Literal["from", "to"]:
     """The side an account answer fills: money left it (an expense, a card bill's payer) or reached it."""
     return "from" if t.unresolved_from_identifier or t.kind == "expense" or (
         t.kind == "transfer" and t.from_account_id is None) else "to"
@@ -190,7 +190,7 @@ def queue(user: CurrentUser = Depends(current_user), db: Database = Depends(get_
         names: dict[str, str] = dict(s.execute(select(Account.id, Account.display_name).where(
             Account.user_id == user.id)).tuples().all())
         rows: list[Any] = list(s.execute(select(q).order_by(q.c.transaction_date.desc(), q.c.id)))
-        emails: dict[str, EmailOut] = _emails(s, user.id, [t.primary_source_id for t in rows])
+        emails: dict[str, EmailOut] = email_details(s, user.id, [t.primary_source_id for t in rows])
         rules: list[tuple[str, str, str | None]] = list(s.execute(select(
             PayeeCategory.payee_id, PayeeCategory.category_id, PayeeCategory.origin).where(
             PayeeCategory.user_id == user.id)).tuples())
@@ -267,7 +267,7 @@ def _capital(text: str) -> str:
     return text[:1].upper() + text[1:]
 
 
-def _emails(session: Session, user_id: str, source_ids: list[str]) -> dict[str, EmailOut]:
+def email_details(session: Session, user_id: str, source_ids: list[str]) -> dict[str, EmailOut]:
     """Where each transaction came from, for the person checking it: when, from whom, and a way to open it."""
     connection: GmailConnection | None = session.get(GmailConnection, user_id)
     account: str = f"?authuser={quote(connection.email_address, safe='')}" if connection else ""
@@ -295,7 +295,7 @@ def _item(t: Any, names: dict[str, str], email: "EmailOut | None") -> ReviewItem
         id=t.id, transaction_date=t.transaction_date, amount_paise=t.amount, kind=t.kind, payee_raw=t.payee_raw,
         payee_id=t.payee_id, payee_name=t.payee_name, category_id=t.category_id,
         account_label=_account_label(t, names, identifier), identifier=identifier,
-        account_leg=_own_leg(t), tags=tags,
+        account_leg=own_leg(t), tags=tags,
         reason=t.review_reason, status=t.status, email=email)
 
 
@@ -345,7 +345,7 @@ def assign_account(body: AssignAccountIn, request: Request, user: CurrentUser = 
                    db: Database = Depends(get_db)) -> UpdatedOut:
     """The email named no account: these transactions get one by edit (there is nothing to register)."""
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
-        legs: dict[str, str] = {i: _own_leg(txns.get_effective(s, user.id, i)) for i in body.transaction_ids}
+        legs: dict[str, str] = {i: own_leg(txns.get_effective(s, user.id, i)) for i in body.transaction_ids}
         for txn_id, leg in legs.items():
             txns.apply_edits(s, user.id, txn_id, {f"{leg}_account_id": body.account_id})
         return UpdatedOut(updated=len(legs))

@@ -134,3 +134,42 @@ def test_a_manual_entry_is_never_flagged_by_its_own_correction(asha: TestClient,
     created: str = enter(asha, from_account_id=wallet).json()["id"]
     resp: Response = asha.patch(f"/api/transactions/{created}", json={"amount_paise": 3_000_000})
     assert resp.json()["status"] == "confirmed"  # the user is the source: no guardrail questions them
+
+
+def test_a_listed_transaction_says_where_it_came_from_like_the_review_queue(app: FastAPI, asha: TestClient) -> None:
+    """The Transactions page shows what Review shows: the email, why it's in review, which side an account fills."""
+    import json
+
+    from hisaab.db import Database
+    from tests.gmail_fake import make_eml
+
+    me: str = asha.get("/api/auth/me").json()["id"]
+    db: Database = app.state.db
+    eml: bytes = make_eml("alerts@bank.example", "Debit alert", "<p>Rs 500 debited from a/c ending 1111</p>")
+    with db.write_session() as s:
+        c: Connection = s.connection()
+        f.gmail_connection(c, user_id=me, email_address="asha@example.test")
+        src: str = f.source(c, me, content=eml, external_message_id="18f2c0ab", received_at="2026-10-05T03:44:00.000Z",
+                            diagnostic=json.dumps({"sender": "alerts@bank.example"}))["id"]
+        txn: str = f.transaction(c, me, source_id=src, kind="expense", status="needs_review",
+                                 review_reason="payee not recognised")["id"]
+    listed: dict[str, Any] = next(t for t in asha.get("/api/transactions").json() if t["id"] == txn)
+    assert listed["email"] == {"received_at": "2026-10-05T03:44:00.000Z", "sender": "alerts@bank.example",
+                               "subject": "Debit alert", "has_text": True,
+                               "gmail_url": "https://mail.google.com/mail/?authuser=asha%40example.test#all/18f2c0ab"}
+    assert (listed["reason"], listed["account_leg"]) == ("payee not recognised", "from")
+    assert asha.get(f"/api/transactions/{txn}").json()["email"] == listed["email"]
+
+
+def test_a_manual_entry_has_no_email(asha: TestClient, wallet: str) -> None:
+    t: Any = enter(asha, from_account_id=wallet).json()
+    assert (t["email"], t["reason"], t["account_leg"]) == (None, None, "from")
+
+
+def test_the_list_can_be_limited_to_a_period_both_ends_included(asha: TestClient, wallet: str) -> None:
+    for day in ("2026-09-30", "2026-10-01", "2026-10-03", "2026-10-04"):
+        enter(asha, from_account_id=wallet, transaction_date=day)
+    listed: list[Any] = asha.get("/api/transactions", params={"start": "2026-10-01", "end": "2026-10-03"}).json()
+    assert [t["transaction_date"] for t in listed] == ["2026-10-03", "2026-10-01"]
+    assert len(asha.get("/api/transactions", params={"start": "2026-10-04"}).json()) == 1  # open-ended
+    assert asha.get("/api/transactions", params={"start": "2026-10-04", "end": "2026-10-01"}).status_code == 422

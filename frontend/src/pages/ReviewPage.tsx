@@ -18,26 +18,25 @@ import { useEffect, useRef, useState } from "react";
 import { useSearchParams } from "react-router";
 
 import { type Account, useAccounts } from "../api/accounts";
-import { type Category, useCategories, useCreateCategory, usePayees, useRenamePayee } from "../api/categories";
+import { type Category, useCategories, usePayees, useRenamePayee } from "../api/categories";
 import { describeError } from "../api/client";
 import {
   type ReviewItem,
-  useAcknowledge,
   useAssignAccount,
   useAssignIdentifier,
   useCategorizePayee,
   useNamePayee,
   useNotMyAccount,
-  useEmailText,
   useReview,
 } from "../api/review";
 import { useMe } from "../api/session";
 import { useCorrectTransaction } from "../api/transactions";
-import { formatDate, formatInstant } from "../dates";
-import { formatPaise, parseRupees } from "../money";
+import { formatDate } from "../dates";
+import { formatPaise } from "../money";
 import { AddAccountForm } from "./AccountsPage";
 import { AnswerBox, type Option } from "../review/AnswerBox";
 import { AutoCategorize } from "../review/AutoCategorize";
+import { ALL_ACTIONS, createCategory, EmailLine, TransactionActions, useCategoryId } from "../review/TransactionTools";
 import { countLeft, inLane, LANES, type LaneId, OPTIONAL } from "../review/lanes";
 import "../styles/review.css";
 
@@ -47,18 +46,6 @@ type Group = {
 };
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
-const NEW_CATEGORY = "__new_category";
-const createCategory = (typed: string): Option => ({ id: NEW_CATEGORY, label: `Create category “${typed}”` });
-
-/** A category pick, as an id: an existing category, or one created on the spot (like a new payee). */
-function useCategoryId() {
-  const create = useCreateCategory();
-  const pick = async (o: Option, typed: string): Promise<{ id: string; name: string }> =>
-    o.id === NEW_CATEGORY ? { id: (await create.mutateAsync(typed)).id, name: typed } : { id: o.id, name: o.label };
-  // a failed creation (e.g. the name is taken) is shown by the caller; the pick goes no further
-  return Object.assign((o: Option, typed: string) => pick(o, typed).catch(() => new Promise<never>(() => {})),
-    { error: create.error });
-}
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function groupsFor(lane: LaneId, items: ReviewItem[]): Group[] {
@@ -398,22 +385,8 @@ function GroupAnswer({ lane, group, accounts, categories, onCancel, onDone }: {
   );
 }
 
-type ItemAction = "category" | "payee" | "account" | "transfer" | "correct" | null;
-
 function ItemLine({ item, accounts, categories }: { item: ReviewItem; accounts: Account[]; categories: Category[] }) {
-  const correct = useCorrectTransaction();
-  const acknowledge = useAcknowledge();
-  const name = useNamePayee();
-  const payees = usePayees();
-  const categoryId = useCategoryId();
-  const [action, setAction] = useState<ItemAction>(null);
   const who = item.payee_name ?? item.payee_raw ?? "Unknown payee";
-  const otherLeg = item.account_leg === "from" ? "to_account_id" : "from_account_id";
-  const ownLeg = item.account_leg === "from" ? "from_account_id" : "to_account_id";
-  const patch = (change: Record<string, unknown>) =>
-    correct.mutate({ id: item.id, change }, { onSuccess: () => setAction(null) });
-  const accountOptions = accounts.map((a) => ({ id: a.id, label: a.display_name }));
-
   return (
     <li className="item" aria-label={`${formatDate(item.transaction_date)} ${who} ${formatPaise(item.amount_paise)}`}>
       <div className="item__line">
@@ -424,85 +397,7 @@ function ItemLine({ item, accounts, categories }: { item: ReviewItem; accounts: 
       </div>
       {item.reason && <p className="item__reason">{item.reason}</p>}
       {item.email && <EmailLine id={item.id} email={item.email} />}
-      <div className="item__actions">
-        <button className="button button--quiet" type="button" onClick={() => setAction("category")}>Category for this one</button>
-        {item.payee_id === null && (
-          <button className="button button--quiet" type="button" onClick={() => setAction("payee")}>Payee for this one</button>
-        )}
-        <button className="button button--quiet" type="button" onClick={() => setAction("account")}>Account for this one</button>
-        {item.kind !== "transfer" && (
-          <button className="button button--quiet" type="button" onClick={() => setAction("transfer")}>Mark as transfer</button>
-        )}
-        <button className="button button--quiet" type="button" onClick={() => setAction("correct")}>Correct amount or date</button>
-        <button className="button button--quiet" type="button" disabled={acknowledge.isPending}
-          onClick={() => acknowledge.mutate(item.id)}>Looks right</button>
-      </div>
-      {action === "category" && <AnswerBox label={`Category for ${who}, this one only`} onClose={() => setAction(null)}
-        options={categories.map((c) => ({ id: c.id, label: c.name }))} create={createCategory}
-        onPick={(o, typed) => void categoryId(o, typed).then(({ id }) => patch({ category_override_id: id }))} />}
-      {action === "payee" && <AnswerBox label={`Payee for ${who}, this one only`} onClose={() => setAction(null)}
-        options={(payees.data ?? []).map((p) => ({ id: p.id, label: p.name }))}
-        create={(typed) => ({ id: "__create", label: `Create “${typed}”` })}
-        onPick={(o, typed) => name.mutate(o.id === "__create" ? { transaction_ids: [item.id], name: typed }
-          : { transaction_ids: [item.id], payee_id: o.id }, { onSuccess: () => setAction(null) })} />}
-      {action === "account" && <AnswerBox label={`Account for ${who}, this one only`} onClose={() => setAction(null)}
-        options={accountOptions} onPick={(o) => patch({ [ownLeg]: o.id })} />}
-      {action === "transfer" && <AnswerBox label={`The other account for ${who}`} onClose={() => setAction(null)}
-        options={accountOptions} onPick={(o) => patch({ kind: "transfer", [otherLeg]: o.id })} />}
-      {action === "correct" && <CorrectForm item={item} onSave={patch} onClose={() => setAction(null)} />}
-      {(correct.isError || acknowledge.isError || name.isError || categoryId.error) && (
-        <p className="form-error" role="alert">
-          {describeError(correct.error ?? acknowledge.error ?? name.error ?? categoryId.error)}
-        </p>
-      )}
+      <TransactionActions subject={{ ...item, who }} accounts={accounts} categories={categories} actions={ALL_ACTIONS} />
     </li>
-  );
-}
-
-function CorrectForm({ item, onSave, onClose }: {
-  item: ReviewItem; onSave: (change: Record<string, unknown>) => void; onClose: () => void;
-}) {
-  const [amount, setAmount] = useState((item.amount_paise / 100).toFixed(2));
-  const [date, setDate] = useState(item.transaction_date);
-  const [error, setError] = useState<string | null>(null);
-  return (
-    <form className="item__correct" aria-label={`Correct ${formatPaise(item.amount_paise)}`} onSubmit={(e) => {
-      e.preventDefault();
-      const parsed = parseRupees(amount);
-      if (!parsed.ok) { setError(parsed.error); return; }
-      onSave({ amount_paise: parsed.paise, transaction_date: date });
-    }}>
-      <label className="field__label">Amount <input className="field__input" inputMode="decimal" value={amount}
-        onChange={(e) => setAmount(e.target.value)} /></label>
-      <label className="field__label">Date <input className="field__input" type="date" value={date}
-        onChange={(e) => setDate(e.target.value)} /></label>
-      <button className="button button--primary" type="submit">Save</button>
-      <button className="button button--quiet" type="button" onClick={onClose}>Cancel</button>
-      {error && <p className="form-error" role="alert">{error}</p>}
-    </form>
-  );
-}
-
-/** Where a transaction came from, for checking it: when and from whom, the email in Gmail, its text if kept. */
-function EmailLine({ id, email }: { id: string; email: NonNullable<ReviewItem["email"]> }) {
-  const [showing, setShowing] = useState(false);
-  const text = useEmailText(id, showing);
-  return (
-    <div className="item__email">
-      <p className="item__email-line">
-        {`Email from ${email.sender ?? "an unknown sender"}, received ${formatInstant(email.received_at)}`}
-        {email.subject ? `: ${email.subject}` : "."}
-      </p>
-      <div className="item__email-links">
-        {email.gmail_url && <a href={email.gmail_url} target="_blank" rel="noopener noreferrer">Open in Gmail</a>}
-        {email.has_text && (
-          <button className="button button--quiet" type="button" aria-expanded={showing}
-            onClick={() => setShowing((v) => !v)}>{showing ? "Hide the email" : "Show the email"}</button>
-        )}
-      </div>
-      {showing && text.isPending && <p className="muted">Loading…</p>}
-      {showing && text.isError && <p className="form-error" role="alert">{describeError(text.error)}</p>}
-      {showing && text.data && <pre className="item__email-text">{text.data.text}</pre>}
-    </div>
   );
 }

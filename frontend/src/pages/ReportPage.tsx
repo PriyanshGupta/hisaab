@@ -102,7 +102,7 @@ const EARLIEST = "2000-01-01"; // below this a date input is still mid-typing ("
  * lands in a draft; only a whole range (both real dates, from ≤ to, not in the future) becomes
  * the period. Edits within custom mode replace the history entry rather than piling them up.
  */
-function CustomRange({ period, today, onRange }: { period: Period; today: string; onRange: (p: Period) => void }) {
+export function CustomRange({ period, today, onRange }: { period: Period; today: string; onRange: (p: Period) => void }) {
   const [draft, setDraft] = useState({ start: period.start, end: period.end });
   const change = (field: "start" | "end", value: string) => {
     const next = { ...draft, [field]: value };

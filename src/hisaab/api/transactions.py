@@ -7,12 +7,15 @@ response shows each correction with the source's value beside it
 repository and are mapped in main._register_error_handlers.
 """
 
+from datetime import date
 from typing import Any, Literal, TypeAlias, cast
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
+from sqlalchemy.orm import Session
 from pydantic import BaseModel, StrictInt
 
 from hisaab.api.deps import CurrentUser, current_user, get_db
+from hisaab.api.review import EmailOut, email_details, own_leg
 from hisaab.db import Database
 from hisaab.models import Transaction, TransactionEffective
 from hisaab.transactions import repository as txns
@@ -47,6 +50,9 @@ class TransactionOut(BaseModel):
     status: str
     provenance: Provenance
     edits: list[EditOut]
+    email: EmailOut | None  # where it came from, as the review queue shows it; None for manual entries and statements
+    reason: str | None  # why it's in review, in words
+    account_leg: Literal["from", "to"]  # the side an account answer fills
 
 
 class NewTransaction(BaseModel):
@@ -75,7 +81,7 @@ class RevertRequest(BaseModel):
     fields: list[EditableField]
 
 
-def _out(row: txns.ListedTransaction) -> TransactionOut:
+def _out(row: txns.ListedTransaction, email: EmailOut | None) -> TransactionOut:
     t: TransactionEffective = row.transaction
     return TransactionOut(
         id=t.id, kind=t.kind, amount_paise=t.amount, transaction_date=t.transaction_date,
@@ -85,14 +91,29 @@ def _out(row: txns.ListedTransaction) -> TransactionOut:
         category_source=cast(CategorySource | None, row.category_source), status=t.status,
         provenance=cast(Provenance, row.provenance),
         edits=[EditOut(field=e.field, prior_value=e.prior_value, new_value=e.new_value) for e in row.edits],
+        email=email, reason=t.review_reason, account_leg=own_leg(t),
     )
 
 
+def _outs(session: Session, user_id: str, rows: list[txns.ListedTransaction]) -> list[TransactionOut]:
+    emails: dict[str, EmailOut] = email_details(session, user_id, [r.transaction.primary_source_id for r in rows])
+    return [_out(r, emails.get(r.transaction.primary_source_id)) for r in rows]
+
+
+def _one(session: Session, user_id: str, txn_id: str) -> TransactionOut:
+    return _outs(session, user_id, [txns.get_listed(session, user_id, txn_id)])[0]
+
+
 @router.get("", response_model=list[TransactionOut])
-def list_transactions(limit: int = 200, user: CurrentUser = Depends(current_user),
-                      db: Database = Depends(get_db)) -> list[TransactionOut]:
+def list_transactions(start: date | None = None, end: date | None = None, limit: int | None = None,
+                      user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)) -> list[TransactionOut]:
+    """Newest first: the latest 200, or up to 1000 within a period (by transaction date, both ends included)."""
+    if start is not None and end is not None and start > end:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The period starts after it ends.")
+    cap: int = min(max(limit or (1000 if start or end else 200), 1), 1000)
     with db.read_session() as s:
-        return [_out(r) for r in txns.list_transactions(s, user.id, limit=min(max(limit, 1), 1000))]
+        return _outs(s, user.id, txns.list_transactions(s, user.id, limit=cap, start=start.isoformat() if start else None,
+                                                        end=end.isoformat() if end else None))
 
 
 @router.post("", response_model=TransactionOut, status_code=status.HTTP_201_CREATED)
@@ -104,14 +125,14 @@ def create_transaction(body: NewTransaction, request: Request, user: CurrentUser
             transaction_time=body.transaction_time, from_account_id=body.from_account_id,
             to_account_id=body.to_account_id, payee_raw=body.payee, category_id=body.category_id,
         )
-        return _out(txns.get_listed(s, user.id, txn.id))
+        return _one(s, user.id, txn.id)
 
 
 @router.get("/{txn_id}", response_model=TransactionOut)
 def get_transaction(txn_id: str, user: CurrentUser = Depends(current_user),
                     db: Database = Depends(get_db)) -> TransactionOut:
     with db.read_session() as s:
-        return _out(txns.get_listed(s, user.id, txn_id))
+        return _one(s, user.id, txn_id)
 
 
 @router.patch("/{txn_id}", response_model=TransactionOut)
@@ -122,7 +143,7 @@ def correct_transaction(txn_id: str, body: TransactionChange, request: Request,
         changes["amount"] = changes.pop("amount_paise")
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         txns.apply_edits(s, user.id, txn_id, changes)
-        return _out(txns.get_listed(s, user.id, txn_id))
+        return _one(s, user.id, txn_id)
 
 
 @router.post("/{txn_id}/acknowledge", response_model=TransactionOut)
@@ -131,7 +152,7 @@ def looks_right(txn_id: str, request: Request, user: CurrentUser = Depends(curre
     """"Looks right": out of review until its amount changes."""
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         txns.acknowledge(s, user.id, txn_id)
-        return _out(txns.get_listed(s, user.id, txn_id))
+        return _one(s, user.id, txn_id)
 
 
 @router.post("/{txn_id}/revert", response_model=TransactionOut)
@@ -139,7 +160,7 @@ def undo_corrections(txn_id: str, body: RevertRequest, request: Request,
                      user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)) -> TransactionOut:
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         txns.revert(s, user.id, txn_id, list(body.fields))
-        return _out(txns.get_listed(s, user.id, txn_id))
+        return _one(s, user.id, txn_id)
 
 
 @router.delete("/{txn_id}", status_code=status.HTTP_204_NO_CONTENT)

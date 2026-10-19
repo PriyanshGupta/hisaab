@@ -12,14 +12,17 @@ export type EditableField = components["schemas"]["RevertRequest"]["fields"][num
 
 export const transactionsKey = ["transactions"] as const;
 
-export function useTransactions() {
+/** The list, newest first; with a range, only those dates (both ends included). */
+export function useTransactions(range: { start: string; end: string } | null = null) {
   return useQuery({
-    queryKey: transactionsKey,
+    queryKey: [...transactionsKey, "list", range?.start ?? null, range?.end ?? null],
     queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/transactions"));
+      const { data, error, response } = await send(() =>
+        api.GET("/api/transactions", range ? { params: { query: range } } : {}));
       if (data === undefined) throw apiError(response, error);
       return data;
     },
+    placeholderData: (previous) => previous, // a new range keeps the old list on screen until it arrives
   });
 }
 

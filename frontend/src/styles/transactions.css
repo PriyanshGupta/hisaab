@@ -62,8 +62,10 @@
 .txn-detail__body {
   display: grid;
   gap: var(--s3);
-  padding: var(--s2) 0 var(--s3);
-  max-width: 40rem;
+  padding: var(--s3) 0;
+}
+.txn-detail__body > * {
+  max-width: 40rem; /* forms keep a reading measure; the head below spans the row */
 }
 .txn-edits {
   list-style: none;
@@ -104,4 +106,78 @@
   .txn-table__account {
     display: none;
   }
+}
+
+/* Date filter: everything, a shortcut, or a picked range. Pressed = what the list shows. */
+.txn-filter {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s2);
+  margin-bottom: var(--s4);
+}
+.txn-filter__options {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.txn-filter__options button {
+  min-height: 36px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  cursor: pointer;
+}
+.txn-filter__options button:hover { border-color: var(--ink); color: var(--ink); }
+.txn-filter__options button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
+.txn-filter__options button:focus-visible { outline: none; box-shadow: var(--focus); }
+.txn-filter__showing { font-size: var(--t-small); }
+
+/* The open transaction's head: where it came from on the left, Close at the row's right edge (under the
+   amount), styled as the date pills above the list. Clicking the name closes it too. */
+.txn-detail__body > .txn-detail__head {
+  max-width: none;
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s4);
+  padding-bottom: var(--s3);
+  border-bottom: 1px solid var(--rule);
+}
+.txn-detail__source {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+  max-width: 40rem;
+}
+.txn-detail__close {
+  flex: none;
+  min-height: 32px;
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: transparent;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  cursor: pointer;
+}
+.txn-detail__close:hover { border-color: var(--ink); color: var(--ink); }
+.txn-detail__close:focus-visible { outline: none; box-shadow: var(--focus); }
+
+/* A saved category says so. */
+.txn-category__saved {
+  margin-top: var(--s2);
+  color: var(--accent);
+  font-weight: var(--w-strong);
+}
+
+@media (max-width: 640px) {
+  .txn-filter__options button,
+  .txn-detail__close { min-height: var(--touch); }
 }
