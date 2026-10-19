@@ -76,16 +76,18 @@ test("the Gmail step sends the person to Google's consent screen", async () => {
 test("the backfill shows its progress, then lands in bulk categorization", async () => {
   const { api, router } = setup({
     "GET /api/setup": setupAt("backfill", job("running", { progress: { fetched: 2, estimate: 4 } })),
-    "GET /api/setup/uncategorized": { status: 200, body: { groups: [], unnamed: 0 } },
+    "GET /api/review": { status: 200, body: { items: [], categorized: [], sorted_accounts: [], sorted_payees: [] } }, "GET /api/accounts": { status: 200, body: [] },
+    "GET /api/review/auto-categorize/latest": { status: 200, body: { batch_id: null, asked: 0, applied: [], transactions: 0,
+      left: 0, called: false } },
     "GET /api/categories": { status: 200, body: [] },
   });
   expect(await screen.findByText("Fetched 2 of ~4 emails")).toBeInTheDocument();
   api.set("GET /api/setup", setupAt("backfill", job("running", { progress: { read: 1, to_read: 4 } })));
   expect(await screen.findByText("Reading 1 of 4 emails", {}, { timeout: 3000 })).toBeInTheDocument();
   api.set("GET /api/setup", setupAt("categorize", job("succeeded")));
-  expect(await screen.findByRole("heading", { name: "Categorize your spending" }, { timeout: 3000 }))
+  expect(await screen.findByRole("heading", { name: "Review" }, { timeout: 3000 }))
     .toBeInTheDocument();
-  expect(router.state.location.pathname).toBe("/categorize");
+  expect(router.state.location.pathname).toBe("/review");
 });
 
 test("a backfill that stopped shows why and resumes on request", async () => {
@@ -114,4 +116,14 @@ test("a backfill that ended with emails it couldn't fetch says how many and offe
 test("once more emails arrive than Gmail estimated, the estimate is dropped rather than shown wrong", async () => {
   setup({ "GET /api/setup": setupAt("backfill", job("running", { progress: { fetched: 300, estimate: 201 } })) });
   expect(await screen.findByText("Fetched 300 emails")).toBeInTheDocument();
+});
+
+test("an account without an opening balance doesn't hold up the balances step", async () => {
+  const { user } = setup({
+    "GET /api/setup": setupAt("gmail"),
+    "GET /api/accounts": { status: 200, body: [account({ opening_balance_paise: null, opening_balance_date: null })] },
+  });
+  await user.click(await screen.findByRole("button", { name: "Continue" }));
+  expect(await screen.findByText("No opening balance")).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Continue" })).toBeEnabled();
 });

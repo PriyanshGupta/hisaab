@@ -32,7 +32,8 @@ function useAccountsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResul
   return useMutation({
     mutationFn: fn,
     onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: accountsKey }),
-      queryClient.invalidateQueries({ queryKey: setupKey })]),
+      queryClient.invalidateQueries({ queryKey: setupKey }),
+      queryClient.invalidateQueries({ queryKey: ["review"] })]), // a new account resolves its last 4 in review
   });
 }
 

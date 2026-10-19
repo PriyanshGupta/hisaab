@@ -10,7 +10,10 @@ for one family member and not another.
 Forms:
   last4 / card_last4  the last 4 digits, ignoring masking: "XX5512", "**** 5512" -> "5512"
   vpa                 trimmed, lower-cased UPI ID: "  Asha@OKHDFC " -> "asha@okhdfc"
-  other               trimmed, inner whitespace collapsed, lower-cased
+  other               trimmed, inner whitespace collapsed, lower-cased; text ENDING in a
+                      number of 4+ digits is that number's last 4 ("ending 6203" and
+                      "FASTag Wallet 90000012345678" match "6203" and "…5678"), so one
+                      card printed two ways is one card
 """
 
 import re
@@ -19,6 +22,8 @@ from collections.abc import Callable
 _VPA: re.Pattern[str] = re.compile(r"[a-z0-9._-]+@[a-z0-9.-]+")
 # Digits plus the masking characters banks print around them.
 _MASKED_DIGITS: re.Pattern[str] = re.compile(r"[0-9Xx*•\-\s]+")
+# Words, then an account or card number at the end: "ending 6203", "FASTag Wallet 90000012345678".
+_ENDS_IN_NUMBER: re.Pattern[str] = re.compile(r".*?[\s.:#-]([0-9Xx*•\-]*\d[0-9Xx*•\-]*)\s*")
 
 
 class IdentifierError(ValueError):
@@ -43,6 +48,9 @@ def _other(raw: str) -> str:
     value: str = " ".join(raw.split()).lower()
     if not value:
         raise IdentifierError("The identifier is empty.")
+    trailing: re.Match[str] | None = _ENDS_IN_NUMBER.fullmatch(value)
+    if trailing and len(re.sub(r"\D", "", trailing.group(1))) >= 4:  # a number at the end identifies the account
+        return _last4(trailing.group(1))
     return value
 
 

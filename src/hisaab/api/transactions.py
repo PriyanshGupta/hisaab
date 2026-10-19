@@ -125,6 +125,15 @@ def correct_transaction(txn_id: str, body: TransactionChange, request: Request,
         return _out(txns.get_listed(s, user.id, txn_id))
 
 
+@router.post("/{txn_id}/acknowledge", response_model=TransactionOut)
+def looks_right(txn_id: str, request: Request, user: CurrentUser = Depends(current_user),
+                db: Database = Depends(get_db)) -> TransactionOut:
+    """"Looks right": out of review until its amount changes."""
+    with db.write_session(timeout=request.app.state.writer_timeout) as s:
+        txns.acknowledge(s, user.id, txn_id)
+        return _out(txns.get_listed(s, user.id, txn_id))
+
+
 @router.post("/{txn_id}/revert", response_model=TransactionOut)
 def undo_corrections(txn_id: str, body: RevertRequest, request: Request,
                      user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)) -> TransactionOut:

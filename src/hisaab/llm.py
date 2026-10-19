@@ -27,7 +27,7 @@ from hisaab.parsing.email_spec import CONTRACT_FIELDS
 from hisaab.parsing.transforms import collapse_whitespace, strip_html
 
 ANTHROPIC_VERSION: str = "2023-06-01"
-TIMEOUT_S: float = 60.0
+TIMEOUT_S: float = 180.0  # a 100-payee auto-categorize answer with web searches took ~46 s live; never retry a slow answer
 RETRIES: int = 3
 RETRYABLE: frozenset[int] = frozenset({0, 429, 500, 502, 503, 504, 529})  # 0: no response
 MAX_BODY_CHARS: int = 20_000
@@ -111,32 +111,77 @@ def prompt_for(artifact: EmailArtifact) -> str:
 def extract_email(settings: Settings, artifact: EmailArtifact, *, transport: Transport = default_transport,
                   sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
     """The §10.4 contract for one email. Raises LLMUnavailable or ContractError."""
+    return validate_contract(tool_call(settings, SYSTEM, TOOL, "Record what the email says.", SCHEMA,
+                                       prompt_for(artifact), transport=transport, sleep=sleep, max_tokens=1024))
+
+
+WEB_SEARCH: str = "web_search_20250305"  # the basic variant: Haiku has no dynamic-filtering search
+PAUSES: int = 3  # a server-side search loop that pauses is resumed at most this many times
+
+
+def tool_call(settings: Settings, system: str, tool: str, description: str, schema: dict[str, Any], prompt: str, *,
+              transport: Transport = default_transport, sleep: Callable[[float], None] = time.sleep,
+              max_tokens: int = 1024, search_uses: int = 0, strict: bool = False) -> dict[str, Any]:
+    """One answer from the configured model, through `tool`; its input, unvalidated.
+
+    search_uses > 0 also offers Anthropic's server-side web search, for what the model doesn't recognise. A forced
+    tool choice would rule searching out, so the choice is "auto" and the system prompt says to finish with `tool`;
+    a search loop that pauses (stop_reason pause_turn) is resumed. If the account can't search (HTTP 400), the
+    request is made again without it. Raises LLMUnavailable or ContractError."""
     if settings.anthropic_api_key is None:
         raise LLMUnavailable("no LLM configured: set HISAAB_ANTHROPIC_API_KEY in .env")
-    body: bytes = json.dumps({
-        "model": settings.email_model, "max_tokens": 1024, "system": SYSTEM,
-        "tools": [{"name": TOOL, "description": "Record what the email says.", "input_schema": SCHEMA}],
-        "tool_choice": {"type": "tool", "name": TOOL},
-        "messages": [{"role": "user", "content": prompt_for(artifact)}],
-    }).encode()
+    custom: dict[str, Any] = {"name": tool, "description": description, "input_schema": schema,
+                              **({"strict": True} if strict else {})}  # strict: the API checks input against schema
+    messages: list[dict[str, Any]] = [{"role": "user", "content": prompt}]
+
+    def request(searching: bool) -> dict[str, Any]:
+        return {"model": settings.email_model, "max_tokens": max_tokens, "system": system, "messages": messages,
+                "tools": [{"type": WEB_SEARCH, "name": "web_search", "max_uses": search_uses}, custom] if searching
+                else [custom],
+                "tool_choice": {"type": "auto"} if searching else {"type": "tool", "name": tool}}
+
+    searching: bool = search_uses > 0
+    status, reply = _post(settings, request(searching), transport, sleep)
+    if status == 400 and searching:  # web search not available to this account: answer from knowledge alone
+        searching = False
+        status, reply = _post(settings, request(searching), transport, sleep)
+    for _ in range(PAUSES):
+        if status != 200 or reply.get("stop_reason") != "pause_turn":
+            break
+        messages.append({"role": "assistant", "content": reply.get("content", [])})  # resume where it paused
+        status, reply = _post(settings, request(searching), transport, sleep)
+    if status != 200:
+        raise LLMUnavailable(f"LLM refused the request: HTTP {status}")
+    if reply.get("stop_reason") == "max_tokens":  # a cut-off answer is a partial one: never treat it as whole
+        raise ContractError(f"the model's {tool} answer was cut off at {max_tokens} tokens")
+    for block in reply.get("content", []):
+        if block.get("type") == "tool_use" and block.get("name") == tool:
+            answer: dict[str, Any] = block.get("input") or {}
+            return answer
+    raise ContractError(f"the model answered without calling the {tool} tool")
+
+
+def _post(settings: Settings, body: dict[str, Any], transport: Transport,
+          sleep: Callable[[float], None]) -> tuple[int, dict[str, Any]]:
+    """POST /v1/messages with retries on overload and network errors; (status, parsed body)."""
+    assert settings.anthropic_api_key is not None
     headers: dict[str, str] = {"x-api-key": settings.anthropic_api_key.get_secret_value(),
                                "anthropic-version": ANTHROPIC_VERSION, "content-type": "application/json"}
     url: str = settings.llm_base_url.rstrip("/") + "/v1/messages"
+    data: bytes = json.dumps(body).encode()
     for attempt in range(RETRIES + 1):
-        status, raw = transport("POST", url, body, headers)
+        status, raw = transport("POST", url, data, headers)
         if status not in RETRYABLE:
             break
         if attempt < RETRIES:
             sleep(2 ** attempt)
     else:
         raise LLMUnavailable(f"LLM unavailable: HTTP {status or 'no response'} after {RETRIES} retries")
-    if status != 200:
-        raise LLMUnavailable(f"LLM refused the request: HTTP {status}")
-    reply: dict[str, Any] = json.loads(raw or b"{}")
-    for block in reply.get("content", []):
-        if block.get("type") == "tool_use" and block.get("name") == TOOL:
-            return validate_contract(block.get("input") or {})
-    raise ContractError(f"the model answered without calling the {TOOL} tool")
+    try:
+        parsed: dict[str, Any] = json.loads(raw or b"{}") if status == 200 else {}
+    except json.JSONDecodeError:
+        raise ContractError("the model's reply wasn't JSON") from None
+    return status, parsed
 
 
 def validate_contract(raw: dict[str, Any]) -> dict[str, Any]:

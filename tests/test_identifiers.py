@@ -43,9 +43,18 @@ def test_normalize_rejects_invalid(kind: str, raw: str) -> None:
     ("5512", "5512"),
     ("**** **** **** 8830", "8830"),
     ("HDFC Bank Loan", "hdfc bank loan"),
+    ("ending 6203", "6203"),                     # a model's reading of "card ending 6203": the same card as XX6203
+    ("Card no. XX1234", "1234"),
+    ("FASTag Wallet 90000012345678", "5678"),    # words before an account number: its last 4, like the bare number
+    ("Example Bank Credit Card", "example bank credit card"),
+    ("Loan 123", "loan 123"),                    # fewer than 4 digits: not a number to match on
 ])
 def test_lookup_form_matches_write_form(raw: str, expected: str) -> None:
     assert normalize_for_lookup(raw) == expected
+
+
+def test_an_other_identifier_ending_in_a_number_is_stored_as_lookup_finds_it() -> None:
+    assert normalize("other", "FASTag Wallet 90000012345678") == normalize_for_lookup("90000012345678") == "5678"
 
 
 def test_lookup_of_garbage_returns_none() -> None:

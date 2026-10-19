@@ -7,8 +7,11 @@ from hisaab.models.core import (
     BalanceDelta,
     BalanceObservation,
     Category,
+    ExternalIdentifier,
     Payee,
     PayeeCategory,
+    PayeeSuggestion,
+    RawPayeeSuggestion,
     Source,
     Transaction,
     TransactionEdit,
@@ -29,9 +32,9 @@ from hisaab.models.parsing import (
 from hisaab.models.views import ReadOnlyViewError, TransactionEffective
 
 __all__: list[str] = [
-    "Account", "AccountIdentifier", "BalanceDelta", "BalanceObservation", "Base", "Category",
+    "Account", "AccountIdentifier", "BalanceDelta", "BalanceObservation", "Base", "Category", "ExternalIdentifier",
     "ExtractionCache", "FormatSighting", "GmailConnection", "Job", "NormalizationPattern",
-    "ParserTemplate", "Payee", "PayeeCategory", "ReadOnlyViewError", "Sender", "SenderCandidate",
+    "ParserTemplate", "Payee", "PayeeCategory", "PayeeSuggestion", "RawPayeeSuggestion", "ReadOnlyViewError", "Sender", "SenderCandidate",
     "Setting", "Source", "StatementStaging", "Transaction", "TransactionEdit",
     "TransactionEffective", "TransactionSource", "User", "UserSession", "new_id", "utc_now",
 ]

@@ -76,6 +76,32 @@ def test_edit_renames_and_corrects_the_anchor(asha: TestClient) -> None:
         "HDFC Salary", 9000000, "HDFC Bank")  # unspecified fields unchanged
 
 
+# --- the opening balance is optional (ruling 2026-10-12) ----------------------------------
+
+def test_an_account_can_be_added_without_an_opening_balance(asha: TestClient) -> None:
+    body: dict[str, Any] = {k: v for k, v in CASH.items() if not k.startswith("opening")}
+    resp: Response = asha.post("/api/accounts", json=body)
+    assert resp.status_code == 201, resp.text
+    assert (resp.json()["opening_balance_paise"], resp.json()["opening_balance_date"]) == (None, None)
+
+
+@pytest.mark.parametrize("half", [{"opening_balance_paise": 100}, {"opening_balance_date": ANCHOR}])
+def test_a_balance_needs_its_date_and_a_date_its_balance(asha: TestClient, half: dict[str, Any]) -> None:
+    body: dict[str, Any] = {k: v for k, v in CASH.items() if not k.startswith("opening")} | half
+    resp: Response = asha.post("/api/accounts", json=body)
+    assert resp.status_code == 422 and resp.json()["detail"] == "Enter both the balance and its date, or neither."
+
+
+def test_an_anchor_can_be_added_later_and_removed(asha: TestClient) -> None:
+    created: str = asha.post("/api/accounts", json={"type": "cash", "display_name": "Wallet"}).json()["id"]
+    added: Response = asha.patch(f"/api/accounts/{created}",
+                                 json={"opening_balance_paise": 5000, "opening_balance_date": ANCHOR})
+    assert added.json()["opening_balance_paise"] == 5000
+    cleared: Response = asha.patch(f"/api/accounts/{created}",
+                                   json={"opening_balance_paise": None, "opening_balance_date": None})
+    assert (cleared.json()["opening_balance_paise"], cleared.json()["opening_balance_date"]) == (None, None)
+
+
 def test_identifier_lookup_is_case_insensitive(asha: TestClient) -> None:
     acct: Any = asha.post("/api/accounts", json=BANK).json()
     resp: Response = asha.post(f"/api/accounts/{acct['id']}/identifiers", json={"kind": "vpa", "identifier": "upi@ybl"})

@@ -9,6 +9,7 @@ so does openapi_export, so the schema the frontend client is generated from is
 exactly what the running app serves.
 """
 
+import time
 from collections.abc import AsyncIterator, Awaitable, Callable
 from contextlib import asynccontextmanager
 
@@ -19,7 +20,8 @@ from sqlalchemy import text
 from sqlalchemy.exc import SQLAlchemyError
 
 from hisaab.accounts import repository as accounts_repo
-from hisaab.api import accounts, admin_users, auth, categories, gmail, jobs, setup, transactions
+from hisaab.api import accounts, admin_users, auth, categories, gmail, jobs, review, setup, transactions
+from hisaab import llm
 from hisaab.auth import users
 from hisaab.auth.throttle import LoginThrottle
 from hisaab.categories import repository as categories_repo
@@ -62,6 +64,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(gmail.callback_router)
     app.include_router(jobs.router)
     app.include_router(setup.router)
+    app.include_router(review.router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
 
 
@@ -147,6 +150,8 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.db = Database(settings.database_path)
     app.state.jobs = JobQueue(app.state.db, job_kinds(settings))
     app.state.mail_transport = default_transport  # the mailbox transport; tests swap in a fake Gmail
+    app.state.llm_transport = llm.default_transport  # auto-categorize's model calls; tests swap in a fake Claude
+    app.state.llm_sleep = time.sleep  # its retry back-off
     # How long a user action waits for the writer lock before answering 503.
     app.state.writer_timeout = 10.0
     app.state.login_throttle = LoginThrottle()

@@ -28,6 +28,7 @@ PROCESSING_STATES: tuple[str, ...] = ("pending", "parsed", "pending_llm", "faile
 TRANSACTION_KINDS: tuple[str, ...] = ("expense", "income", "transfer", "refund", "adjustment", "lending")
 TRANSACTION_STATUSES: tuple[str, ...] = ("confirmed", "needs_review", "reversed")
 PAYEE_TYPES: tuple[str, ...] = ("merchant", "person")
+RULE_ORIGINS: tuple[str, ...] = ("user", "llm")
 OBSERVATION_SOURCES: tuple[str, ...] = ("email", "statement", "manual")
 DELTA_STATUSES: tuple[str, ...] = ("open", "accepted", "investigated")
 
@@ -56,6 +57,8 @@ class Account(Base):
         Index("uq_accounts_active_last4", "user_id", "last4", unique=True,
               **partial_index_where("archived_at IS NULL")),
         one_of("type", ACCOUNT_TYPES, "type"),
+        # The opening balance is optional (ruling 2026-10-12), but a balance needs its date and a date its balance.
+        CheckConstraint("(opening_balance IS NULL) = (opening_balance_date IS NULL)", name="anchor_both_or_neither"),
     )
 
     id: Mapped[str] = id_column()
@@ -65,8 +68,8 @@ class Account(Base):
     institution: Mapped[str | None]
     account_number_enc: Mapped[bytes | None]  # encrypted at rest; NULL for cash
     last4: Mapped[str | None]  # derived; identifier matching happens on this
-    opening_balance: Mapped[int] = mapped_column(BigInteger)  # paise; for cards POSITIVE = debt
-    opening_balance_date: Mapped[str]
+    opening_balance: Mapped[int | None] = mapped_column(BigInteger)  # paise; for cards POSITIVE = debt; NULL: none
+    opening_balance_date: Mapped[str | None]
     archived_at: Mapped[str | None]
     created_at: Mapped[str] = created_column()
 
@@ -239,14 +242,60 @@ class TransactionEdit(Base):
     updated_at: Mapped[str] = updated_column()
 
 
+class ExternalIdentifier(Base):
+    """A number alerts print that the user says is NOT one of their accounts (user, 2026-10-19): a FASTag
+    wallet paying tolls. Its transactions stay expenses with that leg outside the user's accounts, and review
+    stops asking which account it is. Canonical form, as accounts.identifiers.normalize_for_lookup gives it."""
+
+    __tablename__: str = "external_identifiers"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    identifier: Mapped[str] = mapped_column(primary_key=True)
+    created_at: Mapped[str] = created_column()
+
+
 class PayeeCategory(Base):
     __tablename__: str = "payee_categories"
+    __table_args__: tuple[Any, ...] = (one_of("origin", RULE_ORIGINS, "origin"),)
 
     user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
     payee_id: Mapped[str] = mapped_column(ForeignKey("payees.id"), primary_key=True)
     category_id: Mapped[str] = mapped_column(ForeignKey("categories.id"))
+    # Who wrote the rule (slice 17): the user, or auto-categorize in batch batch_id. NULL: before 0008.
+    origin: Mapped[str | None]
+    batch_id: Mapped[str | None]
     created_at: Mapped[str] = created_column()
     updated_at: Mapped[str] = updated_column()
+
+
+class RawPayeeSuggestion(Base):
+    """Auto-categorize's answer for a payee not yet named: just the text alerts printed (user, 2026-10-19:
+    naming is optional, so these are categorized too). Confident answers name the payee after its text."""
+
+    __tablename__: str = "raw_payee_suggestions"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    payee_raw: Mapped[str] = mapped_column(primary_key=True)
+    category_id: Mapped[str | None] = mapped_column(ForeignKey("categories.id"))  # NULL: none of them fit
+    confidence_percent: Mapped[int]
+    categories_hash: Mapped[str]
+    batch_id: Mapped[str]
+    created_at: Mapped[str] = created_column()
+
+
+class PayeeSuggestion(Base):
+    """Auto-categorize's answer for one payee, confident or not (slice 17). A payee answered for the
+    current category list is never sent again, so a second click costs nothing."""
+
+    __tablename__: str = "payee_suggestions"
+
+    user_id: Mapped[str] = mapped_column(ForeignKey("users.id"), primary_key=True)
+    payee_id: Mapped[str] = mapped_column(ForeignKey("payees.id"), primary_key=True)
+    category_id: Mapped[str | None] = mapped_column(ForeignKey("categories.id"))  # NULL: none of them fit
+    confidence_percent: Mapped[int]
+    categories_hash: Mapped[str]  # the category list it was asked against
+    batch_id: Mapped[str]
+    created_at: Mapped[str] = created_column()
 
 
 class BalanceObservation(Base):

@@ -7,7 +7,6 @@ import { api, apiError, send } from "./client";
 import type { components } from "./schema";
 
 export type Setup = components["schemas"]["SetupOut"];
-export type Uncategorized = components["schemas"]["UncategorizedOut"];
 
 export const setupKey = ["setup"] as const;
 const POLL_MS = 1000;
@@ -21,16 +20,5 @@ export function useSetup() {
       return data;
     },
     refetchInterval: (query) => (query.state.data?.step === "backfill" ? POLL_MS : false),
-  });
-}
-
-export function useUncategorized() {
-  return useQuery({
-    queryKey: [...setupKey, "uncategorized"],
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/setup/uncategorized"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
   });
 }

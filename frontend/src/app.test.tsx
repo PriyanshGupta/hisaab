@@ -135,10 +135,13 @@ test("home during first run goes to setup, so a closed tab comes back to the bac
 test("home after the backfill, with nothing categorized yet, is bulk categorization", async () => {
   mockApi({
     "GET /api/setup": setupAt("categorize"), "GET /api/auth/me": { status: 200, body: ASHA },
-    "GET /api/setup/uncategorized": { status: 200, body: { groups: [], unnamed: 0 } },
+    "GET /api/review": { status: 200, body: { items: [], categorized: [], sorted_accounts: [], sorted_payees: [] } }, "GET /api/accounts": { status: 200, body: [] },
+    "GET /api/review/auto-categorize/latest": { status: 200, body: { batch_id: null, asked: 0, applied: [], transactions: 0,
+      left: 0, called: false } },
     "GET /api/categories": { status: 200, body: [] },
   });
   const { router } = renderApp("/");
-  expect(await screen.findByRole("heading", { name: "Categorize your spending" })).toBeInTheDocument();
-  expect(router.state.location.pathname).toBe("/categorize");
+  expect(await screen.findByRole("heading", { name: "Review" })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/review");
+  expect(router.state.location.search).toBe("?lane=categories");
 });

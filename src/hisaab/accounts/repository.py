@@ -115,6 +115,15 @@ def _check_date(value: str) -> str:
     return value
 
 
+def _check_anchor(account_type: str, balance: int | None, anchor: str | None) -> tuple[int | None, str | None]:
+    """The opening balance is optional (ruling 2026-10-12), but a balance needs its date and a date its balance."""
+    if balance is None and anchor is None:
+        return None, None
+    if balance is None or anchor is None:
+        raise AccountError("Enter both the balance and its date, or neither.")
+    return _check_balance(account_type, balance), _check_date(anchor)
+
+
 def _check_last4(account_type: str, last4: str | None) -> str | None:
     if account_type == "cash":
         if last4:
@@ -198,16 +207,15 @@ def create_account(
     *,
     type: str,
     display_name: str,
-    opening_balance: int,
-    opening_balance_date: str,
+    opening_balance: int | None = None,
+    opening_balance_date: str | None = None,
     last4: str | None = None,
     institution: str | None = None,
 ) -> Account:
     _check_type(type)
     name: str = _check_name(display_name)
     canonical_last4: str | None = _check_last4(type, last4)
-    balance: int = _check_balance(type, opening_balance)
-    anchor: str = _check_date(opening_balance_date)
+    balance, anchor = _check_anchor(type, opening_balance, opening_balance_date)
 
     if canonical_last4 is not None:
         holder: Account | None = session.scalars(
@@ -239,8 +247,8 @@ def update_account(
     *,
     display_name: str | _Unset = _UNSET,
     institution: str | None | _Unset = _UNSET,
-    opening_balance: int | _Unset = _UNSET,
-    opening_balance_date: str | _Unset = _UNSET,
+    opening_balance: int | None | _Unset = _UNSET,
+    opening_balance_date: str | None | _Unset = _UNSET,
 ) -> Account:
     """Rename, or correct the opening anchor. Type and last4 are fixed: a
     different card is a different account."""
@@ -249,10 +257,10 @@ def update_account(
         account.display_name = _check_name(display_name)
     if institution is not _UNSET:
         account.institution = (institution or "").strip() or None
-    if opening_balance is not _UNSET:
-        account.opening_balance = _check_balance(account.type, opening_balance)
-    if opening_balance_date is not _UNSET:
-        account.opening_balance_date = _check_date(opening_balance_date)
+    if opening_balance is not _UNSET or opening_balance_date is not _UNSET:  # checked as a pair: both or neither
+        account.opening_balance, account.opening_balance_date = _check_anchor(
+            account.type, account.opening_balance if isinstance(opening_balance, _Unset) else opening_balance,
+            account.opening_balance_date if isinstance(opening_balance_date, _Unset) else opening_balance_date)
     return account
 
 
@@ -294,6 +302,40 @@ def add_identifier(session: Session, user_id: str, account_id: str, kind: str, r
     return identifier
 
 
+def assign_identifier(session: Session, user_id: str, account_id: str, raw: str) -> tuple[AccountIdentifier, str]:
+    """"Ending 4821 is my HDFC savings" (PRD §3.3): register what an alert printed on one of the user's
+    accounts, from review. Returns the row and the canonical form; the caller resolves past transactions.
+
+    Refused, naming the holder, if another active account already claims that string: identifiers are
+    matched exactly and a wrong account is worse than none. Already on this account: returned as is.
+    """
+    account: Account = _active_account(session, user_id, account_id)
+    canonical: str | None = normalize_for_lookup(raw)
+    if canonical is None:
+        raise AccountError("That doesn't look like an account number, card number or UPI ID.")
+    existing: AccountIdentifier | None = session.scalars(select(AccountIdentifier).where(
+        AccountIdentifier.user_id == user_id, AccountIdentifier.identifier == canonical,
+        AccountIdentifier.retired_at.is_(None))).first()
+    if existing is not None:
+        if existing.account_id != account.id:
+            holder: Account = get_account(session, user_id, existing.account_id)
+            raise DuplicateIdentifier(f"{canonical} is already on {holder.display_name}.")
+        return existing, canonical
+    kind: str = ("vpa" if "@" in canonical else
+                 SETUP_IDENTIFIER_KIND.get(account.type, "last4") if canonical.isdigit() and len(canonical) == 4 else "other")
+    identifier: AccountIdentifier = AccountIdentifier(account_id=account.id, user_id=user_id, kind=kind,
+                                                      identifier=canonical, origin="review_assignment")
+    session.add(identifier)
+    session.flush()
+    return identifier, canonical
+
+
+def removable(identifier: AccountIdentifier) -> bool:
+    """Everything but the last 4 digits the account was created with: one assigned from review by mistake can go.
+    (Transactions it already resolved stay on the account until that period is re-synced.)"""
+    return not (identifier.origin == "account_setup" and identifier.kind in SETUP_IDENTIFIER_KIND.values())
+
+
 def remove_identifier(session: Session, user_id: str, account_id: str, identifier_id: str) -> None:
     _active_account(session, user_id, account_id)
     identifier: AccountIdentifier | None = session.scalars(
@@ -304,6 +346,6 @@ def remove_identifier(session: Session, user_id: str, account_id: str, identifie
     ).one_or_none()
     if identifier is None:
         raise NotFound("No such identifier")
-    if identifier.kind in SETUP_IDENTIFIER_KIND.values():
+    if not removable(identifier):
         raise AccountError("The last 4 digits identify this account and can't be removed. Archive the account instead.")
     session.delete(identifier)

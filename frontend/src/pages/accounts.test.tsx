@@ -175,3 +175,30 @@ test("a card debt typed as a negative number is refused, never sent", async () =
   expect(within(form).getByText("Enter the amount owed as a positive number.")).toBeInTheDocument();
   expect(api.calls).not.toContain("POST /api/accounts");
 });
+
+test("the opening balance is optional: left blank, the account is added without one", async () => {
+  const { api, user } = setup([]);
+  api.set("POST /api/accounts", { status: 201, body: { ...bank, type: "cash", opening_balance_paise: null,
+    opening_balance_date: null } });
+  const form = await openAddForm(user);
+  await user.click(within(form).getByLabelText("Cash"));
+  await user.type(within(form).getByLabelText("Name"), "Wallet");
+  expect(within(form).getByText(/Optional/)).toBeInTheDocument();
+  await user.click(within(form).getByRole("button", { name: "Add account" }));
+  await waitFor(() => expect(api.bodiesFor("POST /api/accounts")).toHaveLength(1));
+  expect(api.bodiesFor("POST /api/accounts")[0]).toMatchObject({ opening_balance_paise: null, opening_balance_date: null });
+});
+
+test("an account without an opening balance says so", async () => {
+  setup([{ ...bank, opening_balance_paise: null, opening_balance_date: null }]);
+  const hdfc = await screen.findByRole("article", { name: "HDFC Savings" });
+  expect(within(hdfc).getByText("No opening balance")).toBeInTheDocument();
+});
+
+test("a number assigned from review by mistake can be removed here", async () => {
+  const { api, user } = setup([{ ...bank, identifiers: [...bank.identifiers,
+    { id: "i-9", kind: "last4", identifier: "4821", removable: true }] }]);
+  api.set("DELETE /api/accounts/a-1/identifiers/i-9", { status: 204 });
+  await user.click(await screen.findByRole("button", { name: "Remove 4821" }));
+  expect(api.calls).toContain("DELETE /api/accounts/a-1/identifiers/i-9");
+});

@@ -15,8 +15,7 @@ run needs an account, and every opening balance dated on or before the
 backfill start (PRD §4.11), or the review queue opens with hundreds of
 unresolved accounts and the balances are wrong from day one.
 
-/api/setup/uncategorized feeds the bulk categorization screen: uncategorized
-transactions grouped by recognised payee, the rest counted.
+Bulk categorization is the review queue's Categories lane (/api/review, slice 17).
 """
 
 from datetime import date
@@ -46,17 +45,6 @@ class SetupOut(BaseModel):
     job: JobOut | None  # the latest backfill job, with progress
 
 
-class PayeeGroup(BaseModel):
-    payee_id: str
-    payee_name: str
-    count: int
-
-
-class UncategorizedOut(BaseModel):
-    groups: list[PayeeGroup]  # most transactions first
-    unnamed: int  # uncategorized, with no recognised payee
-
-
 def _day(d: date) -> str:
     return f"{d.day} {d:%b %Y}"
 
@@ -71,12 +59,14 @@ def first_run_problem(session: Session, user_id: str) -> str | None:
     if not accounts:
         return "Add your accounts first."
     start: date = backfill_start(session, user_id)
-    late: list[Account] = [a for a in accounts if date.fromisoformat(a.opening_balance_date) > start]
+    dated: list[tuple[Account, date]] = [(a, date.fromisoformat(a.opening_balance_date)) for a in accounts
+                                         if a.opening_balance_date is not None]  # no opening balance: nothing to check
+    late: list[tuple[Account, date]] = [(a, d) for a, d in dated if d > start]
     if not late:
         return None
-    named: str = "; ".join(f"{a.display_name} is dated {_day(date.fromisoformat(a.opening_balance_date))}" for a in late)
+    named: str = "; ".join(f"{a.display_name} is dated {_day(d)}" for a, d in late)
     return (f"Opening balances must be on or before {_day(start)}, where your history starts: {named}. "
-            "If an account is newer than that, enter 0 on that date.")
+            "If an account is newer than that, enter 0 on that date, or leave its opening balance out.")
 
 
 def _uncategorized(user_id: str) -> Subquery:
@@ -104,16 +94,3 @@ def setup_state(user: CurrentUser = Depends(current_user), db: Database = Depend
                                     .order_by(Job.created_at.desc(), Job.id.desc()).limit(1)).first()
         return SetupOut(step=_step(s, user.id), backfill_start=backfill_start(s, user.id).isoformat(),
                         job=job_out(job) if job else None)
-
-
-@router.get("/uncategorized", response_model=UncategorizedOut)
-def uncategorized(user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)) -> UncategorizedOut:
-    q: Subquery = _uncategorized(user.id)
-    with db.read_session() as s:
-        rows: list[tuple[str | None, str | None, int]] = list(s.execute(
-            select(q.c.payee_id, q.c.payee_name, func.count())
-            .where(q.c.category_id.is_(None), q.c.kind.in_(CATEGORIZABLE))
-            .group_by(q.c.payee_id, q.c.payee_name).order_by(func.count().desc(), q.c.payee_name)).tuples())
-    return UncategorizedOut(
-        groups=[PayeeGroup(payee_id=p, payee_name=n or "", count=c) for p, n, c in rows if p is not None],
-        unnamed=sum(c for p, _, c in rows if p is None))

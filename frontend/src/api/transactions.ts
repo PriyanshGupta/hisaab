@@ -25,7 +25,11 @@ export function useTransactions() {
 
 function useTransactionsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
   const queryClient = useQueryClient();
-  return useMutation({ mutationFn: fn, onSuccess: () => queryClient.invalidateQueries({ queryKey: transactionsKey }) });
+  return useMutation({
+    mutationFn: fn,
+    onSuccess: () => Promise.all([queryClient.invalidateQueries({ queryKey: transactionsKey }),
+      queryClient.invalidateQueries({ queryKey: ["review"] })]), // the review queue (api/review.ts) reads them too
+  });
 }
 
 export function useCreateTransaction() {

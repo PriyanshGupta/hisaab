@@ -109,6 +109,22 @@ def payee_category(conn: Connection, **kw: Any) -> Row:
     }, kw)
 
 
+def payee_suggestion(conn: Connection, **kw: Any) -> Row:
+    u: str = kw.get("user_id") or user(conn)["id"]
+    return _insert(conn, "payee_suggestions", {
+        "user_id": u, "payee_id": payee(conn)["id"], "category_id": None, "confidence_percent": 50,
+        "categories_hash": "h", "batch_id": new_id(), "created_at": utc_now(),
+    }, kw)
+
+
+def raw_payee_suggestion(conn: Connection, **kw: Any) -> Row:
+    u: str = kw.get("user_id") or user(conn)["id"]
+    return _insert(conn, "raw_payee_suggestions", {
+        "user_id": u, "payee_raw": f"RAW {new_id()}", "category_id": None, "confidence_percent": 50,
+        "categories_hash": "h", "batch_id": new_id(), "created_at": utc_now(),
+    }, kw)
+
+
 def balance_observation(conn: Connection, **kw: Any) -> Row:
     acct: Row = account(conn)
     return _insert(conn, "balance_observations", {

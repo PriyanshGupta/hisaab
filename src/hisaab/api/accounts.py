@@ -20,6 +20,7 @@ from hisaab.accounts import repository as accounts
 from hisaab.api.deps import CurrentUser, current_user, get_db
 from hisaab.db import Database
 from hisaab.models import Account, AccountIdentifier
+from hisaab.pipeline.resolve import resolve_identifier_everywhere
 
 router: APIRouter = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -30,7 +31,7 @@ class IdentifierOut(BaseModel):
     id: str
     kind: str
     identifier: str
-    removable: bool  # false for the last 4 digits the account was created with
+    removable: bool  # false only for the last 4 digits the account was created with
 
 
 class AccountOut(BaseModel):
@@ -39,8 +40,8 @@ class AccountOut(BaseModel):
     display_name: str
     institution: str | None
     last4: str | None
-    opening_balance_paise: int
-    opening_balance_date: str
+    opening_balance_paise: int | None  # None: no opening balance (optional, ruling 2026-10-12)
+    opening_balance_date: str | None
     archived_at: str | None
     created_at: str
     identifiers: list[IdentifierOut]
@@ -51,11 +52,12 @@ class NewAccount(BaseModel):
     display_name: str
     institution: str | None = None
     last4: str | None = None
-    opening_balance_paise: StrictInt
-    opening_balance_date: str
+    opening_balance_paise: StrictInt | None = None  # both or neither
+    opening_balance_date: str | None = None
 
 
 class AccountChange(BaseModel):
+    """Only the fields present change; null on both opening fields removes the opening balance."""
     display_name: str | None = None
     institution: str | None = None
     opening_balance_paise: StrictInt | None = None
@@ -77,7 +79,7 @@ def _out(session: Session, user_id: str, account: Account) -> AccountOut:
         created_at=account.created_at,
         identifiers=[
             IdentifierOut(id=i.id, kind=i.kind, identifier=i.identifier,
-                          removable=i.kind in accounts.USER_IDENTIFIER_KINDS)
+                          removable=accounts.removable(i))
             for i in accounts.active_identifiers(session, user_id, account.id)
         ],
     )
@@ -99,6 +101,8 @@ def create_account(body: NewAccount, request: Request, user: CurrentUser = Depen
             last4=body.last4, opening_balance=body.opening_balance_paise,
             opening_balance_date=body.opening_balance_date,
         )
+        if account.last4 is not None:  # alerts that arrived before the account: they carry its last4 (PRD §3.3)
+            resolve_identifier_everywhere(s, user.id, account, account.last4)
         return _out(s, user.id, account)
 
 
@@ -143,6 +147,7 @@ def add_identifier(account_id: str, body: NewIdentifier, request: Request,
                    user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)) -> IdentifierOut:
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         i: AccountIdentifier = accounts.add_identifier(s, user.id, account_id, body.kind, body.identifier)
+        resolve_identifier_everywhere(s, user.id, accounts.get_account(s, user.id, account_id), i.identifier)
         return IdentifierOut(id=i.id, kind=i.kind, identifier=i.identifier, removable=True)
 
 

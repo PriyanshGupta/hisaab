@@ -44,12 +44,13 @@ from hisaab.models import (
 )
 from hisaab.models.core import TRANSACTION_KINDS
 from hisaab.payees import repository as payees
+from hisaab.transactions import review
 from hisaab.transactions.legs import UNRESOLVED, LegError, validate_legs
 
 # Kinds a person types in. Adjustments are written by reconciliation (slice 20).
 MANUAL_KINDS: tuple[str, ...] = ("expense", "income", "transfer", "refund")
-# Fields the overlay corrects. Slice 17 adds review_acknowledged (the
-# transaction_edits schema already allows it).
+# Fields the overlay corrects. review_acknowledged is an edit too, but only
+# acknowledge() writes it: it is not a value the user types.
 EDITABLE_FIELDS: tuple[str, ...] = ("amount", "kind", "transaction_date", "from_account_id", "to_account_id",
                    "payee_id", "category_override_id")
 MANUAL_DISCRIMINATOR: str = "0"  # a manual Source yields exactly one transaction
@@ -352,6 +353,22 @@ def apply_edits(session: Session, user_id: str, txn_id: str, changes: dict[str, 
             session.add(TransactionEdit(transaction_id=txn.id, user_id=user_id, field=field,
                                         prior_value=source_value, new_value=new_value))
     session.flush()
+    review.refresh(session, user_id, [txn.id])  # a correction may answer (or raise) a review question
+
+
+def acknowledge(session: Session, user_id: str, txn_id: str) -> None:
+    """"Looks right": silences this transaction's review reasons until its amount changes (tech-design §3.5)."""
+    txn: Transaction = _own_transaction(session, user_id, txn_id)
+    amount: str = str(get_effective(session, user_id, txn_id).amount)
+    edit: TransactionEdit | None = session.scalars(select(TransactionEdit).where(
+        TransactionEdit.transaction_id == txn.id, TransactionEdit.field == "review_acknowledged")).first()
+    if edit is None:
+        session.add(TransactionEdit(transaction_id=txn.id, user_id=user_id, field="review_acknowledged",
+                                    prior_value=None, new_value=amount))
+    else:
+        edit.new_value = amount
+    session.flush()
+    review.refresh(session, user_id, [txn.id])
 
 
 def revert(session: Session, user_id: str, txn_id: str, fields: list[str]) -> None:
@@ -367,6 +384,7 @@ def revert(session: Session, user_id: str, txn_id: str, fields: list[str]) -> No
         if field in existing:
             session.delete(existing[field])
     session.flush()
+    review.refresh(session, user_id, [txn.id])
 
 
 # --- delete --------------------------------------------------------------------

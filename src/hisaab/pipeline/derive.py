@@ -58,13 +58,13 @@ from hisaab.parsing.templates import record_outcome
 from hisaab.payees.normalization import PatternRule, load_rules, match_payee
 from hisaab.pipeline.routing import Routed
 from hisaab.transactions.repository import derived_key
+from hisaab.transactions.review import CARD_PAYMENT, review_reasons
 from hisaab.tunables import tunable
 
 EMAIL_DISCRIMINATOR: str = "0"  # an email yields one transaction: its ordinal when there is no reference
 PRECEDENCE: dict[str, int] = {"email": 0, "statement": 1, "manual": 2}  # §4.2; the user's own entry ranks first
 LEGS: dict[str, tuple[str, str]] = {"from": ("from_account_id", "unresolved_from_identifier"),
                                     "to": ("to_account_id", "unresolved_to_identifier")}
-CARD_PAYMENT: str = "card payment received: which of your accounts paid it?"
 
 
 @dataclass
@@ -176,7 +176,7 @@ def _place(run: _Run, source: Source, extraction: dict[str, Any], sender: str | 
         key: str = derived_key(run.user_id, source.ingest_seq, record.reference_number or EMAIL_DISCRIMINATOR)
         txn = Transaction(user_id=run.user_id, derived_key=key, primary_source_id=source.id, status="confirmed")
         _write(txn, record, primary=True)
-        txn.kind = _kind(session, txn, "expense" if record.side == "from" else "income")
+        txn.kind = kind_from_legs(session, txn, "expense" if record.side == "from" else "income")
         session.add(txn)
         session.flush()
         run.created.add(txn.id)
@@ -185,7 +185,7 @@ def _place(run: _Run, source: Source, extraction: dict[str, Any], sender: str | 
         if PRECEDENCE[source.kind] > PRECEDENCE[current.kind]:  # supersession: a statement over an email
             txn.primary_source_id = source.id
         _write(txn, record, primary=txn.primary_source_id == source.id)
-        txn.kind = _kind(session, txn, txn.kind)
+        txn.kind = kind_from_legs(session, txn, txn.kind)
     if session.get(TransactionSource, (txn.id, source.id)) is None:
         session.add(TransactionSource(transaction_id=txn.id, source_id=source.id))
     run.touched[txn.id] = txn
@@ -267,7 +267,7 @@ def _write(txn: Transaction, record: _Record, *, primary: bool) -> None:
         setattr(txn, other_leg, record.other_account_id)  # §6.3 condition 2: the other side is the user's too
 
 
-def _kind(session: Session, txn: Transaction, fallback: str) -> str:
+def kind_from_legs(session: Session, txn: Transaction, fallback: str) -> str:
     """Kind follows from the legs (PRD §3.2); `fallback` when the email named no account at all."""
     if txn.from_account_id and txn.to_account_id and txn.from_account_id != txn.to_account_id:
         return "transfer"
@@ -359,7 +359,7 @@ def _absorb(run: _Run, survivor: Transaction, absorbed: Transaction) -> None:
     session.flush()
     session.add_all(TransactionSource(transaction_id=survivor.id, source_id=link.source_id) for link in links)
     session.delete(absorbed)
-    survivor.kind = _kind(session, survivor, survivor.kind)
+    survivor.kind = kind_from_legs(session, survivor, survivor.kind)
     session.flush()
     run.deleted.add(absorbed.id)
     run.touched.pop(absorbed.id, None)
@@ -385,35 +385,10 @@ def _parse_reasons(extraction: dict[str, Any]) -> list[str]:
 
 
 def _status(run: _Run, txn: Transaction) -> tuple[str, str | None]:
-    """§6.6: needs_review when anything about the transaction is uncertain; why, in words."""
-    primary: Source = run.session.get_one(Source, txn.primary_source_id)
-    reasons: list[str] = list(json.loads(primary.diagnostic or "{}").get("review", []))
-    transfer: bool = txn.kind == "transfer"
-    if transfer and txn.from_account_id is None:
-        reasons.append(CARD_PAYMENT)
-    unresolved: str | None = txn.unresolved_from_identifier or txn.unresolved_to_identifier
-    if unresolved:
-        reasons.append(f"account {unresolved} isn't one of yours yet")
-    elif txn.from_account_id is None and txn.to_account_id is None:
-        reasons.append("no account named in the email")
-    if not transfer and txn.payee_id is None:
-        reasons.append("payee not recognised" if txn.payee_raw else "no payee in the email")
-    if txn.amount > run.threshold:
-        reasons.append(f"amount over ₹{run.threshold // 100:,}")
-    if primary.kind == "statement":
-        reasons.extend(_contradictions(run.session, txn))
-    if txn.id in run.doubts:
-        reasons.append(run.doubts[txn.id])
+    """§6.6: needs_review when anything about the transaction is uncertain; why, in words. Read through the
+    user's edits (transactions.review), so a re-parse never re-raises a question the user has answered."""
+    reasons: list[str] = review_reasons(run.session, txn, run.threshold, run.doubts.get(txn.id))
     return ("needs_review", "; ".join(reasons)) if reasons else ("confirmed", None)
-
-
-def _contradictions(session: Session, txn: Transaction) -> list[str]:
-    """§6.6: a statement disagreeing with a value the user set. The edit still wins; the user decides."""
-    said: dict[str, str] = {"amount": str(txn.amount), "transaction_date": txn.transaction_date}
-    edits: Sequence[TransactionEdit] = session.scalars(select(TransactionEdit).where(
-        TransactionEdit.transaction_id == txn.id, TransactionEdit.field.in_(said))).all()
-    return [f"the statement disagrees with your {'date' if e.field == 'transaction_date' else 'amount'}"
-            for e in edits if e.new_value != said[e.field]]
 
 
 def _observe(session: Session, user_id: str, account_id: str, balance: int, source: Source) -> None:

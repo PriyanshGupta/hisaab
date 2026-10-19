@@ -85,6 +85,10 @@ def _plant(conn: Connection, name: str) -> None:
         f.transaction_edit(conn, b_txn, a)
     elif name.startswith("payee_categories.category_id"):
         f.payee_category(conn, user_id=a, category_id=f.category(conn, b)["id"])
+    elif name.startswith("raw_payee_suggestions.category_id"):
+        f.raw_payee_suggestion(conn, user_id=a, category_id=f.category(conn, b)["id"])
+    elif name.startswith("payee_suggestions.category_id"):
+        f.payee_suggestion(conn, user_id=a, category_id=f.category(conn, b)["id"])
     elif name.startswith("balance_observations.account_id"):
         f.balance_observation(conn, user_id=a, account_id=b_account)
     elif name.startswith("balance_observations.source_id"):

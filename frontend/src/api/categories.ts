@@ -41,7 +41,8 @@ function refreshAfter(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: categoriesKey }),
     queryClient.invalidateQueries({ queryKey: payeesKey }),
     queryClient.invalidateQueries({ queryKey: transactionsKey }),
-    queryClient.invalidateQueries({ queryKey: setupKey }), // the first-run step and the categorize groups
+    queryClient.invalidateQueries({ queryKey: setupKey }), // the first-run step
+    queryClient.invalidateQueries({ queryKey: ["review"] }), // the review queue and the last auto-categorize batch
   ]);
 }
 
@@ -87,5 +88,12 @@ export function useSetPayeeCategory() {
         body: { category_id: categoryId },
       }),
     ),
+  );
+}
+
+/** Rename a payee (global: the name is the same for everyone). */
+export function useRenamePayee() {
+  return useCategoryMutation(({ payeeId, name }: { payeeId: string; name: string }) =>
+    unwrap(() => api.PATCH("/api/payees/{payee_id}", { params: { path: { payee_id: payeeId } }, body: { name } })),
   );
 }

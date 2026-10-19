@@ -165,6 +165,17 @@ def test_a_first_sync_reaches_back_to_the_earliest_opening_balance(db: Database,
     assert fake.queries[0].endswith(f"after:{int(midnight.timestamp())}")
 
 
+def test_an_account_without_an_opening_balance_leaves_the_backfill_start_alone(
+    db: Database, user_id: str, sync: Run, fake: FakeGmail, conn: Connection,
+) -> None:
+    f.account(conn, user_id, opening_balance=None, opening_balance_date=None)
+    conn.commit()
+    sync(user_id)
+    with db.read_session() as s:
+        midnight: datetime = datetime.combine(backfill_start(s, user_id), dt_time(), LOCAL_TZ)
+    assert fake.queries[0].endswith(f"after:{int(midnight.timestamp())}")
+
+
 def test_once_synced_the_window_is_the_48_hour_minimum(db: Database, user_id: str, sync: Run,
                                                        fake: FakeGmail) -> None:
     with db.write_session() as s:

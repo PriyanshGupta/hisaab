@@ -26,6 +26,8 @@ ALL_TABLES: set[str] = GLOBAL_TABLES | {
     "sender_candidates", "gmail_connections", "statement_staging",
     # §3.4 operational
     "jobs", "sessions", "settings",
+    # slice 17 (migration 0008): auto-categorize's memory; (0009) numbers that aren't the user's accounts
+    "payee_suggestions", "external_identifiers", "raw_payee_suggestions",
 }
 
 # §3.8: name -> (table, [(column, descending)], partial-predicate or None)
@@ -65,6 +67,7 @@ EXPECTED_SETTINGS: dict[str, Any] = {
     "balance_delta_tolerance_paise": 100,
     "recurring_detection": {"min_occurrences": 3, "interval_tolerance_days": 4, "amount_tolerance_percent": 10},
     "pattern_timeout_ms": 100,
+    "auto_categorize_min_confidence_percent": 80,  # slice 17 (0008): not a PRD §10.1 row, the user's brief
 }
 
 # Every row of PRD §10.1, in order, mapped to the settings key that carries it.
@@ -98,9 +101,9 @@ def _objects(conn: Connection, kind: str) -> set[str]:
     return {r[0] for r in rows}
 
 
-def test_migration_creates_exactly_the_23_tables(conn: Connection) -> None:
+def test_migration_creates_exactly_the_26_tables(conn: Connection) -> None:
     assert _objects(conn, "table") == ALL_TABLES
-    assert len(ALL_TABLES) == 23
+    assert len(ALL_TABLES) == 26
 
 
 def test_migration_creates_the_effective_view(conn: Connection) -> None:
@@ -178,4 +181,4 @@ def test_settings_seeded_with_every_prd_10_1_tunable(conn: Connection) -> None:
 
 def test_every_prd_10_1_row_maps_to_a_seeded_key() -> None:
     assert len(PRD_10_1_ROWS) == 17
-    assert set(PRD_10_1_ROWS.values()) == set(EXPECTED_SETTINGS)
+    assert set(PRD_10_1_ROWS.values()) == set(EXPECTED_SETTINGS) - {"auto_categorize_min_confidence_percent"}

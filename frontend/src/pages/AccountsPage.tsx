@@ -86,7 +86,7 @@ function AccountItem({ account }: { account: Account }) {
   const [mode, setMode] = useState<"view" | "edit" | "confirm-archive" | "add-upi">("view");
   const archive = useArchiveAccount();
   const isArchived = account.archived_at !== null;
-  const upiIds = account.identifiers.filter((i) => i.kind === "vpa");
+  const upiIds = account.identifiers.filter((i) => i.removable); // UPI IDs, and numbers assigned from review
 
   return (
     <article className="account" aria-label={account.display_name}>
@@ -99,11 +99,17 @@ function AccountItem({ account }: { account: Account }) {
           </p>
         </div>
         <div className="account__opening">
-          <span className="amount">{formatPaise(account.opening_balance_paise)}</span>
-          <span className="account__as-of">
-            {account.type === "credit_card" ? "owed on " : "on "}
-            {formatDate(account.opening_balance_date)}
-          </span>
+          {account.opening_balance_paise === null || account.opening_balance_date === null ? (
+            <span className="account__as-of">No opening balance</span>
+          ) : (
+            <>
+              <span className="amount">{formatPaise(account.opening_balance_paise)}</span>
+              <span className="account__as-of">
+                {account.type === "credit_card" ? "owed on " : "on "}
+                {formatDate(account.opening_balance_date)}
+              </span>
+            </>
+          )}
         </div>
       </div>
 
@@ -217,15 +223,17 @@ function AmountField({ type, value, onChange, error }: {
       placeholder="0.00"
       value={value}
       onChange={(e) => onChange(e.target.value)}
-      help={type === "credit_card"
-        ? "What you'd have paid to clear the card on that date. Enter it as a positive number."
-        : undefined}
+      help={`Optional. ${type === "credit_card"
+        ? "What you'd have paid to clear the card on that date. Enter it as a positive number. "
+        : ""}A balance on a past date lets Hisaab check your balances later; leave it blank if you don't know it.`}
       error={error}
     />
   );
 }
 
-function checkAmount(type: AccountType, raw: string): { paise?: number; error?: string } {
+/** paise: null when left blank (the opening balance is optional); undefined with an error. */
+function checkAmount(type: AccountType, raw: string): { paise?: number | null; error?: string } {
+  if (!raw.trim()) return { paise: null };
   const result = parseRupees(raw, { allowNegative: type === "bank" });
   if (!result.ok) {
     return { error: type === "credit_card" && raw.trim().startsWith("-")
@@ -234,12 +242,14 @@ function checkAmount(type: AccountType, raw: string): { paise?: number; error?: 
   return { paise: result.paise };
 }
 
-export function AddAccountForm({ onDone, defaultDate }: { onDone: () => void; defaultDate?: string }) {
+export function AddAccountForm({ onDone, defaultDate, defaultLast4 }: {
+  onDone: () => void; defaultDate?: string; defaultLast4?: string; // from review: "Add an account ending 4821"
+}) {
   const create = useCreateAccount();
   const [type, setType] = useState<AccountType>("bank");
   const [name, setName] = useState("");
   const [institution, setInstitution] = useState("");
-  const [last4, setLast4] = useState("");
+  const [last4, setLast4] = useState(defaultLast4 ?? "");
   const [amount, setAmount] = useState("");
   const [date, setDate] = useState(defaultDate ?? threeMonthsAgoIso());
   const [errors, setErrors] = useState<FieldErrors>({});
@@ -251,7 +261,7 @@ export function AddAccountForm({ onDone, defaultDate }: { onDone: () => void; de
     if (type !== "cash" && (last4.match(/\d/g)?.length ?? 0) < 4) found.last4 = "Enter the last 4 digits.";
     const { paise, error } = checkAmount(type, amount);
     if (error) found.amount = error;
-    if (!date) found.date = "Pick the date of this balance.";
+    if (paise !== null && !date) found.date = "Pick the date of this balance.";
     setErrors(found);
     if (Object.keys(found).length > 0 || paise === undefined) return;
     create.mutate(
@@ -261,7 +271,7 @@ export function AddAccountForm({ onDone, defaultDate }: { onDone: () => void; de
         institution: institution.trim() || null,
         ...(type !== "cash" && { last4: last4.trim() }),
         opening_balance_paise: paise,
-        opening_balance_date: date,
+        opening_balance_date: paise === null ? null : date,
       },
       { onSuccess: onDone },
     );
@@ -313,8 +323,9 @@ function EditAccountForm({ account, onDone }: { account: Account; onDone: () => 
   const update = useUpdateAccount();
   const [name, setName] = useState(account.display_name);
   const [institution, setInstitution] = useState(account.institution ?? "");
-  const [amount, setAmount] = useState(paiseToInput(account.opening_balance_paise));
-  const [date, setDate] = useState(account.opening_balance_date);
+  const [amount, setAmount] = useState(
+    account.opening_balance_paise === null ? "" : paiseToInput(account.opening_balance_paise));
+  const [date, setDate] = useState(account.opening_balance_date ?? threeMonthsAgoIso());
   const [errors, setErrors] = useState<FieldErrors>({});
 
   const submit = (event: FormEvent) => {
@@ -332,7 +343,7 @@ function EditAccountForm({ account, onDone }: { account: Account; onDone: () => 
           display_name: name.trim(),
           institution: institution.trim() || null,
           opening_balance_paise: paise,
-          opening_balance_date: date,
+          opening_balance_date: paise === null ? null : date,
         },
       },
       { onSuccess: onDone },

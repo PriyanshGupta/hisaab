@@ -51,7 +51,7 @@ def test_create_all_three_types(db: Database, asha: str) -> None:
     card: str = create(db, asha, type="credit_card", display_name="Regalia card", last4="8830", opening_balance=4700000)
     cash: str = create(db, asha, type="cash", display_name="Wallet", institution=None, last4=None, opening_balance=350000)
     with db.read_session() as s:
-        got: dict[str, tuple[str, str | None, int]] = {a.id: (a.type, a.last4, a.opening_balance) for a in accounts.list_accounts(s, asha)}
+        got: dict[str, tuple[str, str | None, int | None]] = {a.id: (a.type, a.last4, a.opening_balance) for a in accounts.list_accounts(s, asha)}
     assert got == {bank: ("bank", "5512", 8420000), card: ("credit_card", "8830", 4700000), cash: ("cash", None, 350000)}
 
 

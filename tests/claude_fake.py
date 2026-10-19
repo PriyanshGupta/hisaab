@@ -28,6 +28,7 @@ class FakeClaude:
     fail_next: list[int] = field(default_factory=list)
     requests: list[dict[str, Any]] = field(default_factory=list)
     raw_reply: dict[str, Any] | None = None  # a whole response body, to test malformed replies
+    raw_replies: list[dict[str, Any]] = field(default_factory=list)  # whole bodies, one per request, first
 
     @property
     def calls(self) -> int:
@@ -40,10 +41,13 @@ class FakeClaude:
         self.requests.append(request)
         if self.fail_next:
             return self.fail_next.pop(0), b'{"type": "error"}'
+        if self.raw_replies:
+            return 200, json.dumps(self.raw_replies.pop(0)).encode()
         if self.raw_reply is not None:
             return 200, json.dumps(self.raw_reply).encode()
         prompt: str = request["messages"][0]["content"]
-        tool: str = request["tool_choice"]["name"]
+        # forced: the named tool; auto: the request's own (non-server) tool, as a model finishing its answer would
+        tool: str = request["tool_choice"].get("name") or next(t["name"] for t in request["tools"] if "input_schema" in t)
         return 200, json.dumps({
             "type": "message", "role": "assistant", "model": request["model"], "stop_reason": "tool_use",
             "content": [{"type": "tool_use", "id": "toolu_1", "name": tool, "input": self.reply(prompt)}],

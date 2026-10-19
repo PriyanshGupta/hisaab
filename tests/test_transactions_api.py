@@ -7,6 +7,9 @@ from fastapi import FastAPI
 from fastapi.testclient import TestClient
 from httpx2 import Response
 
+from sqlalchemy import Connection
+
+from tests import factories as f
 from tests.conftest import login, make_user
 
 DAY: str = "2026-10-05"
@@ -115,3 +118,19 @@ def test_another_users_transaction_is_404_everywhere(app: FastAPI, asha: TestCli
         assert ravi.delete(f"/api/transactions/{t['id']}", params={"confirm": "true"}).status_code == 404
         assert enter(ravi, from_account_id=wallet).status_code == 422  # asha's wallet is not ravi's
     assert asha.get(f"/api/transactions/{t['id']}").json()["amount_paise"] == 40000
+
+
+def test_looks_right_confirms_a_flagged_transaction(app: FastAPI, asha: TestClient) -> None:
+    uid: str = asha.get("/api/auth/me").json()["id"]
+    with app.state.db.write_session() as s:
+        c: Connection = s.connection()
+        txn: str = f.transaction(c, uid, amount=3_000_000, status="needs_review", review_reason="amount over ₹25,000",
+                                 payee_id=f.payee(c)["id"], from_account_id=f.account(c, uid)["id"])["id"]
+    resp: Response = asha.post(f"/api/transactions/{txn}/acknowledge")
+    assert resp.status_code == 200 and resp.json()["status"] == "confirmed"
+
+
+def test_a_manual_entry_is_never_flagged_by_its_own_correction(asha: TestClient, wallet: str) -> None:
+    created: str = enter(asha, from_account_id=wallet).json()["id"]
+    resp: Response = asha.patch(f"/api/transactions/{created}", json={"amount_paise": 3_000_000})
+    assert resp.json()["status"] == "confirmed"  # the user is the source: no guardrail questions them

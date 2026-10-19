@@ -81,8 +81,8 @@ def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transpo
                                             .order_by(Sender.email_address)))
         mailbox: str = row.email_address
         if last is None:  # the backfill: from its start, or the earliest opening balance if that is older
-            anchors: list[str] = list(s.scalars(select(Account.opening_balance_date).where(
-                Account.user_id == user_id, Account.archived_at.is_(None))))
+            anchors: list[str] = [d for d in s.scalars(select(Account.opening_balance_date).where(
+                Account.user_id == user_id, Account.archived_at.is_(None))) if d is not None]
             first_day: date = min([backfill_start(s, user_id, started), *map(date.fromisoformat, anchors)])
             since = datetime.combine(first_day, day_time(), LOCAL_TZ)
     if last is not None:

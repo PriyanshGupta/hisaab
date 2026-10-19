@@ -1,0 +1,174 @@
+/* The review queue. Ruled ledger lines on paper; the lane counts are the one
+   bold element (Anek Latin set wide), a tally that ticks down as you work.
+   Raw bank strings are set at full width and size: they must be read (user, 2026-10-19).
+   Red only marks work remaining: the double rule under a lane with items. */
+.review { max-width: 56rem; }
+.review__head { align-items: baseline; }
+.review__tally { margin: 0; color: var(--ink-soft); }
+.review__tally-n {
+  font-size: var(--t-display);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" 125;
+  font-variant-numeric: tabular-nums;
+  color: var(--ink);
+}
+
+.lanes {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s5);
+  margin: 0 0 var(--s4);
+  border-bottom: 1px solid var(--rule);
+}
+.lane {
+  display: inline-flex;
+  align-items: baseline;
+  gap: var(--s2);
+  min-height: var(--touch);
+  padding: var(--s2) 0;
+  border: 0;
+  border-bottom: 3px solid transparent;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  cursor: pointer;
+}
+.lane__count {
+  font-size: var(--t-title);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" 125;
+  font-variant-numeric: tabular-nums;
+}
+.lane--open .lane__count { color: var(--margin); }
+.lane--open { border-bottom: 3px double color-mix(in srgb, var(--margin) 50%, transparent); }
+.lane[aria-selected="true"] { color: var(--ink); border-bottom-color: var(--ink); border-bottom-style: solid; }
+.lane:focus-visible { outline: none; box-shadow: var(--focus); }
+
+.review__status { margin: 0 0 var(--s3); }
+.review__empty { padding: var(--s5) 0; }
+.review__keys { margin-top: var(--s5); font-size: var(--t-small); }
+
+.groups {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+  border-top: 1px solid var(--rule);
+}
+.groups:focus-visible { outline: none; box-shadow: var(--focus); }
+.group {
+  padding: var(--s2) var(--s3);
+  border-bottom: 1px solid var(--rule);
+  border-left: 3px solid transparent;
+}
+.group--current { background: var(--accent-wash); border-left-color: var(--ink); }
+.group__line {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto auto;
+  align-items: center;
+  gap: var(--s3);
+  min-height: var(--touch);
+}
+.group__label {
+  font-weight: var(--w-strong);
+  overflow-wrap: anywhere;
+}
+.group__count { color: var(--ink-muted); font-size: var(--t-small); white-space: nowrap; }
+.group__actions { display: flex; gap: var(--s2); justify-content: flex-end; }
+.group__answer { padding: var(--s2) 0 var(--s3); }
+
+.answer { display: grid; gap: var(--s2); max-width: 26rem; }
+.answer__note { margin: 0; color: var(--ink-soft); font-size: var(--t-small); }
+.answer__list {
+  margin: 0;
+  padding: var(--s1) 0;
+  list-style: none;
+  max-height: 15rem;
+  overflow-y: auto;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+}
+.answer__option { padding: var(--s2) var(--s3); cursor: pointer; }
+.answer__option[aria-selected="true"] { background: var(--accent-wash); box-shadow: inset 3px 0 0 var(--accent); }
+.answer__empty { padding: var(--s2) var(--s3); color: var(--ink-muted); }
+
+.items { margin: var(--s2) 0 var(--s2) var(--s4); padding: 0; list-style: none; }
+.item { padding: var(--s2) 0; border-top: 1px dashed var(--rule); }
+.item__line {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) auto auto;
+  gap: var(--s3);
+  align-items: baseline;
+}
+.item__date { color: var(--ink-muted); font-size: var(--t-small); font-variant-numeric: tabular-nums; }
+.item__who { overflow-wrap: anywhere; }
+.item__reason { margin: var(--s1) 0 0; color: var(--ink-soft); font-size: var(--t-small); }
+.item__actions { display: flex; flex-wrap: wrap; gap: var(--s1) var(--s2); margin-top: var(--s1); }
+.item__actions .button { min-height: 32px; padding-block: 0; font-size: var(--t-small); }
+.item__correct { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: flex-end; margin-top: var(--s2); }
+.item__correct .field__label { display: grid; gap: var(--s1); }
+
+.auto { margin: 0 0 var(--s4); }
+.auto__head { display: flex; flex-wrap: wrap; align-items: center; gap: var(--s2) var(--s3); }
+.auto__head .muted { font-size: var(--t-small); }
+.auto__summary { margin: var(--s3) 0 var(--s2); }
+.auto__table { width: 100%; margin-bottom: var(--s2); }
+.auto__select { min-width: 10rem; }
+
+@media (max-width: 40rem) {
+  .group__line { grid-template-columns: minmax(0, 1fr) auto; }
+  .group__count { grid-column: 1; }
+  .group__total { grid-column: 2; grid-row: 1; }
+  .group__actions { grid-column: 1 / -1; justify-content: flex-start; }
+  .item__line { grid-template-columns: minmax(0, 1fr) auto; }
+  .item__date, .item__account { grid-column: 1; }
+  .items { margin-left: 0; }
+}
+
+/* Sorted: answered groups stay on screen, below what's left, quieter but still changeable (user, 2026-10-19). */
+.groups__heading {
+  margin: var(--s6) 0 var(--s2);
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+  color: var(--ink-soft);
+}
+.groups--sorted { border-top: 3px double var(--rule-strong); }
+.group--sorted .group__label { font-weight: var(--w-body); }
+.group__sorted-answer {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  align-items: baseline;
+  margin: 0 0 var(--s1);
+  color: var(--accent);
+  font-weight: var(--w-strong);
+}
+.group__auto {
+  padding: 0 var(--s2);
+  border-radius: var(--r-control);
+  background: var(--paper-sunk);
+  color: var(--ink-muted);
+  font-size: var(--t-small);
+  font-weight: var(--w-body);
+}
+.group__rename { display: flex; flex-wrap: wrap; gap: var(--s2); align-items: center; }
+.group__rename .field__input { max-width: 20rem; }
+
+/* Checks: where the transaction came from (user, 2026-10-19). */
+.item__email { margin-top: var(--s1); font-size: var(--t-small); color: var(--ink-soft); }
+.item__email-line { margin: 0; overflow-wrap: anywhere; }
+.item__email-links { display: flex; flex-wrap: wrap; gap: var(--s3); align-items: center; }
+.item__email-links .button { min-height: 32px; padding-block: 0; font-size: var(--t-small); }
+.item__email-text {
+  margin: var(--s2) 0 0;
+  padding: var(--s3);
+  max-height: 20rem;
+  overflow: auto;
+  white-space: pre-wrap;
+  overflow-wrap: anywhere;
+  font: inherit;
+  color: var(--ink);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+}

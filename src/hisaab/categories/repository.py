@@ -129,11 +129,13 @@ def payee_rule(session: Session, user_id: str, payee_id: str) -> str | None:
     )
 
 
-def set_payee_category(session: Session, user_id: str, payee_id: str, category_id: str | None) -> None:
+def set_payee_category(session: Session, user_id: str, payee_id: str, category_id: str | None,
+                       origin: str = "user", batch_id: str | None = None) -> None:
     """File every transaction of this payee under the category (None removes the rule).
 
     One row, not one edit per transaction: past and future transactions all
-    follow it, and per-transaction overrides are left alone (PRD §3.11).
+    follow it, and per-transaction overrides are left alone (PRD §3.11). origin says who wrote it:
+    the user (the default) or auto-categorize ('llm', in batch batch_id); a user's change takes it over.
     """
     if session.get(Payee, payee_id) is None:
         raise NotFound("No such payee")
@@ -144,7 +146,8 @@ def set_payee_category(session: Session, user_id: str, payee_id: str, category_i
     active_category(session, user_id, category_id)
     rule: PayeeCategory | None = session.get(PayeeCategory, (user_id, payee_id))
     if rule is None:
-        session.add(PayeeCategory(user_id=user_id, payee_id=payee_id, category_id=category_id))
+        session.add(PayeeCategory(user_id=user_id, payee_id=payee_id, category_id=category_id, origin=origin,
+                                  batch_id=batch_id))
     else:
-        rule.category_id = category_id
+        rule.category_id, rule.origin, rule.batch_id = category_id, origin, batch_id
     session.flush()

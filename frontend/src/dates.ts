@@ -29,6 +29,15 @@ export function formatInstantDate(isoUtc: string): string {
   return formatDate(indiaIsoDate.format(new Date(isoUtc)));
 }
 
+const indiaTime = new Intl.DateTimeFormat("en-GB", {
+  timeZone: "Asia/Kolkata", hour: "2-digit", minute: "2-digit", hour12: false,
+});
+
+/** "2026-10-05T03:44:00.000Z" -> "5 Oct 2026 at 09:14", India time: when an email arrived. */
+export function formatInstant(isoUtc: string): string {
+  return `${formatInstantDate(isoUtc)} at ${indiaTime.format(new Date(isoUtc))}`;
+}
+
 /** Today's local date as "YYYY-MM-DD". */
 export function todayIso(now: Date = new Date()): string {
   return toIso(now);

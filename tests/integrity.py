@@ -40,6 +40,8 @@ CHECKS: list[Check] = [
     _owner_matches("transactions", "refunds_transaction_id", "transactions"),
     _owner_matches("transaction_edits", "transaction_id", "transactions"),
     _owner_matches("payee_categories", "category_id", "categories"),
+    _owner_matches("payee_suggestions", "category_id", "categories"),
+    _owner_matches("raw_payee_suggestions", "category_id", "categories"),
     _owner_matches("balance_observations", "account_id", "accounts"),
     _owner_matches("balance_observations", "source_id", "sources"),
     _owner_matches("balance_deltas", "account_id", "accounts"),

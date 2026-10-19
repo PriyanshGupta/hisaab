@@ -35,7 +35,7 @@ export function SetupPage() {
   if (setup.isPending) return <p className="muted">Loading…</p>;
   if (setup.isError) return <p className="form-error" role="alert">{describeError(setup.error)}</p>;
   const { step } = setup.data;
-  if (step === "categorize") return <Navigate to="/categorize" replace />;
+  if (step === "categorize") return <Navigate to="/review?lane=categories" replace />;
   if (step === "done") return <Navigate to="/" replace />;
 
   const shown: Shown = step === "backfill" ? "History"
@@ -96,23 +96,24 @@ function AccountsStep({ setup, onContinue }: { setup: Setup; onContinue: () => v
 function BalancesStep({ setup, onContinue }: { setup: Setup; onContinue: () => void }) {
   const accounts = useAccounts();
   const active = (accounts.data ?? []).filter((a) => a.archived_at === null);
-  const late = (a: Account) => a.opening_balance_date > setup.backfill_start; // ISO dates compare as strings
+  // ISO dates compare as strings; an account with no opening balance has nothing to check
+  const late = (a: Account) => a.opening_balance_date !== null && a.opening_balance_date > setup.backfill_start;
 
   return (
     <section className="setup-step" aria-labelledby="step-heading">
       <h2 id="step-heading" className="setup-step__title">Opening balances</h2>
       <p>
         Each balance should be as of {formatDate(setup.backfill_start)} or earlier, so that the three months of
-        history arriving next add up from it. A card's figure is what you owed.
+        history arriving next add up from it. A card's figure is what you owed. Opening balances are optional.
       </p>
       <table className="ledger">
         <tbody>
           {active.map((a) => (
             <tr key={a.id}>
               <td>{a.display_name}</td>
-              <td className="amount">{formatPaise(a.opening_balance_paise)}</td>
+              <td className="amount">{a.opening_balance_paise === null ? "" : formatPaise(a.opening_balance_paise)}</td>
               <td>
-                {formatDate(a.opening_balance_date)}
+                {a.opening_balance_date === null ? "No opening balance" : formatDate(a.opening_balance_date)}
                 {late(a) && (
                   <span className="form-error setup-late">
                     {" "}after {formatDate(setup.backfill_start)}: change it on the <Link to="/accounts">Accounts</Link>{" "}

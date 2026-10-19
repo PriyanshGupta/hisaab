@@ -115,37 +115,6 @@ def test_a_backfill_that_found_no_transactions_is_done(client: TestClient, app: 
     assert step(client) == "done"  # the (empty) report, not a categorize screen with nothing on it
 
 
-# --- the categorize groups ----------------------------------------------------------------------
-
-def test_uncategorized_groups_by_payee_and_counts_the_unnamed(client: TestClient, app: FastAPI) -> None:
-    uid: str = me(client)
-    with write(app) as s:
-        c: Connection = s.connection()
-        shop: str = f.payee(c, normalized_name="Corner Shop")["id"]
-        tea: str = f.payee(c, normalized_name="Tea Stall")["id"]
-        food: str = f.category(c, uid, name="Food")["id"]
-        f.payee_category(c, user_id=uid, payee_id=tea, category_id=food)
-        for _ in range(3):
-            f.transaction(c, uid, payee_id=shop)
-        f.transaction(c, uid, payee_id=shop, kind="refund", to_account_id=f.account(c, uid)["id"])
-        f.transaction(c, uid, payee_id=tea)  # categorized by its rule
-        f.transaction(c, uid)
-        f.transaction(c, uid, payee_raw="UNKNOWN MERCHANT")
-        bank: str = f.account(c, uid)["id"]
-        f.transaction(c, uid, kind="transfer", to_account_id=bank)  # a transfer never takes a category
-    assert client.get("/api/setup/uncategorized").json() == {
-        "groups": [{"payee_id": shop, "payee_name": "Corner Shop", "count": 4}], "unnamed": 2}
-
-
-def test_another_users_transactions_never_count(client: TestClient, app: FastAPI) -> None:
-    with write(app) as s:
-        c: Connection = s.connection()
-        other: str = f.user(c)["id"]
-        f.transaction(c, other, payee_id=f.payee(c)["id"])
-        f.transaction(c, other)
-    assert client.get("/api/setup/uncategorized").json() == {"groups": [], "unnamed": 0}
-
-
 # --- the order is enforced: no Gmail before accounts and their balances --------------------------
 
 @pytest.fixture
@@ -178,6 +147,11 @@ def test_connect_with_a_balance_dated_after_the_start_names_the_account(asha: Te
 
 def test_connect_with_balances_on_the_start_goes_ahead(asha: TestClient, gmail_app: FastAPI) -> None:
     add_account(asha, "HDFC Savings", start_of(gmail_app, me(asha)))
+    assert asha.post("/api/gmail/connect").status_code == 200
+
+
+def test_an_account_without_an_opening_balance_does_not_hold_up_connecting(asha: TestClient) -> None:
+    assert asha.post("/api/accounts", json={"type": "cash", "display_name": "Wallet"}).status_code == 201
     assert asha.post("/api/gmail/connect").status_code == 200
 
 
