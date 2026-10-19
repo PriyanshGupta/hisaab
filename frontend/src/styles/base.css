@@ -81,6 +81,14 @@ a {
   line-height: var(--lh-tight);
 }
 
+/* A page's secondary destination, at the heading's right (e.g. Transactions -> Upload a statement). */
+.page-head__link {
+  font-weight: var(--w-strong);
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+  white-space: nowrap;
+}
+
 /* Empty states: say what will appear and what makes it appear. */
 .empty {
   max-width: 34rem;

@@ -1,0 +1,368 @@
+/*
+ * Statement upload (slice 19). One bold thing: the check, the statement's own arithmetic set as a
+ * column sum and closed on a double rule the way a ledger closes a column. Its left edge carries
+ * the state as structure as well as words: a green rule when the rows add up, the red double
+ * margin rule (the app's one motif) when they don't, a grey rule on a sunk panel when the statement
+ * prints nothing to check against. Everything else is quiet ledger ruling. All selectors sit under
+ * .statements so the short names never meet another screen's.
+ */
+.statements {
+  max-width: 52rem;
+}
+
+.statements .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- upload ---------- */
+.statements .stmt-upload {
+  display: grid;
+  gap: var(--s4);
+  max-width: 30rem;
+}
+.statements .stmt-upload__lead {
+  color: var(--ink-soft);
+  max-width: 34rem;
+}
+.statements .stmt-upload__file {
+  padding: var(--s2);
+  background: var(--paper-raised);
+}
+.statements .stmt-upload__file::file-selector-button {
+  margin-right: var(--s3);
+  padding: var(--s1) var(--s3);
+  font: inherit;
+  font-weight: var(--w-strong);
+  color: var(--ink);
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+  cursor: pointer;
+}
+
+.statements .stmt-open {
+  margin-bottom: var(--s6);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--rule);
+}
+.statements .stmt-open__title {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+  margin-bottom: var(--s2);
+}
+.statements .stmt-open__list {
+  display: grid;
+  gap: var(--s2);
+  padding: 0;
+  list-style: none;
+}
+.statements .stmt-open__list a {
+  font-weight: var(--w-strong);
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+}
+
+/* ---------- a preview ---------- */
+.statements .stmt {
+  display: grid;
+  gap: var(--s6);
+}
+.statements .stmt__head {
+  display: grid;
+  gap: var(--s2);
+}
+.statements .stmt__title {
+  font-size: var(--t-display);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+  line-height: var(--lh-tight);
+}
+.statements .stmt__title-row {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+.statements .stmt__meta {
+  color: var(--ink-muted);
+  max-width: 40rem;
+}
+
+.statements .stmt-pick {
+  display: grid;
+  gap: var(--s2);
+}
+.statements .stmt-pick__choices {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+  margin-top: var(--s2);
+}
+.statements .stmt-pick__choice {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--touch);
+  padding: 0 var(--s4);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  font-weight: var(--w-strong);
+  cursor: pointer;
+}
+.statements .stmt-pick__choice:hover {
+  border-color: var(--ink);
+}
+.statements .stmt-pick__choice:has(input:checked) {
+  border-color: var(--accent);
+  background: var(--accent-wash);
+}
+.statements .stmt-pick__choice:has(input:focus-visible) {
+  box-shadow: var(--focus);
+}
+.statements .stmt-pick__choice input {
+  accent-color: var(--accent);
+  margin: 0;
+}
+
+/* ---------- the check ---------- */
+.statements .stmt-check {
+  position: relative;
+  display: grid;
+  gap: var(--s4);
+  padding: var(--s2) 0 var(--s2) var(--s6);
+}
+.statements .stmt-check::before {
+  content: "";
+  position: absolute;
+  inset: 0 auto 0 var(--s2);
+  border-left: 2px solid var(--accent);
+}
+.statements .stmt-check--failed::before {
+  width: calc(var(--margin-rule-gap) + 2px);
+  border-inline: 1px solid var(--margin);
+}
+.statements .stmt-check--unavailable {
+  padding: var(--s4) var(--s4) var(--s4) var(--s6);
+  background: var(--paper-sunk);
+  border-radius: 0 var(--r-control) var(--r-control) 0;
+}
+.statements .stmt-check--unavailable::before {
+  border-left-color: var(--ink-muted);
+}
+.statements .stmt-check__sentence {
+  font-size: var(--t-lead);
+  font-weight: 520;
+  line-height: var(--lh-tight);
+  max-width: 36rem;
+}
+.statements .stmt-check__advice {
+  font-weight: var(--w-strong);
+}
+
+.statements .stmt-sum {
+  width: min(100%, 26rem);
+  border-collapse: collapse;
+  font-variation-settings: "wdth" var(--wdth-data);
+  line-height: var(--lh-data);
+}
+.statements .stmt-sum th {
+  text-align: left;
+  font-weight: var(--w-body);
+  color: var(--ink-soft);
+  padding: var(--s1) 0;
+}
+.statements .stmt-sum td {
+  text-align: right;
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+  padding: var(--s1) 0 var(--s1) var(--s4);
+}
+.statements .stmt-sum__sign {
+  display: inline-block;
+  width: 1.1em;
+  color: var(--ink-muted);
+}
+.statements .stmt-sum__total th,
+.statements .stmt-sum__total td {
+  padding-top: var(--s2);
+  border-top: 3px double var(--ink);
+  font-size: var(--t-lead);
+  font-weight: var(--w-strong);
+  color: var(--ink);
+}
+.statements .stmt-sum__gap th,
+.statements .stmt-sum__gap td {
+  color: var(--margin);
+  font-weight: var(--w-strong);
+}
+
+/* The full report: the diagnostic as recorded, for finding a parser bug. */
+.statements .stmt-report summary {
+  width: fit-content;
+  color: var(--ink-soft);
+  font-weight: var(--w-strong);
+  cursor: pointer;
+  border-radius: var(--r-control);
+}
+.statements .stmt-report summary:hover {
+  color: var(--ink);
+  text-decoration: underline;
+  text-underline-offset: 0.18em;
+}
+.statements .stmt-report summary:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.statements .stmt-report[open] {
+  display: grid;
+  gap: var(--s3);
+}
+.statements .stmt-report__json {
+  max-height: 24rem;
+  overflow: auto;
+  padding: var(--s3);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  font-family: ui-monospace, "SFMono-Regular", Menlo, Consolas, monospace;
+  font-size: var(--t-small);
+  line-height: 1.5;
+}
+
+/* Raw cells, one box per column; an empty box is hatched so its emptiness is visible. */
+.statements .stmt-raw {
+  display: block;
+  max-width: 100%;
+  overflow-x: auto;
+  border-collapse: collapse;
+  font-size: var(--t-small);
+  font-variation-settings: "wdth" var(--wdth-data);
+}
+.statements .stmt-raw caption {
+  text-align: left;
+  color: var(--ink-muted);
+  padding-bottom: var(--s1);
+}
+.statements .stmt-raw th {
+  text-align: left;
+  font-weight: var(--w-strong);
+  padding: var(--s1) var(--s3) var(--s1) 0;
+  white-space: nowrap;
+  vertical-align: top;
+}
+.statements .stmt-raw__why {
+  display: block;
+  font-weight: var(--w-body);
+  color: var(--ink-muted);
+}
+.statements .stmt-raw td {
+  min-width: 3rem;
+  padding: var(--s1) var(--s2);
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-raised);
+  vertical-align: top;
+}
+.statements .stmt-raw td.stmt-raw__empty {
+  background: repeating-linear-gradient(135deg, var(--paper-raised) 0 5px, var(--rule) 5px 6px);
+}
+
+/* ---------- the three groups ---------- */
+.statements .stmt-group {
+  display: grid;
+  gap: var(--s2);
+}
+.statements .stmt-group__title {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+  line-height: var(--lh-tight);
+}
+.statements .stmt-group--unread .stmt-group__title {
+  color: var(--margin); /* not merged: needs the person's attention */
+}
+.statements .stmt-group--clear {
+  color: var(--ink-muted);
+}
+.statements .stmt-rows__date {
+  width: 1%;
+  white-space: nowrap;
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.statements .stmt-rows__what {
+  overflow-wrap: anywhere;
+}
+.statements .stmt-rows__payee {
+  font-weight: var(--w-strong);
+}
+.statements .stmt-rows__note {
+  display: block;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.statements .stmt-rows__was {
+  display: block;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.statements .stmt-rows__was--kept {
+  color: var(--accent);
+  font-weight: var(--w-strong);
+}
+
+/* ---------- merge (at the top of a preview) ---------- */
+/* The decision heads the preview: under the account name, closed off by a rule from the evidence below. */
+.statements .stmt__actions {
+  display: grid;
+  gap: var(--s3);
+  margin-top: var(--s2);
+  padding-bottom: var(--s4);
+  border-bottom: 1px solid var(--rule-strong);
+}
+.statements .stmt__anyway {
+  background: var(--paper-raised);
+  color: var(--ink);
+  border-color: var(--field-border);
+}
+.statements .stmt__anyway:hover {
+  border-color: var(--ink);
+}
+.statements .stmt-confirm {
+  display: grid;
+  gap: var(--s2);
+}
+.statements .stmt-confirm p {
+  font-weight: var(--w-strong);
+}
+.statements .stmt__result {
+  font-size: var(--t-lead);
+  font-weight: var(--w-strong);
+}
+.statements .stmt-gone {
+  display: grid;
+  gap: var(--s3);
+  justify-items: start;
+}
+
+@media (max-width: 640px) {
+  .statements .stmt-check {
+    padding-left: var(--s5);
+  }
+  .statements .stmt-check::before {
+    left: var(--s1);
+  }
+  .statements .stmt-rows__narration {
+    display: -webkit-box;
+    -webkit-line-clamp: 2;
+    -webkit-box-orient: vertical;
+    overflow: hidden;
+  }
+  .statements .stmt__actions .button {
+    min-height: var(--touch);
+  }
+}

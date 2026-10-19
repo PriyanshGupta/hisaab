@@ -11,6 +11,7 @@ import { NotFoundPage } from "./pages/NotFoundPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SetupPage } from "./pages/SetupPage";
+import { StatementsPage } from "./pages/StatementsPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { AppShell } from "./shell/AppShell";
 
@@ -25,6 +26,7 @@ export const routes: RouteObject[] = [
     children: [
       { index: true, element: <HomePage /> },
       { path: "transactions", element: <TransactionsPage /> },
+      { path: "statements", element: <StatementsPage /> },
       { path: "add", element: <AddPage /> },
       { path: "accounts", element: <AccountsPage /> },
       { path: "categories", element: <CategoriesPage /> },

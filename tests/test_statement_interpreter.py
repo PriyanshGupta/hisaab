@@ -121,17 +121,17 @@ def test_no_header_anywhere_fails() -> None:
 # --- line_pattern rows -------------------------------------------------------------------------
 
 CARD_LINES: list[tuple[str, str | None, bool]] = [
-    ("17/07/2026| 22:11 ZOMATO GURGAON", "1,885.07", False),
+    ("04/07/2026| 19:42 CORNER CAFE PUNE", "1,234.56", False),
     ("NAME SURNAME [CKYC ID : 1 ]", None, False),
-    ("18/07/2026| 00:28 CREDIT CARD PAYMENT", "54,295.00", True),
+    ("05/07/2026| 09:15 CREDIT CARD PAYMENT", "12,345.00", True),
 ]
 
 
 def test_line_pattern_rows_use_named_groups_and_the_plus_sign_marks_credits() -> None:
     result: StatementResult = run(LINES, card_page(CARD_LINES, first=True))
     assert [(r.date, r.time, r.narration, r.direction, r.amount) for r in result.rows] == [
-        ("2026-07-17", "22:11:00", "ZOMATO GURGAON", "debit", 188507),
-        ("2026-07-18", "00:28:00", "CREDIT CARD PAYMENT", "credit", 5429500),
+        ("2026-07-04", "19:42:00", "CORNER CAFE PUNE", "debit", 123456),
+        ("2026-07-05", "09:15:00", "CREDIT CARD PAYMENT", "credit", 1234500),
     ]
     assert result.rows_skipped == 1 and result.account == ("card_last4", "5678")
 
@@ -144,8 +144,8 @@ def test_an_unmatched_line_in_a_line_pattern_table_is_unparseable_when_there_is_
 def test_an_unmatched_line_continues_the_row_above_with_empty_date_column() -> None:
     spec: dict[str, Any] = copy.deepcopy(LINES)
     spec["row_rules"]["continuation"] = "empty_date_column"
-    result: StatementResult = run(spec, card_page([CARD_LINES[0], ("BANGALORE", None, False)], first=True))
-    assert result.rows[0].narration == "ZOMATO GURGAONBANGALORE" and result.unparseable == []
+    result: StatementResult = run(spec, card_page([CARD_LINES[0], ("KOTHRUD", None, False)], first=True))
+    assert result.rows[0].narration == "CORNER CAFE PUNEKOTHRUD" and result.unparseable == []
 
 
 # --- detection, binding ------------------------------------------------------------------------
@@ -177,7 +177,7 @@ def test_separate_debit_credit(cells: dict[str, Any], out: tuple[str, str]) -> N
 
 @pytest.mark.parametrize(("text", "unsigned", "out"), [
     ("+ ₹ 168.31", "debit", ("credit", "₹ 168.31")),
-    ("₹ 1,885.07", "debit", ("debit", "₹ 1,885.07")),
+    ("₹ 1,234.56", "debit", ("debit", "₹ 1,234.56")),
     ("-1,250.00", "credit", ("debit", "1,250.00")),
     ("1,250.00", "credit", ("credit", "1,250.00")),
 ])
@@ -226,3 +226,14 @@ def test_without_resumes_after_a_headerless_page_contributes_nothing() -> None:
 def test_a_zero_amount_row_is_unparseable() -> None:
     result: StatementResult = run(RULED, ruled_page([ROWS[0], ("02/07/26", "REVERSAL", "9", "0.00", "", "")], first=True))
     assert len(result.rows) == 1 and result.unparseable[0]["reason"] == "amount is zero"
+
+
+def test_a_credit_matching_payment_matching_is_a_card_payment_and_a_merchant_credit_is_not() -> None:
+    spec: dict[str, Any] = copy.deepcopy(LINES)
+    spec["row_rules"]["payment_matching"] = ["^PAYMENT RECEIVED"]
+    result: StatementResult = run(spec, card_page([("01/09/2026| 10:00 PAYMENT RECEIVED THANK YOU", "500.00", True),
+                                                   ("02/09/2026| 11:00 SHOP REFUND", "50.00", True),
+                                                   ("03/09/2026| 12:00 PAYMENT RECEIVED BUT A DEBIT", "1,000.00", False)],
+                                                  first=True))
+    assert [(r.narration, r.payment) for r in result.rows] == [
+        ("PAYMENT RECEIVED THANK YOU", True), ("SHOP REFUND", False), ("PAYMENT RECEIVED BUT A DEBIT", False)]

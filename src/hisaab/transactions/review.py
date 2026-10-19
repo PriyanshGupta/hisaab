@@ -66,11 +66,12 @@ def _parse_reasons(stored: list[str], edited: set[str]) -> list[str]:
     return out
 
 
-def _contradictions(session: Session, txn: Transaction, edits: Sequence[TransactionEdit]) -> list[str]:
-    """§6.6: a statement disagreeing with a value the user set. The edit still wins; the user decides."""
-    said: dict[str, str] = {"amount": str(txn.amount), "transaction_date": txn.transaction_date}
-    return [f"the statement disagrees with your {'date' if e.field == 'transaction_date' else 'amount'}"
-            for e in edits if e.field in said and e.new_value != said[e.field]]
+def _contradictions(txn: Transaction, statement: Source, edits: Sequence[TransactionEdit]) -> list[str]:
+    """§6.6, PRD §4.2: a statement arriving after the user set the amount, and disagreeing. The edit still
+    wins; the user decides. An edit made after the statement is the user's answer to it, not a disagreement.
+    Amount only: the statement's date is a posting date and never becomes transaction_date (amendment 11)."""
+    return ["the statement disagrees with your amount" for e in edits
+            if e.field == "amount" and e.new_value != str(txn.amount) and e.updated_at < statement.ingested_at]
 
 
 def _not_mine(session: Session, user_id: str, raw: str) -> bool:
@@ -105,7 +106,7 @@ def review_reasons(session: Session, txn: Transaction, threshold: int, doubt: st
     if t.amount > threshold:
         reasons.append(f"amount over ₹{threshold // 100:,}")
     if primary.kind == "statement":
-        reasons.extend(_contradictions(session, txn, edits))
+        reasons.extend(_contradictions(txn, primary, edits))
     if doubt is not None and not transfer:
         reasons.append(doubt)
     if t.review_acknowledged is not None and t.review_acknowledged == str(t.amount):

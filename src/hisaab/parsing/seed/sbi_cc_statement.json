@@ -13,7 +13,8 @@
     "amount_style": "cr_dr_suffix",
     "unsigned_means": "debit",
     "continuation": "none",
-    "skip_matching": ["^Date$", "^for Statement Period:", "^TRANSACTIONS FOR "]
+    "skip_matching": ["^Date$", "^for Statement Period:", "^TRANSACTIONS FOR "],
+    "payment_matching": ["^PAYMENT RECEIVED"]
   },
   "field_transforms": { "date": "date:%d %b %y", "amount": "inr_to_paise" },
   "declared_balances": {

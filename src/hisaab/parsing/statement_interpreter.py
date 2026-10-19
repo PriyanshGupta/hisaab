@@ -9,7 +9,8 @@
       skip_matching dropped and counted; stop_at ends the whole statement
       continuation  empty_date_column: a line with no date continues the row above,
                     across a page break too; none: such a line is unparseable
-    finish rows     amount style -> direction + amount text, then field transforms
+    finish rows     amount style -> direction + amount text, then field transforms;
+                    a card credit matching payment_matching is a bill payment
     validate        declared balances vs the rows (validation.py, §4.8)
 
 Structural surprises (no header row, a column count or header label that does
@@ -49,6 +50,7 @@ class StatementRow:
     direction: str  # debit | credit
     amount: int  # paise, positive
     balance: int | None
+    payment: bool = False  # a card bill payment received (spec payment_matching), never a refund
 
 
 class UnparseableRow(TypedDict):
@@ -302,15 +304,17 @@ def _finish(spec: StatementSpec, raw: _RawRow) -> StatementRow:
     amount: int = as_paise(amount_key, amount_text)
     if amount <= 0:
         raise RowError("amount is zero")
+    narration: str = fields.get("narration", "").strip()
     time_text: str = fields.get("time", "")
     balance_text: str = fields.get("balance", "")
     return StatementRow(
         page=raw.page,
         date=as_text("date", fields["date"]),
         time=as_text("time", time_text) if time_text else None,
-        narration=fields.get("narration", "").strip(),
+        narration=narration,
         reference=fields.get("reference", "").strip() or None,
         direction=direction,
         amount=amount,
         balance=as_paise("balance", balance_text) if balance_text else None,
+        payment=direction == "credit" and any(_matches(p, narration) for p in spec.payment_matching),
     )

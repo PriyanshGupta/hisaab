@@ -38,7 +38,7 @@ diagnostic, and discards content when routing said so (§3.7).
 """
 
 import json
-from collections.abc import Sequence
+from collections.abc import Collection, Sequence
 from dataclasses import dataclass, field
 from datetime import date, timedelta
 from typing import Any
@@ -57,6 +57,7 @@ from hisaab.models import (
     TransactionEdit,
     TransactionSource,
 )
+from hisaab.parsing.statement_interpreter import StatementRow
 from hisaab.parsing.templates import record_outcome
 from hisaab.payees.normalization import PatternRule, load_rules, match_payee
 from hisaab.pipeline.routing import Routed
@@ -95,6 +96,7 @@ class _Record:
     transaction_date: str
     transaction_time: str | None
     sender: str | None
+    from_statement: bool = False  # a statement's reference identifies only within its own account and dates
 
 
 @dataclass
@@ -145,7 +147,14 @@ def apply(session: Session, user_id: str, batch: Sequence[tuple[str, Routed]]) -
         run.counts.unparsed += routed.state == "failed"
         run.counts.pending_llm += routed.state == "pending_llm"
     session.flush()
+    _settle(run)
+    run.counts.transactions_new = len(run.created - run.deleted)
+    run.counts.transactions_updated = len(run.reparsed - run.created - run.deleted)
+    return run.counts
 
+
+def _settle(run: _Run) -> None:
+    """The pipeline's last two stages over what this run touched: detect transfers, then resolve status."""
     for txn in _to_examine(run):
         if txn.id not in run.deleted:
             doubt: str | None = _pair(run, txn)
@@ -157,10 +166,7 @@ def apply(session: Session, user_id: str, batch: Sequence[tuple[str, Routed]]) -
         if txn.status != "reversed":
             txn.status = status
         run.counts.needs_review += txn.id in run.placed and status == "needs_review"
-    run.counts.transactions_new = len(run.created - run.deleted)
-    run.counts.transactions_updated = len(run.reparsed - run.created - run.deleted)
-    session.flush()
-    return run.counts
+    run.session.flush()
 
 
 # --- parse and deduplicate ----------------------------------------------------------------------------
@@ -226,30 +232,46 @@ def _has_side(side: str) -> ColumnElement[bool]:
     return or_(getattr(Transaction, leg).is_not(None), getattr(Transaction, unresolved).is_not(None), plain)
 
 
-def _duplicate_of(run: _Run, record: _Record) -> Transaction | None:
-    """§6.2: the transaction this record is another sighting of, strongest signal first."""
+def _duplicate_of(run: _Run, record: _Record, exclude: Collection[str] = ()) -> Transaction | None:
+    """§6.2: the transaction this record is another sighting of, strongest signal first. `exclude`: transactions
+    another row of the same statement already claimed (two equal rows are two transactions)."""
     mine: Any = select(Transaction).where(Transaction.user_id == run.user_id, _has_side(record.side))
-    if record.reference_number is not None:
-        same_ref: Transaction | None = run.session.scalars(
-            mine.where(Transaction.reference_number == record.reference_number)).first()
-        if same_ref is not None:
-            return same_ref
-    if record.account_id is None and record.unresolved is None:
-        return None  # no account to be equal to: account equality is hard
     leg, unresolved = LEGS[record.side]
     day: date = date.fromisoformat(record.transaction_date)
+    window: tuple[str, str] = ((day - timedelta(days=run.dedup_days)).isoformat(),
+                               (day + timedelta(days=run.dedup_days)).isoformat())
+    if record.reference_number is not None:
+        by_ref: Any = mine.where(_same_reference(record.reference_number))
+        if record.from_statement:
+            # A UTR is unique everywhere; a statement's reference column also holds cheque numbers, ATM
+            # sequences and placeholders that repeat. A statement is one account (§4.7), so its reference
+            # identifies only on that account, near that date (whole-branch review, 2026-10-19).
+            by_ref = by_ref.where(getattr(Transaction, leg) == record.account_id,
+                                  Transaction.transaction_date.between(*window))
+        same_ref: list[Transaction] = [t for t in run.session.scalars(by_ref) if t.id not in exclude]
+        if same_ref:
+            return min(same_ref, key=lambda t: (abs((date.fromisoformat(t.transaction_date) - day).days), t.id))
+    if record.account_id is None and record.unresolved is None:
+        return None  # no account to be equal to: account equality is hard
     near: Any = mine.where(
         getattr(Transaction, leg) == record.account_id if record.account_id
         else getattr(Transaction, unresolved) == record.unresolved,
         Transaction.amount.between(record.amount - run.tolerance, record.amount + run.tolerance),
-        Transaction.transaction_date.between((day - timedelta(days=run.dedup_days)).isoformat(),
-                                             (day + timedelta(days=run.dedup_days)).isoformat()))
+        Transaction.transaction_date.between(*window))
     if record.reference_number is not None:
         near = near.where(Transaction.reference_number.is_(None))  # two different references: two transactions
-    candidates: list[Transaction] = [t for t in run.session.scalars(near)
-                                     if record.sender is None or record.sender not in _senders(run.session, t)]
+    candidates: list[Transaction] = [t for t in run.session.scalars(near) if t.id not in exclude
+                                     and (record.sender is None or record.sender not in _senders(run.session, t))]
     candidates.sort(key=lambda t: abs((date.fromisoformat(t.transaction_date) - day).days))
     return candidates[0] if candidates else None
+
+
+def _same_reference(reference: str) -> ColumnElement[bool]:
+    """Equal references. All-digit ones compare without leading zeros: the HDFC savings statement prints a
+    UPI reference zero-padded to 16 digits where the alert email gives the 12-digit number."""
+    if reference.isdigit():
+        return func.ltrim(Transaction.reference_number, "0") == reference.lstrip("0")
+    return Transaction.reference_number == reference
 
 
 def _senders(session: Session, txn: Transaction) -> set[str]:
@@ -362,11 +384,21 @@ def _absorb(run: _Run, survivor: Transaction, absorbed: Transaction) -> None:
     for leg, unresolved in LEGS.values():
         if getattr(survivor, leg) is None and getattr(survivor, unresolved) is None:
             setattr(survivor, leg, getattr(absorbed, leg))
-    if PRECEDENCE[session.get_one(Source, absorbed.primary_source_id).kind] > \
-            PRECEDENCE[session.get_one(Source, survivor.primary_source_id).kind]:
+    absorbed_kind: str = session.get_one(Source, absorbed.primary_source_id).kind
+    if PRECEDENCE[absorbed_kind] > PRECEDENCE[session.get_one(Source, survivor.primary_source_id).kind]:
         survivor.primary_source_id = absorbed.primary_source_id
-        for name in ("amount", "transaction_date", "transaction_time", "payee_raw", "payee_id", "reference_number"):
-            setattr(survivor, name, getattr(absorbed, name))
+        if absorbed_kind == "statement":
+            # As a direct statement match (apply_statement): amount and posted date from the statement; the
+            # email's transaction date (amendment 11), time, reference and payee stay when it has them.
+            survivor.amount = absorbed.amount
+            survivor.posted_date = absorbed.posted_date or absorbed.transaction_date
+            survivor.transaction_time = survivor.transaction_time or absorbed.transaction_time
+            survivor.reference_number = survivor.reference_number or absorbed.reference_number
+            if survivor.payee_raw is None:
+                survivor.payee_raw, survivor.payee_id = absorbed.payee_raw, absorbed.payee_id
+        else:
+            for name in ("amount", "transaction_date", "transaction_time", "payee_raw", "payee_id", "reference_number"):
+                setattr(survivor, name, getattr(absorbed, name))
     links: list[TransactionSource] = list(session.scalars(
         select(TransactionSource).where(TransactionSource.transaction_id == absorbed.id)))
     for link in links:
@@ -405,6 +437,91 @@ def pair_resolved(session: Session, user_id: str, txn_ids: Sequence[str]) -> dic
     session.flush()
     return run.merged_into
 
+
+# --- statements (tech-design §7) ---------------------------------------------------------------------
+
+def _statement_record(run: _Run, account_id: str, row: StatementRow, identifying: bool = True) -> _Record:
+    """One statement row as a record. The account is the statement's own, bound once from its header (§4.7).
+    A card bill payment names no payee, so kind_from_legs makes it a transfer, not a refund (ruling 2026-10-19)."""
+    payee_raw: str | None = None if row.payment else (row.narration or None)
+    return _Record(side="to" if row.direction == "credit" else "from", amount=row.amount, account_id=account_id,
+                   unresolved=None, other_account_id=None, payee_raw=payee_raw,
+                   payee_id=match_payee(run.rules, payee_raw) if payee_raw else None,
+                   reference_number=row.reference if identifying else None, transaction_date=row.date,
+                   transaction_time=row.time, sender=None, from_statement=True)
+
+
+def _identifying(rows: Sequence[StatementRow]) -> list[bool]:
+    """Per row, whether its reference can identify it: not when absent, all zeros, or repeated in the statement."""
+    refs: list[str | None] = [r.reference for r in rows]
+    return [r.reference is not None and r.reference.strip("0") != "" and refs.count(r.reference) == 1 for r in rows]
+
+
+def match_statement_rows(session: Session, user_id: str, account_id: str,
+                         rows: Sequence[StatementRow]) -> list[str | None]:
+    """The preview's forecast: per row, the transaction it is another sighting of, or None (new). Each
+    transaction is claimed by one row at most. Read-only; the merge works it out again at merge time."""
+    run: _Run = _new_run(session, user_id)
+    claimed: set[str] = set()
+    found: list[str | None] = []
+    for row, identifying in zip(rows, _identifying(rows), strict=True):
+        txn: Transaction | None = _duplicate_of(run, _statement_record(run, account_id, row, identifying),
+                                                exclude=claimed)
+        if txn is not None:
+            claimed.add(txn.id)
+        found.append(txn.id if txn else None)
+    return found
+
+
+
+@dataclass
+class StatementCounts:
+    new: int = 0
+    matched: int = 0
+    needs_review: int = 0
+
+
+def apply_statement(session: Session, user_id: str, source: Source, account_id: str,
+                    rows: Sequence[StatementRow]) -> StatementCounts:
+    """§7 step 6, inside the caller's write transaction. Every row is matched again here (a sync may have
+    run since the preview), one transaction per row at most. A match takes the statement as its primary
+    Source and its amount; the statement's date becomes posted_date while transaction_date keeps the
+    email's parsed value (amendment 11), and payee stays as it was (ruling 2026-10-19: statements are
+    authoritative on amount and date, PRD §4.2). Edits live in the overlay and are never touched; a
+    statement contradicting one is flagged by review_reasons. A row with no match is a new transaction."""
+    run: _Run = _new_run(session, user_id)
+    identifying: list[bool] = _identifying(rows)
+    claimed: set[str] = set()
+    matched: int = 0
+    for ordinal, row in enumerate(rows):
+        record: _Record = _statement_record(run, account_id, row, identifying[ordinal])
+        txn: Transaction | None = _duplicate_of(run, record, exclude=claimed)
+        if txn is not None:
+            matched += 1
+            if PRECEDENCE[session.get_one(Source, txn.primary_source_id).kind] <= PRECEDENCE["statement"]:
+                txn.primary_source_id = source.id  # over an email, and over an earlier upload of a statement
+                txn.amount, txn.posted_date = row.amount, row.date
+                txn.reference_number = txn.reference_number or row.reference
+                txn.transaction_time = txn.transaction_time or row.time
+            _write(txn, record, primary=False)  # fills the statement's own side when it is still empty
+            txn.kind = kind_from_legs(session, txn, txn.kind)
+        else:
+            txn = Transaction(user_id=user_id, primary_source_id=source.id, status="confirmed", posted_date=row.date,
+                              derived_key=derived_key(user_id, source.ingest_seq, record.reference_number
+                                                      if record.reference_number else f"row:{ordinal}"))
+            _write(txn, record, primary=True)
+            txn.reference_number = row.reference  # kept as printed, even when it identifies nothing
+            txn.kind = kind_from_legs(session, txn, "expense" if record.side == "from" else "income")
+            session.add(txn)
+            session.flush()
+            run.created.add(txn.id)
+        session.add(TransactionSource(transaction_id=txn.id, source_id=source.id))
+        claimed.add(txn.id)
+        run.touched[txn.id] = txn
+        run.placed.add(txn.id)
+    session.flush()
+    _settle(run)
+    return StatementCounts(new=len(run.created - run.deleted), matched=matched, needs_review=run.counts.needs_review)
 
 # --- resolve status -----------------------------------------------------------------------------------
 

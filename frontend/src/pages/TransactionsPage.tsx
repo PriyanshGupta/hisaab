@@ -3,7 +3,7 @@
 // one-transaction answers are the review queue's own (review/TransactionTools): payee, account,
 // mark as transfer, looks right; category and amount/date have the fuller forms below.
 import { type FormEvent, useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { type Account, useAccounts } from "../api/accounts";
 import { type Category, useCategories, useSetPayeeCategory } from "../api/categories";
@@ -57,7 +57,10 @@ export function TransactionsPage() {
 
   return (
     <>
-      <header className="page-head"><h1 className="page-title">Transactions</h1></header>
+      <header className="page-head">
+        <h1 className="page-title">Transactions</h1>
+        <Link className="page-head__link" to="/statements">Upload a statement</Link>
+      </header>
       <DateFilter range={range} today={today}
         onRange={(r) => setParams(r ? { from: r.start, to: r.end } : {}, { replace: true })} />
       {transactions.isPending && <p className="muted">Loading…</p>}

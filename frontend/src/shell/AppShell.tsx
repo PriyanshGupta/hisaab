@@ -62,7 +62,7 @@ export function AppShell() {
       </main>
 
       <nav className="tabbar" aria-label="Main">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => item.tab !== false).map((item) => (
           <NavLink key={item.to} className="tabbar__link" to={item.to} end={item.end ?? false}>
             {item.label}
           </NavLink>

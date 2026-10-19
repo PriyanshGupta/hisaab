@@ -140,3 +140,13 @@ def test_problems_are_collected_not_first_only() -> None:
     spec: dict[str, Any] = changed(changed(RULED, "version", 9), "account_kind", "wallet")
     _, found = check_statement_spec(spec)
     assert len(found) == 2
+
+
+def test_payment_matching_is_optional_and_compiled() -> None:
+    assert parse_statement_spec(LINES).payment_matching == ()
+    spec: StatementSpec = parse_statement_spec(changed(LINES, "row_rules.payment_matching", ["^PAYMENT RECEIVED"]))
+    assert len(spec.payment_matching) == 1
+
+
+def test_payment_matching_is_for_card_statements_only() -> None:
+    assert any("payment_matching" in p for p in problems(changed(RULED, "row_rules.payment_matching", ["^X"])))

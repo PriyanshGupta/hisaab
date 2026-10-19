@@ -210,6 +210,13 @@ def list_transactions(session: Session, user_id: str, limit: int = 200, start: s
         TransactionEffective.transaction_date.desc(), TransactionEffective.created_at.desc()).limit(limit))
 
 
+def list_by_ids(session: Session, user_id: str, txn_ids: list[str]) -> dict[str, ListedTransaction]:
+    """These of the user's transactions that still exist, by id (a statement preview's matches)."""
+    found: list[ListedTransaction] = _listed(
+        session, user_id, with_provenance(user_id).where(TransactionEffective.id.in_(txn_ids)))
+    return {t.transaction.id: t for t in found}
+
+
 def get_listed(session: Session, user_id: str, txn_id: str) -> ListedTransaction:
     found: list[ListedTransaction] = _listed(
         session, user_id, with_provenance(user_id).where(TransactionEffective.id == txn_id))

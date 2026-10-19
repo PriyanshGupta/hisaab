@@ -6,7 +6,8 @@ their save-time validation.
      "account_binding": {"identifier": {"pattern", "transform", "kind": "last4" | "card_last4"}},
      "account_kind": "bank" | "credit_card",                          decides the arithmetic sign
      "table": {"rows": "ruled" | "line_pattern", "ends_at": "<RE2>", ...},
-     "row_rules": {"amount_style", "unsigned_means", "continuation", "skip_matching", "stop_at"},
+     "row_rules": {"amount_style", "unsigned_means", "continuation", "skip_matching", "stop_at",
+                   "payment_matching"},                               card statements only, optional
      "field_transforms": {"date": "date:%d/%m/%y", "debit": "inr_to_paise", ...},
      "declared_balances": {"opening": {"pattern", "transform"}, "closing": {...}}}   optional
 
@@ -84,6 +85,9 @@ class StatementSpec:
     stop_at: Pattern | None
     transforms: dict[str, Callable[[str], object]]  # row field -> transform
     declared: dict[str, Extractor]  # "opening" / "closing"
+    # Card statements: a credit whose narration matches one of these is a bill payment received, not a
+    # refund (ruling 2026-10-19). The phrases are the bank's own wording, taken from the fixtures.
+    payment_matching: tuple[Pattern, ...] = ()
 
 
 class InvalidStatementSpec(ValueError):
@@ -219,6 +223,12 @@ def check_statement_spec(spec: object) -> tuple[StatementSpec | None, list[str]]
         [pattern("row_rules.skip_matching", s) for s in skip] if isinstance(skip, list) else []
     )
     stop_at: Pattern | None = pattern("row_rules.stop_at", rules["stop_at"]) if "stop_at" in rules else None
+    paying: object = rules.get("payment_matching", [])
+    paying_compiled: list[Pattern | None] = (
+        [pattern("row_rules.payment_matching", s) for s in paying] if isinstance(paying, list) else []
+    )
+    if paying and account_kind != "credit_card":
+        problems.append("row_rules.payment_matching: only card statements receive bill payments")
 
     needed: list[str] = ["date", "narration"] + (
         ["debit", "credit"] if style == "separate_debit_credit" else ["amount"])
@@ -271,7 +281,7 @@ def check_statement_spec(spec: object) -> tuple[StatementSpec | None, list[str]]
         table=Table(rows, tuple(columns), tuple(header_contains), line_pattern, ends_at, resumes),
         amount_style=style, unsigned_means=unsigned, continuation=continuation,
         skip_matching=tuple(p for p in skip_compiled if p is not None), stop_at=stop_at, transforms=transforms,
-        declared=declared,
+        declared=declared, payment_matching=tuple(p for p in paying_compiled if p is not None),
     ), problems
 
 

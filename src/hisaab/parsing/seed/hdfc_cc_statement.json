@@ -8,13 +8,14 @@
     "rows": "line_pattern",
     "header_row": { "contains": ["DATE & TIME", "TRANSACTION DESCRIPTION", "AMOUNT"] },
     "line_pattern": "^(?P<date>\\d{2}/\\d{2}/\\d{4})\\s*\\|\\s*(?P<time>\\d{2}:\\d{2})\\s+(?P<narration>.+?)\\s+(?P<amount>\\+?\\s*₹\\s*[\\d,]+\\.\\d{2})(?:\\s+l)?$",
-    "ends_at": "^(Page \\d+ of \\d+|International Transactions|\\*Transaction time)"
+    "ends_at": "^(Page \\d+ of \\d+|International Transactions|\\*Transaction time|TRANSACTIONS TOTAL AMOUNT)"
   },
   "row_rules": {
     "amount_style": "signed_single_column",
     "unsigned_means": "debit",
     "continuation": "none",
-    "skip_matching": ["\\[CKYC ID"]
+    "skip_matching": ["\\[CKYC ID"],
+    "payment_matching": ["^CREDIT CARD PAYMENT"]
   },
   "field_transforms": { "date": "date:%d/%m/%Y", "time": "time:%H:%M", "amount": "inr_to_paise" },
   "declared_balances": {
