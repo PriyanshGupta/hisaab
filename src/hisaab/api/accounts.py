@@ -20,7 +20,7 @@ from hisaab.accounts import repository as accounts
 from hisaab.api.deps import CurrentUser, current_user, get_db
 from hisaab.db import Database
 from hisaab.models import Account, AccountIdentifier
-from hisaab.pipeline.resolve import resolve_identifier_everywhere
+from hisaab.pipeline.resolve import resolve_identifier_everywhere, retyped
 
 router: APIRouter = APIRouter(prefix="/api/accounts", tags=["accounts"])
 
@@ -58,6 +58,7 @@ class NewAccount(BaseModel):
 
 class AccountChange(BaseModel):
     """Only the fields present change; null on both opening fields removes the opening balance."""
+    type: AccountType | None = None  # bank <-> credit_card only; its transactions are read again
     display_name: str | None = None
     institution: str | None = None
     opening_balance_paise: StrictInt | None = None
@@ -132,7 +133,11 @@ def update_account(account_id: str, body: AccountChange, request: Request,
     if "opening_balance_paise" in changes:
         changes["opening_balance"] = changes.pop("opening_balance_paise")
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
-        return _out(s, user.id, accounts.update_account(s, user.id, account_id, **changes))
+        before: str = accounts.get_account(s, user.id, account_id).type
+        account: Account = accounts.update_account(s, user.id, account_id, **changes)
+        if account.type != before:
+            retyped(s, user.id, account)
+        return _out(s, user.id, account)
 
 
 @router.post("/{account_id}/archive", response_model=AccountOut)

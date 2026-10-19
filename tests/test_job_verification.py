@@ -119,7 +119,8 @@ def test_kill_mid_job_then_restart(settings: Settings, conn: Connection) -> None
     with TestClient(create_app(settings)) as restarted:  # startup recovery runs in the lifespan
         db: Database = restarted.app.state.db  # type: ignore[attr-defined]
         with db.read_session() as s:
-            job: Job = s.scalars(select(Job).where(Job.kind == "sync")).one()
+            # the first sync is the one killed; the restart's catch-up sync (scheduler thread) may already sit behind it
+            job: Job = s.scalars(select(Job).where(Job.kind == "sync").order_by(Job.created_at).limit(1)).one()
             batch_1: int = s.scalar(select(func.count()).where(Payee.normalized_name.like("Synced batch 1 %"))) or 0
             batch_2: int = s.scalar(select(func.count()).where(Payee.normalized_name.like("Synced batch 2 %"))) or 0
             synced_at: str | None = s.scalar(select(GmailConnection.last_successful_sync_at))

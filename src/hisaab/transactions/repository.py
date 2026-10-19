@@ -191,20 +191,21 @@ def _listed(session: Session, user_id: str, query: _ListQuery) -> list[ListedTra
                               r.category_id, r.category_source, r.payee_name) for r in rows]
 
 
-def _with_provenance(user_id: str) -> _ListQuery:
+def with_provenance(user_id: str) -> _ListQuery:
+    """The categorized select plus provenance (the primary Source's kind): the list and the report read through it."""
     return (categorized(user_id).add_columns(Source.kind.label("provenance"))
             .join(Source, Source.id == TransactionEffective.primary_source_id))
 
 
 def list_transactions(session: Session, user_id: str, limit: int = 200) -> list[ListedTransaction]:
     """The user's transactions, newest first, with provenance, category and corrections attached."""
-    return _listed(session, user_id, _with_provenance(user_id).order_by(
+    return _listed(session, user_id, with_provenance(user_id).order_by(
         TransactionEffective.transaction_date.desc(), TransactionEffective.created_at.desc()).limit(limit))
 
 
 def get_listed(session: Session, user_id: str, txn_id: str) -> ListedTransaction:
     found: list[ListedTransaction] = _listed(
-        session, user_id, _with_provenance(user_id).where(TransactionEffective.id == txn_id))
+        session, user_id, with_provenance(user_id).where(TransactionEffective.id == txn_id))
     if not found:
         raise NotFound("No such transaction")
     return found[0]

@@ -24,6 +24,9 @@ reached (the to-leg). So:
   whose paying account is unknown until a bank debit (or the user) fills it in.
   Every run re-examines the transactions it touched plus the last 5 days of
   unmatched debits, so a debit whose credit arrives a run later is reclassified.
+  A leg resolved later by a review answer pairs too (pair_resolved): a bill paid
+  through an app has a bank debit naming the app and a card credit naming a card
+  not yet registered, so neither side could pair at ingest.
 
 Kind follows from the legs. The highest-precedence Source is primary
 (manual > statement > email) and writes the shared fields; any Source fills its
@@ -109,15 +112,20 @@ class _Run:
     created: set[str] = field(default_factory=set)
     reparsed: set[str] = field(default_factory=set)
     deleted: set[str] = field(default_factory=set)
+    merged_into: dict[str, str] = field(default_factory=dict)  # absorbed id -> its survivor's id
     doubts: dict[str, str] = field(default_factory=dict)  # transaction id -> an ambiguous transfer match
+
+
+def _new_run(session: Session, user_id: str) -> _Run:
+    return _Run(session, user_id, load_rules(session), tunable(session, "large_amount_threshold_paise", user_id),
+                tunable(session, "dedup_amount_tolerance_paise", user_id),
+                tunable(session, "dedup_date_window_days", user_id),
+                tunable(session, "transfer_match_window_days", user_id))
 
 
 def apply(session: Session, user_id: str, batch: Sequence[tuple[str, Routed]]) -> PipelineCounts:
     """batch: (source id, how it was routed), in ingest order."""
-    run: _Run = _Run(session, user_id, load_rules(session), tunable(session, "large_amount_threshold_paise", user_id),
-                     tunable(session, "dedup_amount_tolerance_paise", user_id),
-                     tunable(session, "dedup_date_window_days", user_id),
-                     tunable(session, "transfer_match_window_days", user_id))
+    run: _Run = _new_run(session, user_id)
     for source_id, routed in batch:
         source: Source = session.get_one(Source, source_id)
         if routed.interpretation is not None:
@@ -295,9 +303,11 @@ def _to_examine(run: _Run) -> list[Transaction]:
 
 
 def _partners(run: _Run, txn: Transaction) -> list[Transaction]:
-    """The other side of a one-sided movement: same amount, ±N days, a different own account."""
+    """The other side of a one-sided movement: same amount, ±N days, a different own account. A card debit
+    is a purchase, never the paying half of a transfer: money can't leave a card for one of your accounts,
+    and pairing it with a same-amount credit (a friend repaying you) would erase both (user, 2026-10-19)."""
     debit: bool = (txn.kind == "expense" and txn.from_account_id is not None and txn.to_account_id is None
-                   and txn.unresolved_to_identifier is None)
+                   and txn.unresolved_to_identifier is None and not _is_card(run.session, txn.from_account_id))
     credit: bool = (txn.kind in ("income", "transfer") and txn.to_account_id is not None
                     and txn.from_account_id is None and txn.unresolved_from_identifier is None)
     if not (debit or credit):
@@ -314,10 +324,15 @@ def _partners(run: _Run, txn: Transaction) -> list[Transaction]:
     else:
         query = query.where(Transaction.kind == "expense", Transaction.from_account_id.is_not(None),
                             Transaction.from_account_id != txn.to_account_id, Transaction.to_account_id.is_(None),
-                            Transaction.unresolved_to_identifier.is_(None))
+                            Transaction.unresolved_to_identifier.is_(None),
+                            Transaction.from_account_id.not_in(select(Account.id).where(Account.type == "credit_card")))
     found: list[Transaction] = [t for t in run.session.scalars(query) if t.id not in run.deleted]
     same_ref: list[Transaction] = [t for t in found if txn.reference_number and t.reference_number == txn.reference_number]
     return same_ref if len(same_ref) == 1 else found
+
+
+def _is_card(session: Session, account_id: str) -> bool:
+    return session.get_one(Account, account_id).type == "credit_card"
 
 
 def _pair(run: _Run, txn: Transaction) -> str | None:
@@ -362,10 +377,33 @@ def _absorb(run: _Run, survivor: Transaction, absorbed: Transaction) -> None:
     survivor.kind = kind_from_legs(session, survivor, survivor.kind)
     session.flush()
     run.deleted.add(absorbed.id)
+    run.merged_into[absorbed.id] = survivor.id
     run.touched.pop(absorbed.id, None)
     run.touched[survivor.id] = survivor
     if absorbed.id in run.placed:
         run.placed.add(survivor.id)
+
+
+def pair_resolved(session: Session, user_id: str, txn_ids: Sequence[str]) -> dict[str, str]:
+    """§6.3 for transactions whose leg a review answer just resolved: the same pairing ingest does, with
+    no date limit on which of them are examined (their partner may be months old; each match still needs
+    the ±N-day window between the two). Statuses of everything it changed are resolved here.
+    Returns absorbed id -> the id of the transaction it merged into."""
+    run: _Run = _new_run(session, user_id)
+    for txn_id in txn_ids:
+        txn: Transaction | None = session.get(Transaction, txn_id)
+        if txn is None or txn.id in run.deleted:
+            continue
+        doubt: str | None = _pair(run, txn)
+        if doubt is not None:
+            run.doubts[txn.id] = doubt
+            run.touched[txn.id] = txn
+    for txn in run.touched.values():
+        status, txn.review_reason = _status(run, txn)
+        if txn.status != "reversed":
+            txn.status = status
+    session.flush()
+    return run.merged_into
 
 
 # --- resolve status -----------------------------------------------------------------------------------

@@ -197,6 +197,16 @@ def test_a_bank_debit_fills_the_payer_of_a_lone_card_payment(db: Database, user_
     assert txn["sources"] == sorted([card_side, bank_side])
 
 
+def test_a_card_purchase_never_pairs_with_a_credit_into_a_bank(db: Database, user_id: str,
+                                                              acct: dict[str, str]) -> None:
+    """Money can't leave a card for one of your accounts: a card debit is a purchase. A friend repaying the
+    same amount into the bank that day is income, not the other half of a transfer (user, 2026-10-19)."""
+    ingest(db, user_id, (contract(account_identifier="3333", payee_raw="TRAVEL SITE"), CARD_EMAIL),
+           (contract(direction="credit", account_identifier="1111", payee_raw="A FRIEND"), BANK_EMAIL))
+    assert sorted((t["kind"], t["from"], t["to"]) for t in transactions(db)) == [
+        ("expense", acct["card"], None), ("income", None, acct["bank"])]
+
+
 def test_an_unresolved_account_never_pairs(db: Database, user_id: str, acct: dict[str, str]) -> None:
     ingest(db, user_id, (DEBIT | {"account_identifier": "9999"}, BANK_EMAIL), (CREDIT, OTHER_BANK_EMAIL))
     assert sorted(t["kind"] for t in transactions(db)) == ["expense", "income"]

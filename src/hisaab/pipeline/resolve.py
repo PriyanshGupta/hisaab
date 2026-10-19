@@ -1,7 +1,8 @@
 """Answers from review applied to rows already stored: the pipeline's own work, done in place.
 
 - An identifier assigned to an account (PRD §3.3): every transaction whose leg
-  carries it gets that account, kind re-derived from the legs. Future emails
+  carries it gets that account, kind re-derived from the legs, and transfer
+  pairing re-run on them (a card's credit can now meet its bank debit). Future emails
   resolve at parse through the registry row the caller just wrote.
 - A normalization pattern (tech-design §6.4: "applying a new pattern
   retroactively is a pure database operation"): every unnamed transaction
@@ -21,9 +22,10 @@ from sqlalchemy import or_, select
 from sqlalchemy.orm import Session
 
 from hisaab.accounts.identifiers import normalize_for_lookup
-from hisaab.models import Account, NormalizationPattern, Transaction, TransactionEffective
+from hisaab.accounts.repository import AccountError
+from hisaab.models import Account, NormalizationPattern, Source, Transaction, TransactionEffective
 from hisaab.payees.normalization import PatternRule, match_payee
-from hisaab.pipeline.derive import LEGS, kind_from_legs
+from hisaab.pipeline.derive import LEGS, kind_from_legs, pair_resolved
 from hisaab.transactions.repository import apply_edits
 from hisaab.transactions.review import refresh
 
@@ -45,7 +47,38 @@ def resolve_identifier_everywhere(session: Session, user_id: str, account: Accou
         if txn.id in touched:
             txn.kind = kind_from_legs(session, txn, txn.kind)
     session.flush()
+    merged: dict[str, str] = pair_resolved(session, user_id, touched)  # a resolved leg may complete a transfer
+    touched = list(dict.fromkeys(merged.get(t, t) for t in touched))
     refresh(session, user_id, touched)
+    return touched
+
+
+def retyped(session: Session, user_id: str, account: Account) -> list[str]:
+    """`account` just switched bank <-> card: what its alerts meant changes with it (a credit into a card is a
+    refund or a bill paid, never income). Re-derive the kind of every emailed or statement transaction on it,
+    pair again, and refuse (rolling everything back) when something the user typed can't fit: income on a card."""
+    rows: list[Transaction] = list(session.scalars(
+        select(Transaction).join(Source, Source.id == Transaction.primary_source_id).where(
+            Transaction.user_id == user_id, Source.kind != "manual",
+            or_(Transaction.from_account_id == account.id, Transaction.to_account_id == account.id))))
+    touched: list[str] = []
+    for txn in rows:
+        kind: str = kind_from_legs(session, txn, txn.kind)
+        if kind != txn.kind:
+            txn.kind = kind
+            touched.append(txn.id)
+    session.flush()
+    merged: dict[str, str] = pair_resolved(session, user_id, touched)
+    touched = list(dict.fromkeys(merged.get(t, t) for t in touched))
+    refresh(session, user_id, touched)
+    if account.type == "credit_card":
+        income: int = len(session.scalars(select(TransactionEffective.id).where(
+            TransactionEffective.user_id == user_id, TransactionEffective.to_account_id == account.id,
+            TransactionEffective.kind == "income", TransactionEffective.status != "reversed")).all())
+        if income:
+            raise AccountError(f"{income} {'entry records' if income == 1 else 'entries record'} income into "
+                               f"{account.display_name}, and a card can't receive income. Change "
+                               f"{'it' if income == 1 else 'them'} to a refund first.")
     return touched
 
 

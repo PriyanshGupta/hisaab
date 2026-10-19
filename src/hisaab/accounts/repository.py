@@ -249,19 +249,37 @@ def update_account(
     institution: str | None | _Unset = _UNSET,
     opening_balance: int | None | _Unset = _UNSET,
     opening_balance_date: str | None | _Unset = _UNSET,
+    type: str | _Unset = _UNSET,
 ) -> Account:
-    """Rename, or correct the opening anchor. Type and last4 are fixed: a
+    """Rename, correct the opening anchor, or switch bank <-> card (a card entered as a bank by mistake,
+    user 2026-10-19; the caller re-reads its transactions: pipeline.resolve.retyped). last4 is fixed: a
     different card is a different account."""
     account: Account = _active_account(session, user_id, account_id)
+    retyped: bool = type is not _UNSET and type != account.type
+    if retyped:
+        _retype(session, account, str(type))
     if display_name is not _UNSET:
         account.display_name = _check_name(display_name)
     if institution is not _UNSET:
         account.institution = (institution or "").strip() or None
-    if opening_balance is not _UNSET or opening_balance_date is not _UNSET:  # checked as a pair: both or neither
+    if retyped or opening_balance is not _UNSET or opening_balance_date is not _UNSET:  # a pair: both or neither
         account.opening_balance, account.opening_balance_date = _check_anchor(
             account.type, account.opening_balance if isinstance(opening_balance, _Unset) else opening_balance,
             account.opening_balance_date if isinstance(opening_balance_date, _Unset) else opening_balance_date)
     return account
+
+
+def _retype(session: Session, account: Account, new_type: str) -> None:
+    if {account.type, new_type} != {"bank", "credit_card"}:
+        raise AccountError("Only a bank account and a credit card can be switched; cash stays cash.")
+    if new_type == "credit_card" and any(i.kind == "vpa" for i in active_identifiers(session, account.user_id, account.id)):
+        raise AccountError("Remove its UPI IDs first: a credit card doesn't have one.")
+    session.execute(  # the number it was set up with is now a card's number, or a bank's
+        update(AccountIdentifier)
+        .where(AccountIdentifier.account_id == account.id, AccountIdentifier.origin == "account_setup",
+               AccountIdentifier.kind == SETUP_IDENTIFIER_KIND[account.type], AccountIdentifier.retired_at.is_(None))
+        .values(kind=SETUP_IDENTIFIER_KIND[new_type]))
+    account.type = new_type
 
 
 def archive_account(session: Session, user_id: str, account_id: str) -> Account:

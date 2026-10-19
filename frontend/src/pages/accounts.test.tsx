@@ -202,3 +202,26 @@ test("a number assigned from review by mistake can be removed here", async () =>
   await user.click(await screen.findByRole("button", { name: "Remove 4821" }));
   expect(api.calls).toContain("DELETE /api/accounts/a-1/identifiers/i-9");
 });
+
+test("only a bank account offers Add UPI ID; a card doesn't have one", async () => {
+  setup([bank, card]);
+  const hdfc = await screen.findByRole("article", { name: "HDFC Savings" });
+  expect(within(hdfc).getByRole("button", { name: "Add UPI ID" })).toBeInTheDocument();
+  expect(within(screen.getByRole("article", { name: "Regalia card" })).queryByRole("button", { name: "Add UPI ID" }))
+    .not.toBeInTheDocument();
+});
+
+test("a bank entered by mistake can be switched to a credit card", async () => {
+  const { api, user } = setup([bank]);
+  api.set("PATCH /api/accounts/a-1", { status: 200, body: { ...bank, type: "credit_card" } });
+  const hdfc = await screen.findByRole("article", { name: "HDFC Savings" });
+  await user.click(within(hdfc).getByRole("button", { name: "Edit" }));
+  const form = within(hdfc).getByRole("form", { name: "Edit HDFC Savings" });
+  await user.click(within(form).getByRole("radio", { name: "Credit card" }));
+  expect(within(form).getByText(/read again/)).toBeInTheDocument();
+  await user.click(within(form).getByRole("button", { name: "Save changes" }));
+  await waitFor(() => expect(api.bodiesFor("PATCH /api/accounts/a-1")).toEqual([{
+    type: "credit_card", display_name: "HDFC Savings", institution: "HDFC Bank", opening_balance_paise: 8420000,
+    opening_balance_date: "2026-07-11",
+  }]));
+});

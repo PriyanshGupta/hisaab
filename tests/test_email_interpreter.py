@@ -232,3 +232,29 @@ def test_a_notice_template_declines_a_real_transaction_and_vice_versa() -> None:
     assert on_debit.template_id == "t-1" and not on_debit.attempts[0].matched
     on_notice: Interpretation = interpret([template(), notice_template()], artifact(NOTICE_BODY))
     assert on_notice.template_id == "notice" and not on_notice.attempts[0].matched
+
+
+PAID_BODY: str = ("<p>Dear Customer, Greetings from HDFC Bank! Your STREAMCO bill, set up through E-mandate (Auto "
+                  "payment), has been successfully paid using your HDFC Bank Credit Card ending 4321. Transaction "
+                  "Details: Amount: INR 100.00 Date: 16/09/2026 Mandate ID: AbC123xYz9</p>")
+
+
+def seed_template(name: str) -> EmailTemplate:
+    import json
+
+    from hisaab.seeds import SEED_TEMPLATES
+
+    return EmailTemplate(id=name, name=name, spec=parse_email_spec(json.loads((SEED_TEMPLATES / f"{name}.json").read_text())))
+
+
+@pytest.mark.parametrize("id_label", ["Mandate ID", "SI Hub ID"])  # HDFC's newer and older wording
+def test_an_e_mandate_payment_confirmation_records_nothing_its_charge_alert_is_the_record(id_label: str) -> None:
+    """HDFC confirms each card auto-payment after a separate charge alert for the same money. Recording the
+    confirmation too counted every subscription twice, and its Mandate ID (the same every month) merged
+    months of confirmations into one phantom charge (user, 2026-10-19)."""
+    paid: EmailArtifact = EmailArtifact(sender="alerts@hdfcbank.bank.in", subject="View: Account update for your HDFC Bank A/c",
+                                        body=PAID_BODY.replace("Mandate ID", id_label), received_at=datetime(2026, 9, 16, tzinfo=UTC))
+    result: Interpretation = interpret(
+        [seed_template("hdfc_upi_credit"), seed_template("hdfc_cc_mandate"), seed_template("hdfc_cc_mandate_paid")], paid)
+    assert result.template_id == "hdfc_cc_mandate_paid"
+    assert result.extraction is not None and result.extraction["outcome"] == "non_transactional"

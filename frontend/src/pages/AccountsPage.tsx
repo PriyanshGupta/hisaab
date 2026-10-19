@@ -143,7 +143,7 @@ function AccountItem({ account }: { account: Account }) {
           )}
           {mode === "view" && (
             <div className="actions">
-              {account.type !== "cash" && (
+              {account.type === "bank" && ( // UPI IDs belong to bank accounts; a card has none
                 <button className="button button--quiet" type="button" onClick={() => setMode("add-upi")}>
                   Add UPI ID
                 </button>
@@ -327,12 +327,13 @@ function EditAccountForm({ account, onDone }: { account: Account; onDone: () => 
     account.opening_balance_paise === null ? "" : paiseToInput(account.opening_balance_paise));
   const [date, setDate] = useState(account.opening_balance_date ?? threeMonthsAgoIso());
   const [errors, setErrors] = useState<FieldErrors>({});
+  const [type, setType] = useState<AccountType>(account.type); // bank <-> card, for one entered as the wrong kind
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     const found: FieldErrors = {};
     if (!name.trim()) found.name = "Give the account a name.";
-    const { paise, error } = checkAmount(account.type, amount);
+    const { paise, error } = checkAmount(type, amount);
     if (error) found.amount = error;
     setErrors(found);
     if (Object.keys(found).length > 0 || paise === undefined) return;
@@ -340,6 +341,7 @@ function EditAccountForm({ account, onDone }: { account: Account; onDone: () => 
       {
         id: account.id,
         change: {
+          ...(type !== account.type && { type }),
           display_name: name.trim(),
           institution: institution.trim() || null,
           opening_balance_paise: paise,
@@ -359,7 +361,23 @@ function EditAccountForm({ account, onDone }: { account: Account; onDone: () => 
           <Field label="Bank or card issuer (optional)" value={institution}
             onChange={(e) => setInstitution(e.target.value)} />
         )}
-        <AmountField type={account.type} value={amount} onChange={setAmount} error={errors.amount} />
+        {account.type !== "cash" && (
+          <fieldset className="choice">
+            <legend className="field__label">Type</legend>
+            {(["bank", "credit_card"] as const).map((t) => (
+              <label key={t} className="choice__option">
+                <input type="radio" name={`type-${account.id}`} value={t} checked={type === t} onChange={() => setType(t)} />
+                {TYPE_LABELS[t]}
+              </label>
+            ))}
+            {type !== account.type && (
+              <p className="field__help">
+                Its transactions will be read again: money into a card is a refund or a bill payment, not income.
+              </p>
+            )}
+          </fieldset>
+        )}
+        <AmountField type={type} value={amount} onChange={setAmount} error={errors.amount} />
         <Field label="As of" type="date" value={date} onChange={(e) => setDate(e.target.value)} />
       </div>
       {update.isError && <p className="form-error" role="alert">{describeError(update.error)}</p>}

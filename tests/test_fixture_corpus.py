@@ -27,7 +27,7 @@ def results() -> list[FixtureResult]:
 def test_every_fixture_format_is_measured(results: list[FixtureResult]) -> None:
     assert {r.format for r in results} >= {
         "hdfc_upi_debit", "hdfc_upi_credit", "hdfc_cc_purchase", "icici_cc_purchase", "sbi_cc_purchase",
-        "scapia_cc_purchase", "icici_cc_repayment", "scapia_cc_repayment", "hdfc_cc_mandate",
+        "scapia_cc_purchase", "icici_cc_repayment", "scapia_cc_repayment", "hdfc_cc_mandate", "hdfc_cc_mandate_paid",
         "hdfc_acct_statement", "hdfc_cc_statement", "icici_cc_statement", "sbi_cc_statement", "scapia_cc_statement",
     }
 

@@ -23,7 +23,7 @@ from hisaab.payees import repository as payees
 from tests import factories as f
 from tests.conftest import login, make_user
 from tests.gmail_fake import make_eml
-from tests.pipeline_helpers import BANK_EMAIL, contract, ingest, make_accounts
+from tests.pipeline_helpers import BANK_EMAIL, CARD_EMAIL, contract, ingest, make_accounts
 
 RAW: str = "UPI/DR/111111/TEST PAYEE@okexample"
 
@@ -351,3 +351,55 @@ def test_another_users_rows_never_appear(app: FastAPI, admin: TestClient) -> Non
     ingest(db_of(app), other, (contract(), BANK_EMAIL))
     assert admin.get("/api/review").json() == {"items": [], "categorized": [], "sorted_accounts": [],
                                                "sorted_payees": []}
+
+
+# --- a resolved leg completes a movement: pairing after the answer (§6.3) -------------------------
+
+CARD_NAME: str = "Example Card Credit Card"  # a card-side alert naming the card, no digits
+
+
+def bill_paid_through_an_app(app: FastAPI, me: str, *debits: int) -> list[str]:
+    """The bank's debit names the app; the card's credit names a card the registry doesn't know yet."""
+    _, sources = ingest(db_of(app), me,
+                        *[(contract(amount=amount, payee_raw="PAYAPP BILLS"), BANK_EMAIL) for amount in debits],
+                        (contract(amount=1200000, direction="credit", account_identifier=CARD_NAME, payee_raw=None),
+                         CARD_EMAIL))
+    return sources
+
+
+def user_rows(app: FastAPI, me: str) -> list[Transaction]:
+    with db_of(app).read_session() as s:
+        rows: list[Transaction] = list(s.scalars(select(Transaction).where(Transaction.user_id == me)
+                                                 .order_by(Transaction.created_at)))
+        s.expunge_all()
+        return rows
+
+
+def test_assigning_the_card_pairs_a_bill_paid_through_an_app_with_its_bank_debit(app: FastAPI, admin: TestClient) -> None:
+    me: str = uid(admin)
+    accounts: dict[str, str] = make_accounts(db_of(app), me)
+    bill_paid_through_an_app(app, me, 1200000)
+    assert sorted(t.kind for t in user_rows(app, me)) == ["expense", "income"]  # ingest couldn't pair them
+    resp: Response = admin.post("/api/review/identifier", json={"identifier": CARD_NAME, "account_id": accounts["card"]})
+    assert resp.json() == {"resolved": 1}
+    [bill] = user_rows(app, me)
+    assert (bill.kind, bill.from_account_id, bill.to_account_id, bill.status) == (
+        "transfer", accounts["bank"], accounts["card"], "confirmed")
+    with db_of(app).read_session() as s:
+        assert s.scalar(select(func.count()).select_from(TransactionSource)
+                        .where(TransactionSource.transaction_id == bill.id)) == 2  # both alerts kept
+    report: dict[str, Any] = admin.get("/api/report", params={"start": "2026-09-01", "end": "2026-09-30"}).json()
+    assert (report["spending_paise"], report["money_in_paise"], report["cash_out_paise"]) == (0, 0, 1200000)
+    assert [t["kind"] for t in report["transfers"]] == ["card_bill"]
+
+
+def test_a_card_payment_matching_two_debits_is_not_guessed(app: FastAPI, admin: TestClient) -> None:
+    me: str = uid(admin)
+    accounts: dict[str, str] = make_accounts(db_of(app), me)
+    bill_paid_through_an_app(app, me, 1200000, 1200000)
+    admin.post("/api/review/identifier", json={"identifier": CARD_NAME, "account_id": accounts["card"]})
+    rows: list[Transaction] = user_rows(app, me)
+    assert sorted(t.kind for t in rows) == ["expense", "expense", "transfer"]  # nothing merged
+    card_side: Transaction = next(t for t in rows if t.kind == "transfer")
+    assert card_side.status == "needs_review"  # the user answers which account paid; the app never picks
+    assert card_side.review_reason == "card payment received: which of your accounts paid it?"

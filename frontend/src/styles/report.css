@@ -1,0 +1,346 @@
+/*
+ * The report (slice 18), after docs/prototype.html. One bold thing: the period's
+ * total, set wide and heavy and double-underlined the way a ledger closes a
+ * column. Everything else is quiet ruling. Bars are one hue (--accent) for
+ * magnitude; the uncategorized line alone is red, with its label in words, so
+ * colour is never the only signal. All selectors sit under .report so the
+ * short names here never meet another screen's.
+ */
+.report {
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+}
+
+/* ---------- top bar: period, its length, the review badge ---------- */
+.report__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s4);
+  flex-wrap: wrap;
+}
+.report__nav {
+  display: flex;
+  align-items: center;
+  gap: var(--s1);
+  margin-left: calc(-1 * var(--s2));
+}
+.report__title {
+  font-size: var(--t-display);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+  line-height: var(--lh-tight);
+  min-width: 0;
+}
+.report .icon-btn {
+  width: var(--touch);
+  height: var(--touch);
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-title);
+  line-height: 1;
+  cursor: pointer;
+}
+.report .icon-btn:hover:not(:disabled) { background: var(--paper-sunk); color: var(--ink); }
+.report .icon-btn:disabled { opacity: 0.35; cursor: default; }
+.report__controls {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  margin-top: var(--s2);
+}
+.report__custom {
+  display: flex;
+  gap: var(--s2);
+  align-items: center;
+  flex-wrap: wrap;
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+}
+.report__custom input {
+  margin-left: var(--s1);
+  padding: var(--s1) var(--s2);
+  font: inherit;
+  border: 1px solid var(--field-border);
+  border-radius: var(--r-control);
+  background: var(--paper-raised);
+  color: var(--ink);
+}
+
+/* Segmented control: period length, and what the total counts. */
+.report .seg {
+  display: inline-flex;
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+  background: var(--paper-raised);
+  padding: 2px;
+}
+.report .seg button {
+  min-height: 36px;
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: calc(var(--r-control) - 2px);
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  cursor: pointer;
+}
+.report .seg button:hover { color: var(--ink); }
+.report .seg button[aria-pressed="true"] { background: var(--ink); color: var(--on-ink); }
+
+/* The pending-review badge: visible, never in the way. Red count, ink words. */
+.report .pill {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: 36px;
+  padding: 0 var(--s3) 0 var(--s1);
+  border: 1px solid var(--rule-strong);
+  border-radius: 999px;
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  text-decoration: none;
+}
+.report .pill:hover { border-color: var(--ink); }
+.report .pill__n {
+  min-width: 28px;
+  padding: 2px var(--s2);
+  border-radius: 999px;
+  background: var(--margin-wash);
+  color: var(--margin);
+  text-align: center;
+  font-variant-numeric: tabular-nums;
+}
+
+.report a:focus-visible,
+.report button:focus-visible,
+.report input:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+
+/* ---------- the total ---------- */
+.report .hero {
+  padding: var(--s5) var(--s5) var(--s4) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.report .hero__top {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: var(--s3);
+  flex-wrap: wrap;
+}
+.report .hero__lead { color: var(--ink-soft); font-weight: var(--w-strong); }
+.report .hero__total {
+  display: inline-block;
+  margin: var(--s3) 0 var(--s3);
+  padding-bottom: 6px;
+  border-bottom: 4px double var(--ink); /* a ledger's closed total */
+  font-size: clamp(2.6rem, 8vw, 4.2rem);
+  font-weight: var(--w-wordmark);
+  font-variation-settings: "wdth" var(--wdth-wordmark);
+  font-variant-numeric: tabular-nums;
+  letter-spacing: -0.015em;
+  line-height: 1;
+}
+.report .hero__note {
+  max-width: 62ch;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.report .hero__note + .hero__note { margin-top: var(--s2); }
+.report .hero__note--attention { color: var(--ink); }
+.report .hero__note--attention a { color: var(--margin); font-weight: var(--w-strong); }
+
+/* ---------- spending by category: category, payee, transaction ---------- */
+.report .cats__head,
+.report .lrow,
+.report .prow {
+  display: grid;
+  grid-template-columns: minmax(9rem, 1.2fr) minmax(5rem, 2fr) 7.5rem 3rem 8.5rem;
+  gap: var(--s3);
+  align-items: center;
+  padding-right: var(--s5);
+}
+.report .cats__head {
+  padding-top: var(--s4);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--rule);
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.report .r { text-align: right; }
+.report .cats,
+.report .payees,
+.report .txns {
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.report .lrow {
+  min-height: 52px;
+  border-bottom: 1px solid var(--rule);
+  font-variation-settings: "wdth" var(--wdth-data);
+}
+.report .lname {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-width: 0;
+  padding: var(--s2) 0;
+  border: 0;
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  font-weight: var(--w-strong);
+  text-align: left;
+  cursor: pointer;
+}
+.report .lname:disabled { cursor: default; }
+.report .lname:disabled .caret { visibility: hidden; }
+.report .lname__text { display: flex; flex-direction: column; min-width: 0; line-height: 1.25; }
+.report .lname__name { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.report .lname__sub { font-size: var(--t-small); font-weight: var(--w-body); color: var(--ink-muted); white-space: nowrap; }
+.report .caret {
+  flex: none;
+  width: 14px;
+  color: var(--ink-muted);
+  transition: transform 0.15s;
+}
+.report [aria-expanded="true"] .caret { transform: rotate(90deg); }
+
+.report .track { display: flex; align-items: center; height: 24px; }
+.report .bar {
+  display: block;
+  height: 10px;
+  border-radius: 0 4px 4px 0; /* rounded data end, square at the baseline */
+  background: var(--accent);
+  transform-origin: left center;
+  animation: report-grow 0.6s cubic-bezier(0.2, 0.7, 0.2, 1);
+}
+@keyframes report-grow { from { transform: scaleX(0); } }
+.report .amt { font-weight: var(--w-strong); font-variant-numeric: tabular-nums; white-space: nowrap; }
+.report .share { font-size: var(--t-small); color: var(--ink-muted); font-variant-numeric: tabular-nums; }
+.report .act { font-size: var(--t-small); }
+
+/* Not categorized yet: the line that keeps every share honest. */
+.report .lrow-wrap--uncat .lname__name { font-style: italic; font-weight: var(--w-body); }
+.report .lrow-wrap--uncat .bar { /* hatched as well as red: still unlike the green bars under colour blindness */
+  background: repeating-linear-gradient(135deg, var(--margin) 0 3px,
+    color-mix(in srgb, var(--margin) 40%, var(--paper-raised)) 3px 5px);
+}
+.report .lrow-wrap--uncat .act a { color: var(--margin); font-weight: var(--w-strong); }
+
+.report .payees {
+  margin-left: calc(-1 * (var(--s7) + var(--s2)));
+  padding-left: calc(var(--s7) + var(--s2));
+  background: var(--paper-sunk);
+  border-bottom: 1px solid var(--rule);
+}
+.report .prow { min-height: 44px; border-top: 1px solid var(--rule); font-size: 0.95em; }
+.report .payees > li:first-child > .prow { border-top: 0; }
+.report .lname--payee { padding-left: var(--s4); font-weight: var(--w-body); }
+.report .prow .bar { height: 6px; background: var(--ink-soft); opacity: 0.6; }
+
+.report .txns { padding: 0 var(--s5) var(--s2) calc(var(--s4) + 22px); }
+.report .txn {
+  display: grid;
+  grid-template-columns: 6.5rem minmax(0, 1fr) auto;
+  gap: var(--s3);
+  align-items: baseline;
+  padding: var(--s2) 0;
+  border-top: 1px dashed var(--rule-strong);
+  font-size: var(--t-small);
+}
+.report .txn__date { color: var(--ink-soft); font-variant-numeric: tabular-nums; }
+.report .txn__where { display: flex; flex-wrap: wrap; gap: 0 var(--s2); }
+.report .txn .amt { font-weight: var(--w-body); }
+.report .chip {
+  padding: 0 var(--s2);
+  border-radius: 999px;
+  background: var(--margin-wash);
+  color: var(--margin);
+  font-weight: var(--w-strong);
+}
+
+.report .cats__foot {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s3) var(--s5) var(--s4) 0;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+
+/* ---------- money in and moved: nothing here counts as spending ---------- */
+.report .moved { padding-right: var(--s5); padding-bottom: var(--s4); }
+.report .moved__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s3);
+  flex-wrap: wrap;
+  padding: var(--s5) 0 var(--s2);
+}
+.report .moved__head h2 { font-size: var(--t-title); font-weight: var(--w-title); font-variation-settings: "wdth" var(--wdth-title); }
+.report .moved__head p { font-size: var(--t-small); }
+.report .moved h3 { padding: var(--s4) 0 var(--s1); font-size: var(--t-body); font-weight: var(--w-strong); }
+.report .frow {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.report .frow:last-child { border-bottom: 0; }
+.report .frow > span:first-child { display: flex; flex-direction: column; min-width: 0; }
+.report .frow .num { font-variant-numeric: tabular-nums; white-space: nowrap; }
+.report .frow--total { font-weight: var(--w-strong); }
+.report .frow--minor { font-size: var(--t-small); color: var(--ink-soft); }
+.report .frow__sub { font-size: var(--t-small); color: var(--ink-muted); }
+.report .frow s { color: var(--ink-muted); }
+
+@media (prefers-reduced-motion: reduce) {
+  .report .bar { animation: none; }
+  .report .caret { transition: none; }
+}
+
+/* Phones: name and amount on one line, the bar under them, share and action beneath. */
+@media (max-width: 640px) {
+  .report .cats__head { display: none; }
+  .report .lrow,
+  .report .prow {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas: "name amt" "bar bar" "share act";
+    row-gap: 2px;
+    padding: var(--s2) var(--s4) var(--s2) 0;
+  }
+  /* areas for category and payee rows only: a payment row (.txn) keeps its own grid */
+  .report :is(.lrow, .prow) > .lname { grid-area: name; }
+  .report :is(.lrow, .prow) > .amt { grid-area: amt; }
+  .report :is(.lrow, .prow) > .track { grid-area: bar; height: 12px; }
+  .report :is(.lrow, .prow) > .share { grid-area: share; text-align: left; }
+  .report .lrow > .act { grid-area: act; }
+  /* thumbs: every control reaches the 44px touch size */
+  .report .seg button,
+  .report .pill { min-height: var(--touch); }
+  .report .act a,
+  .report .hero__note a { display: inline-flex; align-items: center; min-height: var(--touch); }
+  .report .prow > :nth-child(5) { display: none; } /* the payee row's empty action cell */
+  .report .hero { padding-right: var(--s4); }
+  .report .txns { padding-right: var(--s4); padding-left: var(--s4); }
+  .report .txn { grid-template-columns: minmax(0, 1fr) auto; }
+  .report .txn__where { grid-column: 1 / -1; grid-row: 2; }
+  .report .moved { padding-right: var(--s4); }
+}

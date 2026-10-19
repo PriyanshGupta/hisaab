@@ -9,6 +9,11 @@ const ASHA = { id: "u-1", username: "asha", display_name: "Asha Kulkarni", role:
 const NOT_LOGGED_IN = { status: 401, body: { detail: "Not logged in" } };
 const setupAt = (step: string) => ({ status: 200, body: { step, backfill_start: "2026-07-11", job: null } });
 const SETUP_DONE = setupAt("done");
+const EMPTY_REPORT = { status: 200, body: { start: "2026-10-01", end: "2026-10-31", spending_paise: 0, cash_out_paise: 0,
+  cash_out_unknown_paise: 0, money_in_paise: 0, income: [], transfers: [], reversed: [],
+  categories: [{ category_id: null, name: "Not categorized yet", amount_paise: 0, count: 0, payees: [] }] } };
+const EMPTY_REVIEW = { status: 200, body: { items: [], categorized: [], sorted_accounts: [], sorted_payees: [] } };
+const REPORT_HEADING = { level: 1, name: /\d{4}/ } as const; // home is the report: its title is the period
 
 async function signIn(username = "asha", password = "correct horse") {
   const user = userEvent.setup();
@@ -18,27 +23,27 @@ async function signIn(username = "asha", password = "correct horse") {
 }
 
 test("an anonymous visitor to / is sent to the sign-in form", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/auth/me": NOT_LOGGED_IN });
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW, "GET /api/auth/me": NOT_LOGGED_IN });
   const { router } = renderApp("/");
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
   expect(router.state.location.pathname).toBe("/login");
 });
 
 test("signing in lands on the report with the user's name in the chrome", async () => {
-  const api = mockApi({ "GET /api/setup": SETUP_DONE,
+  const api = mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
     "GET /api/auth/me": NOT_LOGGED_IN,
     "POST /api/auth/login": { status: 200, body: ASHA },
   });
   const { router } = renderApp("/");
   await signIn();
-  expect(await screen.findByRole("heading", { name: "Report" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", REPORT_HEADING)).toBeInTheDocument();
   expect(screen.getAllByText("Asha Kulkarni").length).toBeGreaterThan(0);
   expect(router.state.location.pathname).toBe("/");
   expect(api.calls).toContain("POST /api/auth/login");
 });
 
 test("a wrong password says so and stays on the sign-in form", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE,
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
     "GET /api/auth/me": NOT_LOGGED_IN,
     "POST /api/auth/login": { status: 401, body: { detail: "Invalid username or password" } },
   });
@@ -49,7 +54,7 @@ test("a wrong password says so and stays on the sign-in form", async () => {
 });
 
 test("a busy server asks the user to try again shortly", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE,
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
     "GET /api/auth/me": NOT_LOGGED_IN,
     "POST /api/auth/login": { status: 503, body: { detail: "Busy" } },
   });
@@ -59,7 +64,7 @@ test("a busy server asks the user to try again shortly", async () => {
 });
 
 test("a locked-out username shows the server's explanation", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE,
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
     "GET /api/auth/me": NOT_LOGGED_IN,
     "POST /api/auth/login": {
       status: 429,
@@ -72,14 +77,14 @@ test("a locked-out username shows the server's explanation", async () => {
 });
 
 test("an unreachable server is reported as such", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/auth/me": NOT_LOGGED_IN, "POST /api/auth/login": "network-error" });
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW, "GET /api/auth/me": NOT_LOGGED_IN, "POST /api/auth/login": "network-error" });
   renderApp("/login");
   await signIn();
   expect(await screen.findByRole("alert")).toHaveTextContent("Can't reach the Hisaab server");
 });
 
 test("signing out ends the session and returns to sign-in", async () => {
-  const api = mockApi({ "GET /api/setup": SETUP_DONE,
+  const api = mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
     "GET /api/auth/me": { status: 200, body: ASHA },
     "POST /api/auth/logout": { status: 204 },
   });
@@ -92,30 +97,30 @@ test("signing out ends the session and returns to sign-in", async () => {
 });
 
 test("a session that expires while the app is open lands on sign-in", async () => {
-  const api = mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/auth/me": { status: 200, body: ASHA } });
+  const api = mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW, "GET /api/auth/me": { status: 200, body: ASHA } });
   const { queryClient } = renderApp("/");
-  expect(await screen.findByRole("heading", { name: "Report" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", REPORT_HEADING)).toBeInTheDocument();
   api.set("GET /api/auth/me", NOT_LOGGED_IN);
   await queryClient.invalidateQueries({ queryKey: meQueryKey });
   expect(await screen.findByRole("heading", { name: "Sign in" })).toBeInTheDocument();
 });
 
 test("an unknown page shows not-found inside the shell", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/auth/me": { status: 200, body: ASHA } });
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW, "GET /api/auth/me": { status: 200, body: ASHA } });
   renderApp("/no/such/page");
   expect(await screen.findByRole("heading", { name: "Page not found" })).toBeInTheDocument();
   expect(screen.getAllByText("Asha Kulkarni").length).toBeGreaterThan(0);
 });
 
 test("visiting sign-in while signed in goes to the report", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/auth/me": { status: 200, body: ASHA } });
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW, "GET /api/auth/me": { status: 200, body: ASHA } });
   const { router } = renderApp("/login");
-  expect(await screen.findByRole("heading", { name: "Report" })).toBeInTheDocument();
+  expect(await screen.findByRole("heading", REPORT_HEADING)).toBeInTheDocument();
   expect(router.state.location.pathname).toBe("/");
 });
 
 test("after sign-in the user returns to the page they first asked for", async () => {
-  mockApi({ "GET /api/setup": SETUP_DONE,
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
     "GET /api/auth/me": NOT_LOGGED_IN,
     "POST /api/auth/login": { status: 200, body: ASHA },
   });

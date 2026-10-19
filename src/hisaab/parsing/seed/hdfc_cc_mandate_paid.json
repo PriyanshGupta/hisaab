@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "outcome": "non_transactional",
+  "match": { "sender": "alerts@hdfcbank.bank.in", "subject": "^View: Account update for your HDFC Bank A/c$" },
+  "preprocess": ["strip_html", "collapse_whitespace"],
+  "confirm": [
+    "set up through E-mandate \\(Auto payment\\), has been successfully paid using your HDFC Bank Credit Card ending",
+    "(?:Mandate|SI Hub) ID:"
+  ]
+}

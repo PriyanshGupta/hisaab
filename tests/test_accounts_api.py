@@ -163,3 +163,59 @@ def test_another_users_account_is_404_everywhere(app: FastAPI, asha: TestClient)
                          json={"kind": "vpa", "identifier": "r@ybl"}).status_code == 404
         assert ravi.get("/api/accounts/resolve", params={"identifier": "asha@ybl"}).status_code == 404
     assert asha.get(f"/api/accounts/{acct['id']}").json()["display_name"] == "HDFC Savings"
+
+
+# --- changing the type: a card entered as a bank by mistake (user, 2026-10-19) ---------------------
+
+def _me(client: TestClient) -> str:
+    me: str = client.get("/api/auth/me").json()["id"]
+    return me
+
+
+def _kinds(app: FastAPI, user_id: str) -> list[tuple[str, int]]:
+    from sqlalchemy import select
+
+    from hisaab.db import Database
+    from hisaab.models import Transaction
+
+    db: Database = app.state.db
+    with db.read_session() as s:
+        return sorted((t.kind, t.amount) for t in s.scalars(select(Transaction).where(Transaction.user_id == user_id)))
+
+
+def test_a_bank_that_is_really_a_card_is_switched_and_its_credits_are_read_again(app: FastAPI, asha: TestClient) -> None:
+    from tests.pipeline_helpers import CARD_EMAIL, contract, ingest
+
+    account: Any = asha.post("/api/accounts", json=BANK | {"last4": "6203"}).json()
+    ingest(app.state.db, _me(asha), (contract(direction="credit", account_identifier="6203", payee_raw=None,
+                                              amount=2468000), CARD_EMAIL),
+           (contract(direction="credit", account_identifier="6203", payee_raw="CASHBACK", amount=5000), CARD_EMAIL))
+    assert _kinds(app, _me(asha)) == [("income", 5000), ("income", 2468000)]
+    resp: Response = asha.patch(f"/api/accounts/{account['id']}", json={"type": "credit_card"})
+    assert resp.status_code == 200, resp.text
+    assert (resp.json()["type"], resp.json()["identifiers"][0]["kind"]) == ("credit_card", "card_last4")
+    assert _kinds(app, _me(asha)) == [("refund", 5000), ("transfer", 2468000)]  # cashback; a bill paid, payer unknown
+    report: Any = asha.get("/api/report", params={"start": "2026-09-01", "end": "2026-09-30"}).json()
+    assert report["money_in_paise"] == 0
+    back: Response = asha.patch(f"/api/accounts/{account['id']}", json={"type": "bank"})
+    assert back.status_code == 200 and _kinds(app, _me(asha)) == [("income", 5000), ("income", 2468000)]
+
+
+@pytest.mark.parametrize("setup,body,message", [
+    ("manual_income", {"type": "credit_card"}, "income"),
+    ("upi", {"type": "credit_card"}, "UPI"),
+    ("overdraft", {"type": "credit_card"}, "owed"),
+    ("cash", {"type": "bank"}, "cash"),
+])
+def test_a_type_change_that_cannot_fit_is_refused_and_nothing_changes(asha: TestClient, setup: str,
+                                                                     body: dict[str, Any], message: str) -> None:
+    account: Any = asha.post("/api/accounts", json=CASH if setup == "cash" else
+                             BANK | ({"opening_balance_paise": -50000} if setup == "overdraft" else {})).json()
+    if setup == "manual_income":
+        asha.post("/api/transactions", json={"kind": "income", "amount_paise": 100000, "transaction_date": "2026-09-01",
+                                             "payee": "Employer", "to_account_id": account["id"]})
+    if setup == "upi":
+        asha.post(f"/api/accounts/{account['id']}/identifiers", json={"kind": "vpa", "identifier": "asha@okexample"})
+    resp: Response = asha.patch(f"/api/accounts/{account['id']}", json=body)
+    assert resp.status_code == 422 and message in resp.json()["detail"], resp.text
+    assert asha.get(f"/api/accounts/{account['id']}").json()["type"] == account["type"]

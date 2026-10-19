@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiError, send } from "./client";
 import type { components } from "./schema";
+import { transactionsKey } from "./transactions";
 
 export type GmailStatus = components["schemas"]["GmailStatus"];
 export type Job = components["schemas"]["JobOut"];
@@ -45,7 +46,7 @@ export function useSyncNow() {
 
 const finished = (job: Job | undefined) => job !== undefined && job.state !== "queued" && job.state !== "running";
 
-/** Polls a job until it finishes; then refreshes the Gmail status (the sync clock may have moved). */
+/** Polls a job until it finishes; then refreshes the Gmail status (the sync clock may have moved) and what it brought in. */
 export function useJob(jobId: string | null) {
   const queryClient = useQueryClient();
   return useQuery({
@@ -56,7 +57,9 @@ export function useJob(jobId: string | null) {
         api.GET("/api/jobs/{job_id}", { params: { path: { job_id: jobId ?? "" } } }),
       );
       if (data === undefined) throw apiError(response, error);
-      if (finished(data)) await queryClient.invalidateQueries({ queryKey: gmailKey });
+      if (finished(data)) await Promise.all([queryClient.invalidateQueries({ queryKey: gmailKey }),
+        queryClient.invalidateQueries({ queryKey: transactionsKey }), // a sync brings transactions: list, report
+        queryClient.invalidateQueries({ queryKey: ["review"] })]); // ...and review items: the queue, the badge
       return data;
     },
     refetchInterval: (query) => (finished(query.state.data) ? false : POLL_MS),

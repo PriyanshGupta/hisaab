@@ -38,15 +38,8 @@ import { formatPaise, parseRupees } from "../money";
 import { AddAccountForm } from "./AccountsPage";
 import { AnswerBox, type Option } from "../review/AnswerBox";
 import { AutoCategorize } from "../review/AutoCategorize";
+import { countLeft, inLane, LANES, type LaneId, OPTIONAL } from "../review/lanes";
 import "../styles/review.css";
-
-type LaneId = "accounts" | "payees" | "categories" | "checks";
-const LANES: { id: LaneId; name: string }[] = [
-  { id: "accounts", name: "Accounts" }, { id: "categories", name: "Categories" },
-  { id: "payees", name: "Payees" }, { id: "checks", name: "Checks" },
-];
-const OPTIONAL: LaneId = "payees"; // not counted as left, not marked
-const CHECK_TAGS = new Set(["parse", "large", "transfer", "statement", "other"]);
 
 type Group = {
   key: string; label: string; name: string; items: ReviewItem[]; answerable: boolean;
@@ -67,13 +60,6 @@ function useCategoryId() {
     { error: create.error });
 }
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
-
-function inLane(lane: LaneId, i: ReviewItem): boolean {
-  if (lane === "accounts") return i.tags.includes("account");
-  if (lane === "payees") return i.tags.includes("payee");
-  if (lane === "categories") return i.tags.includes("uncategorized");
-  return i.tags.some((t) => CHECK_TAGS.has(t));
-}
 
 function groupsFor(lane: LaneId, items: ReviewItem[]): Group[] {
   const mine = items.filter((i) => inLane(lane, i));
@@ -106,7 +92,7 @@ export function ReviewPage() {
   const [status, setStatus] = useState<string | null>(null);
 
   const items = review.data?.items ?? [];
-  const left = items.filter((i) => LANES.some((l) => l.id !== OPTIONAL && inLane(l.id, i))).length;
+  const left = countLeft(items);
   const active: Account[] = (accounts.data ?? []).filter((a) => a.archived_at === null);
   const cats: Category[] = (categories.data ?? []).filter((c) => c.archived_at === null);
   const choose = (id: LaneId) => { setParams({ lane: id }, { replace: true }); setStatus(null); };

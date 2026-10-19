@@ -1,6 +1,7 @@
 // A stand-in for the backend in component tests: stubs global fetch with
 // canned responses keyed by "METHOD /path" (query strings ignored), and records
-// every call made: `calls` as keys, `requests` with their parsed JSON bodies.
+// every call made: `calls` as keys, `requests` with their parsed JSON bodies,
+// `urls` in full, query strings included.
 import { vi } from "vitest";
 
 export type Reply = { status: number; body?: unknown } | "network-error";
@@ -8,11 +9,13 @@ export type Reply = { status: number; body?: unknown } | "network-error";
 export function mockApi(initial: Record<string, Reply>) {
   const routes = new Map(Object.entries(initial));
   const calls: string[] = [];
+  const urls: string[] = [];
   const requests: { key: string; body: unknown }[] = [];
 
   vi.stubGlobal("fetch", async (input: Request) => {
     const key = `${input.method} ${new URL(input.url).pathname}`;
     calls.push(key);
+    urls.push(input.url);
     const text = await input.clone().text();
     requests.push({ key, body: text ? JSON.parse(text) : undefined });
     const reply = routes.get(key);
@@ -27,6 +30,7 @@ export function mockApi(initial: Record<string, Reply>) {
 
   return {
     calls,
+    urls,
     requests,
     /** JSON bodies sent to this "METHOD /path", in order. */
     bodiesFor(key: string) {
