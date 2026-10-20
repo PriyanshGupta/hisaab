@@ -47,6 +47,7 @@ from sqlalchemy import ColumnElement, func, or_, select
 from sqlalchemy.orm import Session
 
 from hisaab.accounts.repository import resolve_identifier
+from hisaab.balances.checks import record_checks
 from hisaab.clock import local_today
 from hisaab.models import (
     Account,
@@ -116,6 +117,7 @@ class _Run:
     deleted: set[str] = field(default_factory=set)
     merged_into: dict[str, str] = field(default_factory=dict)  # absorbed id -> its survivor's id
     doubts: dict[str, str] = field(default_factory=dict)  # transaction id -> an ambiguous transfer match
+    observed: bool = False  # an email's balance was recorded: run the reconciliation check (slice 20)
 
 
 def _new_run(session: Session, user_id: str) -> _Run:
@@ -148,6 +150,8 @@ def apply(session: Session, user_id: str, batch: Sequence[tuple[str, Routed]]) -
         run.counts.pending_llm += routed.state == "pending_llm"
     session.flush()
     _settle(run)
+    if run.observed:
+        record_checks(session, user_id)
     run.counts.transactions_new = len(run.created - run.deleted)
     run.counts.transactions_updated = len(run.reparsed - run.created - run.deleted)
     return run.counts
@@ -206,6 +210,7 @@ def _place(run: _Run, source: Source, extraction: dict[str, Any], sender: str | 
     run.placed.add(txn.id)
     if extraction.get("balance") is not None and account is not None:
         _observe(session, run.user_id, account.id, extraction["balance"], source)
+        run.observed = True
 
 
 def _parse(session: Session, user_id: str, extraction: dict[str, Any],

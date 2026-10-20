@@ -10,7 +10,9 @@
   a review question) fits neither side; cash_out_unknown says how much. A number the user marked "not my
   account" (a FASTag wallet) is outside their accounts for good: in neither, and nothing to ask.
 - Transfers are listed and counted in neither spending nor money in. Reversed payments are listed
-  and counted nowhere. Adjustments (slice 20) and lending (schema only) are not reported yet.
+  and counted nowhere. Adjustments (a balance gap the user accepted, slice 20) are deliberately outside
+  every total: they are visible in the transaction list, never spending, cash out or money in. Lending
+  is schema only.
 """
 
 from collections.abc import Iterable

@@ -24,6 +24,7 @@ from hisaab.api import (
     accounts,
     admin_users,
     auth,
+    balances,
     categories,
     gmail,
     jobs,
@@ -79,6 +80,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(review.router)
     app.include_router(reports.router)
     app.include_router(statements.router)
+    app.include_router(balances.router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
 
 

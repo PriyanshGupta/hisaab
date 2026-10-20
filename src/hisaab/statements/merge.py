@@ -6,19 +6,22 @@
               the diagnostic is kept, with accepted_gap_paise when the user merged a failed check
     rows      derive.apply_statement: match again, supersede, insert, pair, resolve status
     balance   the declared closing balance as a BalanceObservation, at the end of the last row's day
-              (no movement after it, so that is when the closing figure is true)
+              (no movement after it, so that is when the closing figure is true), and the declared
+              opening at the end of the day before the first row, so the statement is checked against
+              the ledger at once (slice 20, ruling 2026-10-20)
     discard   the staging row is deleted
 
-Reconciliation against the observation, and adjustments for an accepted gap, are slice 20.
+    check     record_checks: any gap between those balances and the ledger opens a balance_deltas row
 """
 
 import json
-from datetime import date, datetime, time
+from datetime import date, datetime, time, timedelta
 from typing import Any
 
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
+from hisaab.balances.checks import record_checks
 from hisaab.clock import LOCAL_TZ
 from hisaab.jobs.queue import JobContext
 from hisaab.models import Account, BalanceObservation, Source, StatementStaging, utc_now
@@ -56,23 +59,47 @@ def run(ctx: JobContext) -> dict[str, int]:
         s.flush()
         rows: list[StatementRow] = rows_of(staging)
         counts: StatementCounts = apply_statement(s, ctx.user_id, source, account.id, rows)
-        if staging.declared_closing is not None and rows:
-            _observe_closing(s, ctx.user_id, account.id, staging.declared_closing,
-                             max(date.fromisoformat(r.date) for r in rows), source)
+        if rows:
+            first: date = min(date.fromisoformat(r.date) for r in rows)
+            last: date = max(date.fromisoformat(r.date) for r in rows)
+            wanted: list[tuple[int, date]] = [
+                (balance, on) for balance, on in ((staging.declared_opening, first - timedelta(days=1)),  # slice 20
+                                                  (staging.declared_closing, last)) if balance is not None]
+            _observe(s, ctx.user_id, account.id, wanted, source, staging.content_hash)
         s.delete(staging)
+        gaps: int = record_checks(s, ctx.user_id)
     return {"new": counts.new, "matched": counts.matched, "needs_review": counts.needs_review,
-            "unparseable": int(diagnostic["rows_unparseable"])}
+            "unparseable": int(diagnostic["rows_unparseable"]), "balance_gaps": gaps}
 
 
-def _observe_closing(session: Session, user_id: str, account_id: str, balance: int, last: date,
-                     source: Source) -> None:
-    """One observation per account and statement date: uploading the statement again updates it."""
-    observed_at: str = utc_now(datetime.combine(last, time(23, 59, 59), LOCAL_TZ))
-    seen: BalanceObservation | None = session.scalars(select(BalanceObservation).where(
-        BalanceObservation.user_id == user_id, BalanceObservation.account_id == account_id,
-        BalanceObservation.source == "statement", BalanceObservation.observed_at == observed_at)).first()
-    if seen is None:
-        session.add(BalanceObservation(user_id=user_id, account_id=account_id, balance=balance,
-                                       observed_at=observed_at, source="statement", source_id=source.id))
-    else:
-        seen.balance, seen.source_id = balance, source.id
+def _observe(session: Session, user_id: str, account_id: str, wanted: list[tuple[int, date]], source: Source,
+             content_hash: str) -> None:
+    """The balances the statement prints (its opening, then its closing), each at the end of its date.
+
+    Matched to the observations an earlier upload of the SAME statement (same content hash) recorded:
+    the same instant first, then opening/closing order, so a re-upload updates them in place even when a
+    parser fix moved a row date (their ids, and any gap recorded against them, stay). Another statement's
+    figure at the same instant (August's closing, September's opening) is never overwritten: both are kept,
+    and if the bank's two documents disagree the check shows the difference."""
+    earlier: list[BalanceObservation] = list(session.scalars(
+        select(BalanceObservation).join(Source, Source.id == BalanceObservation.source_id).where(
+            BalanceObservation.user_id == user_id, BalanceObservation.account_id == account_id,
+            BalanceObservation.source == "statement", Source.content_hash == content_hash)
+        .order_by(BalanceObservation.observed_at)))
+    instants: list[tuple[int, str]] = [(balance, utc_now(datetime.combine(on, time(23, 59, 59), LOCAL_TZ)))
+                                       for balance, on in wanted]
+    unmatched: list[BalanceObservation] = list(earlier)
+    plan: list[tuple[int, str, BalanceObservation | None]] = []
+    for balance, observed_at in instants:
+        same: BalanceObservation | None = next((o for o in unmatched if o.observed_at == observed_at), None)
+        if same is not None:
+            unmatched.remove(same)
+        plan.append((balance, observed_at, same))
+    for balance, observed_at, same in plan:
+        seen: BalanceObservation | None = same or (unmatched.pop(0) if unmatched else None)
+        if seen is None:
+            session.add(BalanceObservation(user_id=user_id, account_id=account_id, balance=balance,
+                                           observed_at=observed_at, source="statement", source_id=source.id))
+        else:
+            seen.balance, seen.observed_at, seen.source_id = balance, observed_at, source.id
+    session.flush()

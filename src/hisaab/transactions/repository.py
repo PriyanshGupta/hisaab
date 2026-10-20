@@ -25,15 +25,17 @@ from dataclasses import dataclass
 from datetime import date
 from typing import Any, TypeAlias
 
-from sqlalchemy import Row, Select, delete, func, select
+from sqlalchemy import Row, Select, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from hisaab.accounts import repository as accounts
+from hisaab.balances import mark_changed
 from hisaab.categories import repository as categories
 from hisaab.categories.resolution import categorized
 from hisaab.clock import local_today
 from hisaab.models import (
     Account,
+    BalanceDelta,
     Payee,
     Source,
     Transaction,
@@ -418,6 +420,11 @@ def delete_manual(session: Session, user_id: str, txn_id: str, *, confirm_edits_
     fields: list[str] = [e.field for e in _edits(session, user_id, [txn_id])[txn_id]]
     if fields and not confirm_edits_lost:
         raise EditsWouldBeLost(fields)
+    # An accepted balance gap's adjustment: deleting it makes the gap real again, so its delta reopens.
+    session.execute(update(BalanceDelta).where(BalanceDelta.user_id == user_id,
+                                               BalanceDelta.adjustment_transaction_id == txn.id)
+                    .values(adjustment_transaction_id=None, status="open", resolved_at=None))
+    mark_changed(session, user_id)  # bulk statements below are invisible to the balance check's commit hook
     # Explicit order: no ORM relationships tell SQLAlchemy which rows depend on which.
     session.execute(delete(TransactionEdit).where(TransactionEdit.transaction_id == txn.id))
     session.execute(delete(TransactionSource).where(TransactionSource.transaction_id == txn.id))

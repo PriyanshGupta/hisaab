@@ -10,7 +10,7 @@ outside the user's net worth).
     income      external             bank / cash
     transfer    internal / unknown   internal, a different account   (unknown payer: ruling 2026-10-11)
     refund      external             bank / card / cash   (cash: ruling 2026-10-11)
-    adjustment  external             any internal account
+    adjustment  one internal account, the other side external: in or out (ruling 2026-10-20)
     lending     schema only in v0: refused
 
 Income never lands on a card: card credits (cashback, rewards) are refunds (§3.8),
@@ -27,7 +27,7 @@ _RULES: dict[str, tuple[set[str | None], set[str | None]]] = {
     "income": ({None}, {"bank", "cash", UNRESOLVED}),
     "transfer": (INTERNAL | {None}, INTERNAL),  # None: a card payment from an account the app can't see
     "refund": ({None}, {"bank", "credit_card", "cash", UNRESOLVED}),
-    "adjustment": ({None}, INTERNAL),
+    "adjustment": (INTERNAL | {None}, INTERNAL | {None}),  # and exactly one internal: checked below
 }
 
 _DESCRIBE: dict[str, str] = {
@@ -35,7 +35,7 @@ _DESCRIBE: dict[str, str] = {
     "income": "Income comes from outside into a bank account or cash.",
     "transfer": "A transfer moves money between two different accounts of yours.",
     "refund": "A refund comes from outside into a bank account, card or cash.",
-    "adjustment": "An adjustment goes into one of your accounts.",
+    "adjustment": "An adjustment moves money into or out of one of your accounts, never between two.",
 }
 
 
@@ -50,4 +50,6 @@ def validate_legs(kind: str, from_leg: str | None, to_leg: str | None, *, same_a
         raise LegError(f"Unknown kind '{kind}'.")
     allowed_from, allowed_to = _RULES[kind]
     if from_leg not in allowed_from or to_leg not in allowed_to or (kind == "transfer" and same_account):
+        raise LegError(_DESCRIBE[kind])
+    if kind == "adjustment" and (from_leg is None) == (to_leg is None):  # a balance gap is either way round
         raise LegError(_DESCRIBE[kind])

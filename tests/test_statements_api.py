@@ -90,7 +90,8 @@ def test_upload_preview_and_merge(asha: TestClient, bank: str) -> None:
 
     job: dict[str, Any] = wait_job(asha, asha.post(f"/api/statements/{preview['id']}/merge", json={}).json()["job_id"])
     assert job["state"] == "succeeded", job
-    assert job["result"] == {"new": 1, "matched": 0, "needs_review": 1, "unparseable": 0}  # payee not recognised
+    assert job["result"] == {"new": 1, "matched": 0, "needs_review": 1, "unparseable": 0,  # payee not recognised
+                             "balance_gaps": 0}  # the statement matches its own opening and closing
     assert asha.get(f"/api/statements/{preview['id']}").status_code == 404
     [listed] = asha.get("/api/transactions").json()
     assert (listed["provenance"], listed["amount_paise"]) == ("statement", 10000)

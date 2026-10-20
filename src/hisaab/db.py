@@ -136,6 +136,8 @@ class Database:
     """
 
     def __init__(self, db_path: Path) -> None:
+        import hisaab.balances.checks  # noqa: F401  registers the reconciliation check's commit hook
+
         self.write_engine: Engine = make_engine(db_path, pool_size=1)
         self.read_engine: Engine = make_engine(db_path, read_only=True)
         self.writer_lock: threading.Lock = threading.Lock()

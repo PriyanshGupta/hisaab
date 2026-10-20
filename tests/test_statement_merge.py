@@ -18,6 +18,7 @@ from hisaab.accounts import repository as accounts
 from hisaab.db import Database
 from hisaab.jobs.queue import JobContext
 from hisaab.models import (
+    BalanceDelta,
     BalanceObservation,
     Source,
     StatementStaging,
@@ -57,17 +58,18 @@ def row(date: str, direction: str, amount: int, narration: str = "CORNER SHOP", 
 
 def stage_rows(db: Database, user_id: str, account_id: str | None, rows: list[StatementRow], *,
                outcome: str = "passed", closing: int | None = 500000, kind: str = "bank",
-               expires_in: timedelta = timedelta(hours=24)) -> str:
+               expires_in: timedelta = timedelta(hours=24), opening: int | None = 100000,
+               content_hash: str = "hash-1") -> str:
     diagnostic: dict[str, Any] = {
         "outcome": outcome, "template_id": None, "template_name": "Example", "pages_processed": 1,
         "rows_extracted": len(rows), "rows_skipped": 0, "rows_unparseable": 0,
-        "declared": {"opening": 100000, "closing": closing}, "computed": {"credits": 0, "debits": 0, "closing": 0},
+        "declared": {"opening": opening, "closing": closing}, "computed": {"credits": 0, "debits": 0, "closing": 0},
         "gap_paise": 200000 if outcome == "failed" else 0, "unparseable_rows": [], "account_kind": kind}
     with db.write_session() as s:
         staging: StatementStaging = StatementStaging(
-            user_id=user_id, account_id=account_id, filename="statement.pdf", content_hash="hash-1",
+            user_id=user_id, account_id=account_id, filename="statement.pdf", content_hash=content_hash,
             parsed_rows=json.dumps([dataclasses.asdict(r) for r in rows]), row_dispositions="[]",
-            declared_opening=100000, declared_closing=closing, validation_result=json.dumps(diagnostic),
+            declared_opening=opening, declared_closing=closing, validation_result=json.dumps(diagnostic),
             expires_at=utc_now(datetime.now(UTC) + expires_in))
         s.add(staging)
         s.flush()
@@ -212,24 +214,55 @@ def test_a_card_statement_matches_the_email_purchase(db: Database, user_id: str,
     assert merge_rows(db, user_id, acct["card"], [row(DAY, "debit", 75000)], kind="credit_card")["matched"] == 1
 
 
-def test_the_closing_balance_is_observed_once_per_statement_date(
+def test_the_statements_balances_are_observed_once_per_date(
         db: Database, user_id: str, acct: dict[str, str]) -> None:
+    """The closing at the end of the last row's day, and (slice 20) the statement's own opening at the end of
+    the day before its first row; re-uploading updates both, never adds."""
     rows: list[StatementRow] = [row(DAY, "debit", 100), row(NEXT, "debit", 200)]
     merge_rows(db, user_id, acct["bank"], rows, closing=500000)
     merge_rows(db, user_id, acct["bank"], rows, closing=500000)
     with db.read_session() as s:
-        seen: list[BalanceObservation] = list(s.scalars(select(BalanceObservation)))
-        assert len(seen) == 1
-        o: BalanceObservation = seen[0]
-        assert (o.account_id, o.balance, o.source, o.source_id) == (
-            acct["bank"], 500000, "statement", statement_sources(db, user_id)[1])
-        assert o.observed_at == "2026-09-02T18:29:59.000Z"  # the end of the last row's day in India
+        seen: list[BalanceObservation] = list(s.scalars(select(BalanceObservation).order_by(BalanceObservation.observed_at)))
+        assert [(o.balance, o.observed_at) for o in seen] == [
+            (100000, "2026-08-31T18:29:59.000Z"), (500000, "2026-09-02T18:29:59.000Z")]
+        assert {(o.account_id, o.source, o.source_id) for o in seen} == {
+            (acct["bank"], "statement", statement_sources(db, user_id)[1])}
 
 
-def test_no_closing_balance_no_observation(db: Database, user_id: str, acct: dict[str, str]) -> None:
-    merge_rows(db, user_id, acct["bank"], [row(DAY, "debit", 100)], closing=None, outcome="unavailable")
+def test_no_declared_balances_no_observation(db: Database, user_id: str, acct: dict[str, str]) -> None:
+    merge_rows(db, user_id, acct["bank"], [row(DAY, "debit", 100)], closing=None, opening=None, outcome="unavailable")
     with db.read_session() as s:
         assert s.scalar(select(func.count()).select_from(BalanceObservation)) == 0
+
+
+# --- slice 20: a merged statement is checked against the ledger at once ------------------------------
+
+def open_deltas(db: Database, user_id: str) -> list[tuple[str, int, str]]:
+    with db.read_session() as s:
+        return [(d.account_id, d.delta, d.arose_from) for d in s.scalars(select(BalanceDelta).where(
+            BalanceDelta.user_id == user_id, BalanceDelta.status == "open"))]
+
+
+def test_a_statement_that_disagrees_with_the_ledger_opens_one_delta_once(
+        db: Database, user_id: str, acct: dict[str, str]) -> None:
+    ingest(db, user_id, (contract(amount=5000, date=DAY, account_identifier="3333", payee_raw="Cafe"), CARD_EMAIL))
+    rows: list[StatementRow] = [row(DAY, "debit", 100, "BOOKS")]  # the statement lacks the ₹50 email charge
+    first: dict[str, int] = merge_rows(db, user_id, acct["card"], rows, kind="credit_card", opening=0, closing=100)
+    assert first["balance_gaps"] == 1
+    assert open_deltas(db, user_id) == [(acct["card"], -5000, "2026-08-31")]  # owes less than Hisaab has
+    again: dict[str, int] = merge_rows(db, user_id, acct["card"], rows, kind="credit_card", opening=0, closing=100)
+    assert again["balance_gaps"] == 0 and len(open_deltas(db, user_id)) == 1  # re-upload: the same interval
+
+
+def test_a_statement_that_matches_the_ledger_opens_none(db: Database, user_id: str, acct: dict[str, str]) -> None:
+    result: dict[str, int] = merge_rows(db, user_id, acct["card"], [row(DAY, "debit", 100)], kind="credit_card",
+                                        opening=0, closing=100)
+    assert result["balance_gaps"] == 0 and open_deltas(db, user_id) == []
+
+
+def test_an_email_carrying_a_balance_runs_the_check(db: Database, user_id: str, acct: dict[str, str]) -> None:
+    ingest(db, user_id, (contract(amount=50000, date=DAY, balance=100000), BANK_EMAIL))  # opening 0: ₹1,500 off
+    assert [(a, d) for a, d, _ in open_deltas(db, user_id)] == [(acct["bank"], 150000)]
 
 
 def test_the_merge_keeps_no_content_and_deletes_the_staging_row(
@@ -333,3 +366,29 @@ def test_an_amount_edit_made_after_the_statement_is_the_users_answer_not_a_disag
     with db.write_session() as s:
         refresh(s, user_id, [txn_id])
     assert "disagrees" not in (effective(db, txn_id).review_reason or "")
+
+
+def observations(db: Database, user_id: str) -> list[tuple[str, int]]:
+    with db.read_session() as s:
+        return [(o.observed_at, o.balance) for o in s.scalars(select(BalanceObservation).where(
+            BalanceObservation.user_id == user_id).order_by(BalanceObservation.observed_at, BalanceObservation.created_at))]
+
+
+def test_consecutive_statements_keep_both_figures_for_the_same_moment(
+        db: Database, user_id: str, acct: dict[str, str]) -> None:
+    """August's closing and September's opening fall at the same instant; neither overwrites the other, and
+    if the bank's two documents disagree, the difference is a gap on September's opening."""
+    merge_rows(db, user_id, acct["bank"], [row("2026-08-10", "credit", 100000, "SALARY")], opening=0, closing=100000,
+               content_hash="hash-aug")
+    merge_rows(db, user_id, acct["bank"], [row("2026-08-11", "debit", 500, "TEA")], opening=95000, closing=94500,
+               content_hash="hash-sep")
+    assert observations(db, user_id) == [("2026-08-09T18:29:59.000Z", 0), ("2026-08-10T18:29:59.000Z", 100000),
+                                         ("2026-08-10T18:29:59.000Z", 95000), ("2026-08-11T18:29:59.000Z", 94500)]
+    assert [(d, since) for _, d, since in open_deltas(db, user_id)] == [(-5000, "2026-08-10")]
+
+
+def test_reuploading_with_shifted_row_dates_updates_the_same_observations(
+        db: Database, user_id: str, acct: dict[str, str]) -> None:
+    merge_rows(db, user_id, acct["bank"], [row(DAY, "debit", 100)], opening=100000, closing=99900)
+    merge_rows(db, user_id, acct["bank"], [row(NEXT, "debit", 100)], opening=100000, closing=99900)  # a parser fix
+    assert observations(db, user_id) == [("2026-09-01T18:29:59.000Z", 100000), ("2026-09-02T18:29:59.000Z", 99900)]

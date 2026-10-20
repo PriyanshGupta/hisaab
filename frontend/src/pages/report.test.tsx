@@ -35,7 +35,8 @@ afterEach(() => { vi.useRealTimers(); });
 
 function open(report: Report = REPORT, review = NO_REVIEW) {
   const api = mockApi({ "GET /api/auth/me": ME, "GET /api/setup": SETUP_DONE,
-    "GET /api/report": { status: 200, body: report }, "GET /api/review": review });
+    "GET /api/report": { status: 200, body: report }, "GET /api/review": review,
+    "GET /api/balances": { status: 200, body: [] } });
   return { api, ...renderApp("/") };
 }
 

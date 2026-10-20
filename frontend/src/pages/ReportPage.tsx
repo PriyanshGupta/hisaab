@@ -11,6 +11,7 @@ import { type Report, type ReportCategory, type ReportPayee, type ReportTransact
 import { useReview } from "../api/review";
 import { formatDate } from "../dates";
 import { formatPaise } from "../money";
+import { BalanceBanners, BalancesPanel } from "../report/Balances";
 import { type Period, type Unit, fromParams, indiaToday, periodAt, periodTitle, shift, toParams } from "../report/period";
 import { countLeft } from "../review/lanes";
 import "../styles/report.css";
@@ -80,6 +81,7 @@ export function ReportPage() {
         )}
       </header>
 
+      <BalanceBanners />
       {report.isError && <p className="form-error" role="alert">{describeError(report.error)}</p>}
       {report.data && (
         <>
@@ -90,6 +92,7 @@ export function ReportPage() {
           <Moved report={report.data} cash={cash} word={word} />
         </>
       )}
+      <BalancesPanel />
       {report.isPending && <p className="muted">Loading…</p>}
     </div>
   );

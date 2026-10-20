@@ -66,15 +66,10 @@ def test_refund_must_come_from_outside_into_an_account(from_leg: str | None, to_
     bad("refund", from_leg, to_leg)
 
 
-# adjustment: external -> any internal account
+# adjustment: exactly one internal account, on either side (ruling 2026-10-20; see the end of this file)
 @pytest.mark.parametrize("dst", [BANK, CARD, CASH])
 def test_adjustment_from_external_into_any_account(dst: str | None) -> None:
     ok("adjustment", None, dst)
-
-
-@pytest.mark.parametrize("from_leg,to_leg", [(BANK, None), (None, None)])
-def test_adjustment_needs_only_a_destination_account(from_leg: str | None, to_leg: str | None) -> None:
-    bad("adjustment", from_leg, to_leg)
 
 
 # lending: reserved in the schema, not implemented in v0
@@ -85,3 +80,15 @@ def test_lending_is_refused() -> None:
 
 def test_unknown_kind_is_refused() -> None:
     bad("gift", BANK, None)
+
+
+@pytest.mark.parametrize(("from_leg", "to_leg"), [(None, "bank"), (None, "credit_card"), ("bank", None),
+                                                  ("credit_card", None), ("cash", None)])
+def test_adjustment_has_exactly_one_internal_leg_on_either_side(from_leg: str | None, to_leg: str | None) -> None:
+    validate_legs("adjustment", from_leg, to_leg)  # ruling 2026-10-20: a gap can be either way round
+
+
+@pytest.mark.parametrize(("from_leg", "to_leg"), [("bank", "credit_card"), (None, None)])
+def test_adjustment_never_moves_between_two_accounts_or_nowhere(from_leg: str | None, to_leg: str | None) -> None:
+    with pytest.raises(LegError, match="into or out of one of your accounts"):
+        validate_legs("adjustment", from_leg, to_leg)
