@@ -12,9 +12,12 @@ import { useReview } from "../api/review";
 import { formatDate } from "../dates";
 import { formatPaise } from "../money";
 import { BalanceBanners, BalancesPanel } from "../report/Balances";
+import { Recurring } from "../report/Recurring";
+import { Trends } from "../report/Trends";
 import { type Period, type Unit, fromParams, indiaToday, periodAt, periodTitle, shift, toParams } from "../report/period";
 import { countLeft } from "../review/lanes";
 import "../styles/report.css";
+import "../styles/trends.css";
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
 const UNITS: { unit: Unit; label: string }[] = [
@@ -89,6 +92,8 @@ export function ReportPage() {
             <Hero report={report.data} cash={cash} title={periodTitle(period)} onBasis={(b) => go(period, b)} />
             <Ledger report={report.data} word={word} />
           </section>
+          <Trends />
+          <Recurring />
           <Moved report={report.data} cash={cash} word={word} />
         </>
       )}

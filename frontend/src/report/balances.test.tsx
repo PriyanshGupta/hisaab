@@ -30,7 +30,9 @@ afterEach(() => { vi.useRealTimers(); });
 
 function open(balances: unknown[], routes: Record<string, Reply> = {}) {
   const api = mockApi({ "GET /api/auth/me": ME, "GET /api/setup": SETUP_DONE, "GET /api/report": REPORT,
-    "GET /api/review": NO_REVIEW, "GET /api/balances": { status: 200, body: balances }, ...routes });
+    "GET /api/review": NO_REVIEW, "GET /api/balances": { status: 200, body: balances },
+    "GET /api/trends": { status: 200, body: { months: [], history_from: null, partial: [], categories: [] } },
+    "GET /api/recurring": { status: 200, body: [] }, ...routes });
   renderApp("/");
   return { api, user: userEvent.setup({ advanceTimers: vi.advanceTimersByTime }) };
 }

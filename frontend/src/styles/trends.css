@@ -1,0 +1,148 @@
+/*
+ * Trends and recurring charges (slice 21), inside the report. Small multiples separated by hairline rules,
+ * not shadowed cards: each chart is a ledger column, not a widget. One hue, the report's accent, for every
+ * line (single series per chart: no legend, the title names it). Months before the history are a sunk band
+ * with no marks; the running month's point is hollow. Text never wears the line colour. Under .report.
+ */
+.report .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+/* ---------- the grid ---------- */
+.report .trends {
+  padding-right: var(--s5);
+  padding-bottom: var(--s4);
+}
+.report .trends__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  column-gap: var(--s5);
+}
+.report .trend {
+  margin: 0;
+  padding: var(--s3) 0 var(--s2);
+  border-top: 1px solid var(--rule);
+  min-width: 0;
+}
+.report .trend__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: baseline;
+  gap: var(--s2);
+}
+.report .trend__name {
+  font-weight: var(--w-strong);
+  min-width: 0;
+  overflow-wrap: anywhere;
+}
+.report .trend__now {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s1);
+  white-space: nowrap;
+}
+.report .trend__value {
+  font-weight: var(--w-strong);
+}
+.report .trend__when {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+
+/* ---------- one chart ---------- */
+.report .trend__plot {
+  position: relative;
+  margin-top: var(--s1);
+}
+.report .trend svg {
+  display: block;
+  width: 100%;
+  height: auto;
+  overflow: visible;
+  border-radius: var(--r-control);
+  touch-action: pan-y;
+}
+.report .trend svg:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.report .trend__before {
+  fill: var(--paper-sunk);
+}
+.report .trend__grid {
+  stroke: var(--rule);
+  stroke-width: 1;
+}
+.report .trend__zero {
+  stroke: var(--rule-strong);
+  stroke-width: 1;
+}
+.report .trend__cross {
+  stroke: var(--ink-muted);
+  stroke-width: 1;
+}
+.report .trend__tick {
+  font-size: 9px;
+  fill: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+}
+.report .trend__line {
+  fill: none;
+  stroke: var(--accent);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+}
+.report .trend__point {
+  fill: var(--accent);
+  stroke: var(--paper-raised); /* the surface ring keeps a point legible where it meets the line */
+  stroke-width: 2;
+}
+.report .trend__point--partial {
+  fill: var(--paper-raised);
+  stroke: var(--accent);
+}
+.report .trend__tip {
+  position: absolute;
+  top: -0.25rem;
+  transform: translate(-50%, -100%);
+  display: grid;
+  padding: var(--s1) var(--s2);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-control);
+  white-space: nowrap;
+  pointer-events: none;
+  z-index: 1;
+}
+.report .trend__tip span {
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+}
+
+/* ---------- recurring charges ---------- */
+.report .recurring__list {
+  padding: 0;
+  margin: 0;
+  list-style: none;
+}
+.report .recurring__payee {
+  font-weight: var(--w-strong);
+}
+.report .recurring__money {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-end;
+  text-align: right;
+}
+
+@media (max-width: 640px) {
+  .report .trends {
+    padding-right: var(--s3);
+  }
+}

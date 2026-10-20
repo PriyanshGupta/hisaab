@@ -247,3 +247,62 @@ def test_a_card_bill_with_no_known_payer_is_reported_apart_from_cash_out(
     report: dict[str, Any] = get(asha)
     assert [(t["kind"], t["from_label"]) for t in report["transfers"]] == [("card_bill", None)]
     assert (report["cash_out_paise"], report["cash_out_unknown_paise"], report["spending_paise"]) == (0, 2800000, 0)
+
+
+# --- slice 21: trends and recurring charges ------------------------------------------------------------------
+
+def _days_ago(n: int) -> str:
+    from datetime import timedelta
+
+    from hisaab.clock import local_today
+
+    return (local_today() - timedelta(days=n)).isoformat()
+
+
+def test_trends_and_recurring_need_login(client: TestClient) -> None:
+    assert client.get("/api/trends").status_code == 401
+    assert client.get("/api/recurring").status_code == 401
+
+
+def test_trends_by_category_for_twelve_months(asha: TestClient, accts: dict[str, str]) -> None:
+    food: str = category(asha, "Food")
+    enter(asha, amount_paise=40000, payee="Cafe", category_id=food, from_account_id=accts["card"],
+          transaction_date=_days_ago(0))
+    body: dict[str, Any] = asha.get("/api/trends").json()
+    assert len(body["months"]) == 12 and body["history_from"] == _days_ago(0)
+    [food_trend] = body["categories"]
+    assert (food_trend["name"], food_trend["category_id"], food_trend["months"][-1], food_trend["total_paise"]) == (
+        "Food", food, 40000, 40000)
+    assert body["months"][-1] in body["partial"]
+
+
+def test_recurring_finds_the_monthly_charge_and_not_the_varying_weekly_shop(asha: TestClient,
+                                                                            accts: dict[str, str]) -> None:
+    films: str = category(asha, "Streaming")
+    for days in (90, 60, 30):
+        enter(asha, amount_paise=55500, payee="Streamflix", category_id=films, from_account_id=accts["card"],
+              transaction_date=_days_ago(days))
+    for days, amount in zip((35, 28, 21, 14, 7), (120000, 85000, 230000, 150000, 98000)):
+        enter(asha, amount_paise=amount, payee="Corner Grocer", from_account_id=accts["bank"],
+              transaction_date=_days_ago(days))
+    [only] = asha.get("/api/recurring").json()
+    assert (only["payee"], only["category"], only["account"], only["count"], only["typical_gap_days"]) == (
+        "Streamflix", "Streaming", "Card", 3, 30)
+    assert (only["latest_paise"], only["first_paise"], only["last_on"], only["yearly_paise"]) == (
+        55500, 55500, _days_ago(30), 55500 * 12)
+
+
+def test_an_empty_user_gets_empty_trends_and_no_recurring(asha: TestClient) -> None:
+    body: dict[str, Any] = asha.get("/api/trends").json()
+    assert (len(body["months"]), body["history_from"], body["categories"]) == (12, None, [])
+    assert asha.get("/api/recurring").json() == []
+
+
+def test_another_users_charges_never_show(app: FastAPI, asha: TestClient, client: TestClient,
+                                          accts: dict[str, str]) -> None:
+    for days in (90, 60, 30):
+        enter(asha, amount_paise=55500, payee="Streamflix", from_account_id=accts["card"],
+              transaction_date=_days_ago(days))
+    make_user(app, "ravi", "ravi password 1")
+    login(client, "ravi", "ravi password 1")
+    assert client.get("/api/recurring").json() == [] and client.get("/api/trends").json()["categories"] == []
