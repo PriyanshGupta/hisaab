@@ -165,6 +165,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
     app.state.jobs = JobQueue(app.state.db, job_kinds(settings))
     app.state.mail_transport = default_transport  # the mailbox transport; tests swap in a fake Gmail
     app.state.llm_transport = llm.default_transport  # auto-categorize's model calls; tests swap in a fake Claude
+    app.state.statement_transport = None  # tier-3 statements: None = llm.long_transport; tests swap in a fake
     app.state.llm_sleep = time.sleep  # its retry back-off
     # How long a user action waits for the writer lock before answering 503.
     app.state.writer_timeout = 10.0

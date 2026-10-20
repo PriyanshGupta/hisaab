@@ -15,6 +15,7 @@ reliable layer, and the spec decides how to cut them into rows.
 """
 
 import io
+import re
 from dataclasses import dataclass
 
 import pdfplumber
@@ -22,6 +23,8 @@ from pdfminer.pdfdocument import PDFPasswordIncorrect
 from pdfplumber.page import Page as PdfPage
 
 LINE_TOLERANCE: float = 3  # points: words whose tops differ by less sit on one line
+CHAR_PT: float = 4.5  # points per character column in layout_text (about one character of 9pt type)
+WORD_GAP_PT: float = 6.0  # layout_text: words closer than this are one phrase; farther, a new column
 
 
 class PdfError(ValueError):
@@ -110,3 +113,33 @@ def _page(number: int, page: PdfPage) -> Page:
     rules += [Rule((r["x0"] + r["x1"]) / 2, r["top"], r["bottom"]) for r in page.rects if r["width"] <= 2]
     rules.sort(key=lambda r: (r.x, r.top))
     return Page(number, tuple(built), tuple(rules))
+
+
+_NUMBER: re.Pattern[str] = re.compile(r"^[+-]?[\d,]*\d\.\d{2}(Cr|CR|Dr|DR|C|D)?$")
+
+
+def layout_text(page: Page) -> str:
+    """The page as text with each word at its horizontal position, so columns stay columns: for the model
+    reading an unknown layout (tier 3), "40.00" under Withdrawal and under Deposit must not look the same.
+
+    The character width is the page's narrowest (small or condensed type, common on statements), so text
+    never overruns its column; amounts are placed by their right edge, as statements right-align them."""
+    widths: list[float] = [(w.x1 - w.x0) / len(w.text) for line in page.lines for w in line.words if len(w.text) >= 4]
+    char_pt: float = max(1.5, min([CHAR_PT, *widths]))
+    out: list[str] = []
+    for line in page.lines:
+        text: str = ""
+        previous: Word | None = None
+        for word in line.words:
+            right: bool = _NUMBER.match(word.text) is not None
+            column: int = round(word.x1 / char_pt) - len(word.text) if right else round(word.x0 / char_pt)
+            if previous is not None and word.x0 - previous.x1 < WORD_GAP_PT:
+                text += " "  # the same phrase: one space, as printed
+            elif previous is not None:  # a gap: the next column, at least two spaces away
+                text += " " * max(2, column - len(text))
+            else:
+                text += " " * max(0, column)
+            text += word.text
+            previous = word
+        out.append(text)
+    return "\n".join(out)

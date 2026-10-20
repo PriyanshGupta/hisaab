@@ -32,10 +32,10 @@ def stage(session: Session, user_id: str, filename: str, content_hash: str, read
     validation: dict[str, Any] = read.result.validation
     row: StatementStaging = StatementStaging(
         user_id=user_id, account_id=read.account_id, filename=filename, content_hash=content_hash,
-        template_id=read.template.id, parsed_rows=json.dumps([dataclasses.asdict(r) for r in rows]),
+        template_id=read.template.id if read.template else None, parsed_rows=json.dumps([dataclasses.asdict(r) for r in rows]),
         row_dispositions=json.dumps(_dispositions(session, user_id, read.account_id, rows)),
         declared_opening=validation["declared"]["opening"], declared_closing=validation["declared"]["closing"],
-        validation_result=json.dumps({**validation, "account_kind": read.template.spec.account_kind}),
+        validation_result=json.dumps({**validation, "account_kind": read.account_kind}),
         expires_at=utc_now(now + TTL))
     session.add(row)
     session.flush()

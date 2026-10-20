@@ -25,7 +25,14 @@ import {
 } from "../api/statements";
 import { formatDate, formatInstant } from "../dates";
 import { formatPaise } from "../money";
-import { type Diagnostic, type Kind, type UnparseableRow, checkLines, describeCheck } from "../statements/diagnostic";
+import {
+  type Diagnostic,
+  type Kind,
+  type UnparseableRow,
+  checkLines,
+  describeCheck,
+  readBy,
+} from "../statements/diagnostic";
 import "../styles/statements.css";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -77,6 +84,11 @@ function UploadForm({ onRead }: { onRead: (id: string) => void }) {
           {upload.isPending ? "Reading…" : "Read statement"}
         </button>
       </div>
+      {upload.isPending && (
+        <p className="stmt-upload__wait" role="status">
+          A layout Hisaab doesn't know yet is read by Claude, which can take a minute or two.
+        </p>
+      )}
       {sentence && (
         <p className="form-error" role="alert">
           {sentence}
@@ -135,7 +147,7 @@ function PreviewBody({ p, onClose }: { p: StatementPreview; onClose: () => void 
           </div>
         )}
         <p className="stmt__meta">
-          {p.filename}, read as “{p.template_name ?? "unknown layout"}”, {plural(d.pages_processed, "page", "pages")}.
+          {p.filename}, {readBy(d, p.template_name)}, {plural(d.pages_processed, "page", "pages")}.
           {" "}Discarded automatically on {formatInstant(p.expires_at)} unless merged.
         </p>
         {!picking && <MergeActions p={p} d={d} rows={rows} onClose={onClose} />}
@@ -192,6 +204,12 @@ function Check({ d, kind }: { d: Diagnostic; kind: Kind }) {
   const lines = checkLines(d, kind);
   return (
     <section className={`stmt-check stmt-check--${d.outcome}`} aria-label="The statement's own check">
+      {d.tier === 3 && (
+        <p className="stmt-check__source">
+          Every amount below was found printed in the PDF. Rows Claude read but Hisaab couldn't find there are
+          under “couldn't be read”.
+        </p>
+      )}
       <p className="stmt-check__sentence">{describeCheck(d, kind)}</p>
       {lines.length > 0 ? (
         <table className="stmt-sum">

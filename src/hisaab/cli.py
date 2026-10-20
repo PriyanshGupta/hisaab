@@ -14,6 +14,7 @@ shell history or the process list.
 
 import argparse
 import json
+import os
 import sys
 from getpass import getpass
 from pathlib import Path
@@ -129,6 +130,10 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
         "measure-fixtures", help="PRD §9 parse rate: every fixture with an expected answer, through the seeds")
     meas.add_argument("--fixtures", default=str(PROJECT_ROOT / "fixtures"), help="fixture directory")
     commands.add_parser("sync-seeds", help="load the shipped parser templates and normalization patterns")
+    compare: argparse.ArgumentParser = commands.add_parser(
+        "compare-tiers", help="read one of your own statements by its template and by Claude, and diff them")
+    compare.add_argument("pdf", help="a statement PDF you downloaded (never a fixture)")
+    compare.add_argument("--password-env", metavar="VAR", help="read the PDF's password from this env var")
     args: argparse.Namespace = parser.parse_args(argv)
     if args.command == "create-admin":
         return _create_admin(args, settings or Settings())
@@ -142,6 +147,12 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
         return _measure_fixtures(args)
     if args.command == "sync-seeds":
         return _sync_seeds(settings or Settings())
+    if args.command == "compare-tiers":
+        from hisaab.statements.compare import compare_tiers
+
+        resolved: Settings = settings or Settings()
+        return compare_tiers(Database(resolved.database_path), resolved, Path(args.pdf),
+                             os.environ.get(args.password_env) if args.password_env else None, sys.stdout)
     if args.command == "template-skeleton":
         from hisaab.parsing.harness import skeleton
 

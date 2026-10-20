@@ -193,3 +193,29 @@ def test_an_oversize_file_says_so_and_a_long_password_is_never_echoed(asha: Test
     secret: str = "p" * 300
     long_pw: Response = upload(asha, PASSING, secret)
     assert long_pw.status_code == 422 and secret not in long_pw.text
+
+
+def test_an_unknown_layout_is_read_by_the_model_and_merges_like_any_other(app: FastAPI, asha: TestClient,
+                                                                          bank: str) -> None:
+    from pydantic import SecretStr
+
+    from tests.claude_fake import FakeClaude
+    from tests.test_statement_reading import MODEL_ANSWER, UNKNOWN
+
+    app.state.settings = app.state.settings.model_copy(update={"anthropic_api_key": SecretStr("sk-test")})
+    claude: FakeClaude = FakeClaude(reply=lambda prompt: MODEL_ANSWER)
+    app.state.statement_transport = claude
+    preview: dict[str, Any] = upload(asha, UNKNOWN, filename="other.pdf").json()
+    assert (preview["template_name"], preview["account_id"], preview["diagnostic"]["tier"]) == (None, bank, 3)
+    assert [r["amount_paise"] for r in preview["new"]] == [10000] and claude.calls == 1
+    job: dict[str, Any] = wait_job(asha, asha.post(f"/api/statements/{preview['id']}/merge", json={}).json()["job_id"])
+    assert job["state"] == "succeeded" and job["result"]["new"] == 1
+
+
+def test_an_unknown_layout_without_the_model_is_422_and_stages_nothing(app: FastAPI, asha: TestClient) -> None:
+    from tests.test_statement_reading import UNKNOWN
+
+    before: tuple[int, int] = counts(app)
+    resp: Response = upload(asha, UNKNOWN)
+    assert resp.status_code == 422 and "isn't available right now" in resp.json()["detail"]
+    assert counts(app) == before

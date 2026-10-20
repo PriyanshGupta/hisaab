@@ -5,18 +5,22 @@ Synthetic statements only (tests/statement_samples.py): the RULED spec reads
 """
 
 import json
+from typing import Any
 from datetime import UTC, datetime, timedelta
 
 import pytest
+from pydantic import SecretStr
 from sqlalchemy import Connection
 
 from hisaab.accounts import repository as accounts
+from hisaab.config import Settings
 from hisaab.db import Database
 from hisaab.models import StatementStaging, utc_now
 from hisaab.parsing import templates
 from hisaab.statements.reading import ReadStatement, StatementError, read_statement
 from hisaab.statements.staging import load, rebind, rows_of, stage
 from tests import factories as f
+from tests.claude_fake import FakeClaude
 from tests.pdf_factory import make_pdf
 from tests.pipeline_helpers import contract, ingest
 from tests.statement_samples import ruled_page, ruled_pdf
@@ -48,9 +52,14 @@ def bank(db: Database, user_id: str) -> str:
     return make_account(db, user_id, "1234")
 
 
-def read(db: Database, user_id: str, data: bytes, password: str | None = None) -> ReadStatement:
+NO_MODEL: Settings = Settings(_env_file=None, anthropic_api_key=None)  # a known layout must never need the model
+
+
+def read(db: Database, user_id: str, data: bytes, password: str | None = None, *, settings: Settings = NO_MODEL,
+         claude: FakeClaude | None = None) -> ReadStatement:
     with db.read_session() as s:
-        return read_statement(s, user_id, data, password)
+        return read_statement(s, user_id, data, password, settings=settings, transport=claude or FakeClaude(),
+                              sleep=lambda _s: None)
 
 
 def staged(db: Database, user_id: str, data: bytes = PASSING) -> str:
@@ -61,7 +70,7 @@ def staged(db: Database, user_id: str, data: bytes = PASSING) -> str:
 
 def test_reads_binds_and_validates(db: Database, user_id: str, bank: str) -> None:
     found: ReadStatement = read(db, user_id, PASSING)
-    assert found.account_id == bank and found.template.name == "Example statement"
+    assert found.account_id == bank and found.template is not None and found.template.name == "Example statement"
     assert found.result.validation["outcome"] == "passed"
     assert [(r.date, r.direction, r.amount) for r in found.result.rows] == [(DAY, "debit", 10000)]
 
@@ -75,19 +84,12 @@ def test_an_encrypted_statement_opens_with_its_password(db: Database, user_id: s
     (b"not a pdf at all", None, "isn't a PDF"),
     (ruled_pdf(ruled_page([ROW], first=True), password="pw"), None, "password-protected"),
     (ruled_pdf(ruled_page([ROW], first=True), password="pw"), "wrong", "doesn't open"),
-    (make_pdf([{"texts": [(40, 30, "Some Other Bank"), (40, 50, "Your statement")]}]), None, "No statement layout"),
     (make_pdf([{"texts": []}]), None, "no text"),
 ])
 def test_refusals_are_sentences(db: Database, user_id: str, data: bytes, password: str | None, says: str) -> None:
     with pytest.raises(StatementError, match=says) as e:
         read(db, user_id, data, password)
     assert "wrong" not in str(e.value) or says == "doesn't open"  # the password is never echoed
-
-
-def test_a_layout_that_does_not_fit_says_which_and_why(db: Database, user_id: str) -> None:
-    labels: list[str] = ["Date", "Narration", "Ref", "Deposit", "Withdrawal", "Balance"]  # two columns swapped
-    with pytest.raises(StatementError, match="“Example statement” layout didn't fit this file: .*Withdrawal"):
-        read(db, user_id, ruled_pdf(ruled_page([ROW], first=True, labels=labels)))
 
 
 def test_unbound_when_the_number_is_not_one_of_the_users_accounts(db: Database, user_id: str) -> None:
@@ -161,3 +163,61 @@ def test_load_hides_expired_and_other_users_previews(db: Database, conn: Connect
         s.get_one(StatementStaging, staging_id).expires_at = utc_now(datetime.now(UTC) - timedelta(seconds=1))
     with db.read_session() as s:
         assert load(s, user_id, staging_id) is None  # expired but not yet swept: gone all the same
+
+
+# --- tier 3: layouts no template reads (ruling 2026-10-19) ---------------------------------------------
+
+UNKNOWN: bytes = make_pdf([{"texts": [(40, 30, "Some Other Bank"), (40, 45, "Savings account ending 1234"),
+                                      (40, 60, "Opening 1,000.00"), (40, 75, "Closing 900.00"),
+                                      (40, 100, "01/09/26"), (120, 100, "CORNER SHOP"), (400, 100, "100.00")]}])
+MODEL_ANSWER: dict[str, Any] = {
+    "outcome": "statement", "account_kind": "bank", "account_last4": "1234", "institution": "Some Other Bank",
+    "opening": 100000, "closing": 90000, "unreadable": [],
+    "rows": [{"page": 1, "date": DAY, "time": None, "narration": "CORNER SHOP", "reference": None,
+              "direction": "debit", "amount": 10000, "balance": None, "bill_payment": False}],
+}
+WITH_MODEL: Settings = Settings(_env_file=None, anthropic_api_key=SecretStr("sk-test"))
+
+
+def test_an_unknown_layout_is_read_by_the_model(db: Database, user_id: str, bank: str) -> None:
+    claude: FakeClaude = FakeClaude(reply=lambda prompt: MODEL_ANSWER)
+    found: ReadStatement = read(db, user_id, UNKNOWN, settings=WITH_MODEL, claude=claude)
+    assert claude.calls == 1 and "CORNER SHOP" in claude.requests[0]["messages"][0]["content"]
+    assert found.template is None and (found.account_id, found.account_kind) == (bank, "bank")
+    assert (found.result.validation["tier"], found.result.validation["outcome"]) == (3, "passed")
+    with db.write_session() as s:
+        row: StatementStaging = stage(s, user_id, "other.pdf", "hash-9", found)
+        assert row.template_id is None and json.loads(row.validation_result)["account_kind"] == "bank"
+
+
+def test_a_known_layout_never_calls_the_model(db: Database, user_id: str, bank: str) -> None:
+    claude: FakeClaude = FakeClaude(reply=lambda prompt: MODEL_ANSWER)
+    assert read(db, user_id, PASSING, settings=WITH_MODEL, claude=claude).template is not None
+    assert claude.calls == 0
+
+
+def test_a_template_that_does_not_fit_falls_through_and_says_which(db: Database, user_id: str, bank: str) -> None:
+    labels: list[str] = ["Date", "Narration", "Ref", "Deposit", "Withdrawal", "Balance"]
+    misfit: bytes = ruled_pdf(ruled_page([ROW], first=True, labels=labels, summary=SUMMARY))
+    answer: dict[str, Any] = MODEL_ANSWER | {"opening": None, "closing": None}
+    found: ReadStatement = read(db, user_id, misfit, settings=WITH_MODEL, claude=FakeClaude(reply=lambda p: answer))
+    tried: dict[str, str] = found.result.validation["template_tried"]
+    assert tried["template"] == "Example statement" and "Withdrawal" in tried["reason"]
+
+
+def test_without_the_model_an_unknown_layout_is_a_sentence(db: Database, user_id: str) -> None:
+    with pytest.raises(StatementError, match="isn't one Hisaab knows, and the model that reads new layouts isn't "
+                                             "available right now"):
+        read(db, user_id, UNKNOWN)  # no API key configured
+
+
+def test_a_model_answer_that_breaks_the_contract_is_a_sentence(db: Database, user_id: str) -> None:
+    claude: FakeClaude = FakeClaude(reply=lambda prompt: MODEL_ANSWER | {"rows": "lots"})
+    with pytest.raises(StatementError, match="The model's reading of this statement couldn't be used.*Nothing was saved"):
+        read(db, user_id, UNKNOWN, settings=WITH_MODEL, claude=claude)
+
+
+def test_a_file_the_model_says_is_not_a_statement_is_a_sentence(db: Database, user_id: str) -> None:
+    claude: FakeClaude = FakeClaude(reply=lambda prompt: MODEL_ANSWER | {"outcome": "not_a_statement", "rows": []})
+    with pytest.raises(StatementError, match="doesn't look like a bank or card statement"):
+        read(db, user_id, UNKNOWN, settings=WITH_MODEL, claude=claude)

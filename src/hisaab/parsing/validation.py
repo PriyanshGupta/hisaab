@@ -40,14 +40,22 @@ def declared_balances(spec: StatementSpec, text: str) -> dict[str, int | None]:
 
 def validate(spec: StatementSpec, text: str, result: StatementResult, *, template_id: str | None = None,
              template_name: str | None = None, tolerance_paise: int = 100) -> dict[str, Any]:
-    declared: dict[str, int | None] = declared_balances(spec, text)
+    return arithmetic(spec.account_kind, declared_balances(spec, text), result, template_id=template_id,
+                      template_name=template_name, tolerance_paise=tolerance_paise)
+
+
+def arithmetic(account_kind: str, declared: dict[str, int | None], result: StatementResult, *,
+               template_id: str | None = None, template_name: str | None = None,
+               tolerance_paise: int = 100) -> dict[str, Any]:
+    """The check and its diagnostic, given the statement's declared balances however they were read
+    (a template's patterns, or the model's reading held to the printed text in tier 3)."""
     credits: int = sum(r.amount for r in result.rows if r.direction == "credit")
     debits: int = sum(r.amount for r in result.rows if r.direction == "debit")
     computed_closing: int | None = None
     gap: int | None = None
     outcome: str = "unavailable"
     if declared["opening"] is not None and declared["closing"] is not None:
-        change: int = debits - credits if spec.account_kind == "credit_card" else credits - debits
+        change: int = debits - credits if account_kind == "credit_card" else credits - debits
         computed_closing = declared["opening"] + change
         gap = declared["closing"] - computed_closing
         outcome = "passed" if abs(gap) <= tolerance_paise else "failed"

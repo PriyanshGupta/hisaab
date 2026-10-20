@@ -49,3 +49,11 @@ test("the sum: bank adds money in, card adds spending", () => {
     "Owed at the start", "Spent", "Paid and refunded", "The rows come to", "The statement says", "Gap"]);
   expect(checkLines({ ...base, outcome: "unavailable" }, "bank")).toEqual([]);
 });
+
+test("unavailable because Claude's balances weren't found printed says that, not that none are printed", () => {
+  const dropped = { ...base, outcome: "unavailable", tier: 3, declared: { opening: null, closing: null }, gap_paise: null,
+    declared_dropped: ["opening", "closing"] };
+  expect(describeCheck(dropped, "bank")).toBe(
+    "Parsed 118 rows. Claude reported an opening and closing balance that Hisaab couldn't find printed in the " +
+    "statement, so the rows couldn't be checked against them.");
+});

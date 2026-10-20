@@ -45,6 +45,11 @@
   cursor: pointer;
 }
 
+.statements .stmt-upload__wait {
+  color: var(--ink-muted);
+  max-width: 34rem;
+}
+
 .statements .stmt-open {
   margin-bottom: var(--s6);
   padding-bottom: var(--s4);
@@ -154,6 +159,11 @@
 }
 .statements .stmt-check--unavailable::before {
   border-left-color: var(--ink-muted);
+}
+/* Tier 3: what the figures below were held to, before the check itself speaks. */
+.statements .stmt-check__source {
+  color: var(--ink-soft);
+  max-width: 36rem;
 }
 .statements .stmt-check__sentence {
   font-size: var(--t-lead);

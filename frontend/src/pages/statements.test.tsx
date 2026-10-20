@@ -1,4 +1,5 @@
 import { screen, waitFor, within } from "@testing-library/react";
+import { vi } from "vitest";
 import userEvent from "@testing-library/user-event";
 
 import { mockApi, type Reply } from "../test/mockApi";
@@ -193,4 +194,43 @@ test("the merge action sits at the top, before the check and the rows", async ()
   const merge = await screen.findByRole("button", { name: "Merge 3 rows into HDFC Savings" });
   const check = screen.getByRole("region", { name: "The statement's own check" });
   expect(merge.compareDocumentPosition(check) & Node.DOCUMENT_POSITION_FOLLOWING).toBeTruthy();
+});
+
+test("a statement read by Claude says so, and that every amount was found in the PDF", async () => {
+  setup("/statements?open=s-1", { "GET /api/statements/s-1": { status: 200, body: preview({
+    template_name: null, diagnostic: diagnostic({ tier: 3, model: "claude-sonnet-5-5", institution: "Other Bank",
+      template_name: null }) }) } });
+  expect(await screen.findByText(/sept\.pdf, read by Claude because no known layout matched, 2 pages\./)).toBeInTheDocument();
+  expect(screen.getByText("Every amount below was found printed in the PDF. Rows Claude read but Hisaab couldn't " +
+    "find there are under “couldn't be read”.")).toBeInTheDocument();
+});
+
+test("when a known layout didn't fit, the preview says which and why", async () => {
+  setup("/statements?open=s-1", { "GET /api/statements/s-1": { status: 200, body: preview({
+    template_name: null, diagnostic: diagnostic({ tier: 3, template_name: null,
+      template_tried: { template: "hdfc_cc_statement", reason: "no header row on any page" } }) }) } });
+  expect(await screen.findByText(/read by Claude because the “hdfc_cc_statement” layout didn't fit \(no header row on any page\)/))
+    .toBeInTheDocument();
+});
+
+test("a statement read by a template shows no Claude note", async () => {
+  setup("/statements?open=s-1", { "GET /api/statements/s-1": { status: 200, body: preview() } });
+  expect(await screen.findByText(/read as “Example statement”/)).toBeInTheDocument();
+  expect(screen.queryByText(/found printed in the PDF/)).not.toBeInTheDocument();
+});
+
+test("while reading, the form says an unfamiliar layout can take a minute or two", async () => {
+  const { user } = setup("/statements", {});
+  let release: () => void = () => {};
+  vi.stubGlobal("fetch", (input: Request) => new Promise<Response>((resolve) => {
+    if (input.method === "POST") release = () => resolve(new Response(JSON.stringify(preview()), {
+      status: 201, headers: { "content-type": "application/json" } }));
+    else resolve(new Response(JSON.stringify(input.url.endsWith("/api/auth/me") ? ME.body : []), {
+      status: 200, headers: { "content-type": "application/json" } }));
+  }));
+  await user.upload(await screen.findByLabelText("Statement PDF"), new File(["%PDF"], "sept.pdf"));
+  await user.click(screen.getByRole("button", { name: "Read statement" }));
+  expect(await screen.findByText("A layout Hisaab doesn't know yet is read by Claude, which can take a minute or two."))
+    .toBeInTheDocument();
+  release();
 });

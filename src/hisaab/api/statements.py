@@ -142,8 +142,10 @@ def _preview(session: Session, user_id: str, staging: StatementStaging) -> State
 
 
 @router.post("", response_model=StatementPreview, status_code=status.HTTP_201_CREATED)
-def upload(body: Upload, user: CurrentUser = Depends(current_user),
+def upload(body: Upload, request: Request, user: CurrentUser = Depends(current_user),
            db: Database = Depends(get_db)) -> StatementPreview:
+    """Synchronous on purpose: an unknown layout is read by the model here, which can take a minute or two,
+    but a job would need the PDF and password kept until it ran, and neither may be kept (PRD §4.6)."""
     if len(body.content_base64) > (MAX_PDF_BYTES * 4) // 3 + 4:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That file is over 10 MB.")
     if body.password is not None and len(body.password) > MAX_PASSWORD:
@@ -156,7 +158,9 @@ def upload(body: Upload, user: CurrentUser = Depends(current_user),
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "That file is over 10 MB.")
     try:
         with db.read_session() as s:
-            found: ReadStatement = read_statement(s, user.id, data, body.password)
+            found: ReadStatement = read_statement(
+                s, user.id, data, body.password, settings=request.app.state.settings,
+                transport=request.app.state.statement_transport, sleep=request.app.state.llm_sleep)
     except StatementError as e:
         raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, str(e)) from None
     with db.write_session() as s:

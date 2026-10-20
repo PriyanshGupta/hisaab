@@ -16,6 +16,11 @@ export type Diagnostic = {
   computed: { credits: number; debits: number; closing: number | null };
   gap_paise: number | null; // declared closing − computed closing: positive means the rows come to less
   unparseable_rows: UnparseableRow[];
+  tier?: number; // 3: read by the model (no template fitted)
+  model?: string;
+  institution?: string | null;
+  template_tried?: { template: string; reason: string }; // a template recognised it but didn't fit
+  declared_dropped?: string[]; // tier 3: balances Claude reported that aren't printed in the statement
 };
 export type Kind = "bank" | "credit_card";
 export type SumLine = { label: string; paise: number; sign?: "+" | "−"; total?: boolean };
@@ -38,6 +43,9 @@ export function describeCheck(d: Diagnostic, kind: Kind): string {
     const gap = d.gap_paise ?? 0;
     sentence = `Parsed ${rows(d.rows_extracted)}, but they come to ${formatPaise(Math.abs(gap))} ` +
       `${gap > 0 ? "less" : "more"} than the statement's own ${closingName}.`;
+  } else if (d.declared_dropped?.length) {
+    sentence = `Parsed ${rows(d.rows_extracted)}. Claude reported an opening and closing balance that Hisaab ` +
+      "couldn't find printed in the statement, so the rows couldn't be checked against them.";
   } else {
     sentence = `Parsed ${rows(d.rows_extracted)}. This statement doesn't print an opening and closing balance ` +
       "Hisaab can read, so the rows couldn't be checked against it.";
@@ -62,4 +70,11 @@ export function checkLines(d: Diagnostic, kind: Kind): SumLine[] {
   ];
   if (d.outcome === "failed") lines.push({ label: "Gap", paise: Math.abs(d.gap_paise ?? 0) });
   return lines;
+}
+
+/** How the statement was read, for the preview's file line. */
+export function readBy(d: Diagnostic, templateName: string | null): string {
+  if (d.tier !== 3) return `read as “${templateName ?? "unknown layout"}”`;
+  if (d.template_tried) return `read by Claude because the “${d.template_tried.template}” layout didn't fit (${d.template_tried.reason})`;
+  return "read by Claude because no known layout matched";
 }

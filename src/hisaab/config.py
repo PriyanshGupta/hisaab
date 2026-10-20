@@ -47,9 +47,10 @@ class Settings(BaseSettings):
     encryption_key: SecretStr | None = None
     session_secret: SecretStr | None = None
 
-    # Tier-2 extraction (tech-design §4.11): any server speaking the Anthropic Messages API.
+    # LLM tiers (tech-design §4.11): any server speaking the Anthropic Messages API.
     llm_base_url: str = "https://api.anthropic.com"
     email_model: str = "claude-haiku-5-5"
+    statement_model: str = "claude-sonnet-5-5"  # tier 3: unknown statement layouts (tech-design §4.11)
 
     @field_validator("database_path", "frontend_dist")
     @classmethod
