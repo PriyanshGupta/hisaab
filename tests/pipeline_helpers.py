@@ -31,11 +31,11 @@ def install_templates(db: Database) -> None:
 
 
 def add_source(session: Session, user_id: str, content: bytes, message_id: str | None, kind: str = "email",
-               **kw: Any) -> Source:
+               processing_state: str = "pending", **kw: Any) -> Source:
     source: Source = Source(
         ingest_seq=next_ingest_seq(session), user_id=user_id, kind=kind, content=content,
         content_hash=hashlib.sha256(content).hexdigest(), external_message_id=message_id,
-        received_at="2026-10-05T20:00:00.000Z", ingested_at=utc_now(), processing_state="pending", **kw)
+        received_at="2026-10-05T20:00:00.000Z", ingested_at=utc_now(), processing_state=processing_state, **kw)
     session.add(source)
     session.flush()
     return source

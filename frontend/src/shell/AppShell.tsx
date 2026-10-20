@@ -18,6 +18,7 @@ export function AppShell() {
   const user = me.data;
   if (!user) return null; // RequireAuth guarantees a user; this narrows the type.
 
+  const items = NAV_ITEMS.filter((item) => !item.admin || user.role === "admin");
   const signOut = () => logout.mutate(undefined, { onSettled: () => navigate("/login", { replace: true }) });
 
   return (
@@ -40,7 +41,7 @@ export function AppShell() {
         <span className="wordmark">Hisaab</span>
         <nav aria-label="Main">
           <ul className="sidenav">
-            {NAV_ITEMS.map((item) => (
+            {items.map((item) => (
               <li key={item.to}>
                 <NavLink className="sidenav__link" to={item.to} end={item.end ?? false}>
                   {item.label}
@@ -62,7 +63,7 @@ export function AppShell() {
       </main>
 
       <nav className="tabbar" aria-label="Main">
-        {NAV_ITEMS.filter((item) => item.tab !== false).map((item) => (
+        {items.filter((item) => item.tab !== false).map((item) => (
           <NavLink key={item.to} className="tabbar__link" to={item.to} end={item.end ?? false}>
             {item.label}
           </NavLink>

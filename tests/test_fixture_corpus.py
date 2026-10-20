@@ -9,7 +9,7 @@ import pytest
 
 from hisaab.cli import HELD_OUT
 from hisaab.config import PROJECT_ROOT
-from hisaab.parsing.measure import FixtureResult, Summary, load_seed_templates, measure, summarize
+from hisaab.parsing.measure import FixtureResult, Summary, load_templates, measure, summarize
 from hisaab.seeds import SEED_TEMPLATES
 
 FIXTURES: Path = PROJECT_ROOT / "fixtures"
@@ -21,7 +21,7 @@ KNOWN_UNBINDABLE: set[str] = {"sbi_cc_statement_01"}
 
 @pytest.fixture(scope="module")
 def results() -> list[FixtureResult]:
-    return measure(FIXTURES, load_seed_templates(SEED_TEMPLATES), HELD_OUT)
+    return measure(FIXTURES, load_templates(SEED_TEMPLATES, FIXTURES), HELD_OUT)  # promoted exports included
 
 
 def test_every_fixture_format_is_measured(results: list[FixtureResult]) -> None:

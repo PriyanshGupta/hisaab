@@ -74,8 +74,10 @@ def test_an_unknown_format_goes_to_the_llm_keeps_its_content_and_is_cached(
     assert result.cache_entry is not None
     assert (result.cache_entry.outcome, result.cache_entry.model, result.cache_entry.tier) == ("transaction", MODEL, 2)
     assert json.loads(result.cache_entry.extracted or "{}") == TRANSACTION
+    assert result.fingerprint is not None
     assert result.diagnostic == {"route": "tier2", "model": MODEL, "outcome": "transaction", "missing_fields": [],
-                                 "tier1_attempts": [], "sender": "offers@shop.example"}
+                                 "tier1_attempts": [], "sender": "offers@shop.example",
+                                 "fingerprint": result.fingerprint.value}
 
 
 def test_templates_that_declined_are_named_in_the_tier_2_diagnostic(routed: Callable[[bytes, Llm], Routed]) -> None:

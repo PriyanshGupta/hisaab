@@ -87,10 +87,11 @@ HELD_OUT: frozenset[str] = frozenset({"hdfc_cc_purchase_02", "icici_cc_purchase_
 
 
 def _measure_fixtures(args: argparse.Namespace) -> int:
-    from hisaab.parsing.measure import FixtureResult, Summary, load_seed_templates, measure, summarize
+    from hisaab.parsing.measure import FixtureResult, Summary, load_templates, measure, summarize
     from hisaab.seeds import SEED_TEMPLATES
 
-    results: list[FixtureResult] = measure(Path(args.fixtures), load_seed_templates(SEED_TEMPLATES), HELD_OUT)
+    results: list[FixtureResult] = measure(Path(args.fixtures), load_templates(SEED_TEMPLATES, Path(args.fixtures)),
+                                           HELD_OUT)
     for r in results:
         mark: str = "ok  " if r.ok else "FAIL"
         held: str = " (held out)" if r.held_out else ""

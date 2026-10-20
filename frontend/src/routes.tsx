@@ -12,6 +12,7 @@ import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SetupPage } from "./pages/SetupPage";
 import { StatementsPage } from "./pages/StatementsPage";
+import { TemplatesPage } from "./pages/TemplatesPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
 import { AppShell } from "./shell/AppShell";
 
@@ -33,6 +34,7 @@ export const routes: RouteObject[] = [
       { path: "settings", element: <SettingsPage /> },
       { path: "setup", element: <SetupPage /> },
       { path: "review", element: <ReviewPage /> },
+      { path: "templates", element: <TemplatesPage /> },
       { path: "categorize", element: <Navigate to="/review?lane=categories" replace /> }, // slice 16's landing
       { path: "*", element: <NotFoundPage /> },
     ],

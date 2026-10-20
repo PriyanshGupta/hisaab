@@ -3,10 +3,11 @@
 // ?gmail=connected|denied|error. Sync now runs a background job and reports
 // what it stored when it ends.
 import { useState } from "react";
-import { useSearchParams } from "react-router";
+import { Link, useSearchParams } from "react-router";
 
 import { describeError } from "../api/client";
 import { type GmailStatus, type Job, useConnectGmail, useGmailStatus, useJob, useSyncNow } from "../api/gmail";
+import { useMe } from "../api/session";
 import { formatInstantDate } from "../dates";
 import { goTo } from "../navigate";
 import "../styles/settings.css";
@@ -21,10 +22,15 @@ export function SettingsPage() {
   const [params] = useSearchParams();
   const returned = RETURN_MESSAGES[params.get("gmail") ?? ""];
   const status = useGmailStatus();
+  const me = useMe();
 
   return (
     <>
-      <header className="page-head"><h1 className="page-title">Settings</h1></header>
+      <header className="page-head">
+        <h1 className="page-title">Settings</h1>
+        {/* the queue is a sidebar destination; phones have no sidebar, so admins reach it from here */}
+        {me.data?.role === "admin" && <Link className="page-head__link" to="/templates">Template queue</Link>}
+      </header>
       <section className="settings-section" aria-labelledby="gmail-heading">
         <h2 id="gmail-heading" className="settings-section__title">Gmail</h2>
         {returned && <p className="settings-note">{returned}</p>}

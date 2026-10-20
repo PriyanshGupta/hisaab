@@ -59,6 +59,14 @@ _FIELD_KEYS: set[str] = {"const", "pattern", "transform", "required"}
 _TYPED: dict[str, str] = {"amount": "inr_to_paise", "balance": "inr_to_paise", "date": "date:", "time": "time:"}
 
 
+def same_value(field: str, expected: object, got: object) -> bool:
+    """Contract equality: exact, except time. The model's contract reads HH:MM and the time: transform yields
+    HH:MM:SS (the seeds have always stored seconds), so times compare to the minute, the precision both share."""
+    if field == "time" and isinstance(expected, str) and isinstance(got, str):
+        return expected[:5] == got[:5]
+    return expected == got
+
+
 @dataclass(frozen=True)
 class FieldSpec:
     name: str

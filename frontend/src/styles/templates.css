@@ -1,0 +1,197 @@
+/*
+ * Template promotion queue (slice 22). One bold thing: inside each email's text, the values Haiku
+ * extracted are marked in the accent wash, so the reviewer sees where every value came from before
+ * trusting the table beside it. A row where the template disagrees carries the red double margin rule
+ * (the app's one motif) and says "No match" in words. Everything else is quiet ledger ruling, scoped
+ * under .templates so the short names never meet another screen's.
+ */
+.templates {
+  max-width: 64rem;
+}
+
+.templates .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.templates__lead {
+  max-width: 38rem;
+  margin-bottom: var(--s5);
+  color: var(--ink-soft);
+}
+
+.templates__done {
+  max-width: 44rem;
+  margin-bottom: var(--s5);
+  padding: var(--s3) var(--s4);
+  background: var(--accent-wash);
+  border-radius: var(--r-control);
+}
+
+/* ---------- a candidate ---------- */
+.templates .cand {
+  display: grid;
+  gap: var(--s3);
+  margin-bottom: var(--s6);
+  padding: var(--s5) var(--s5) var(--s5) calc(var(--s7) + var(--s2));
+}
+
+.templates .cand__head {
+  display: grid;
+  gap: var(--s1);
+}
+.templates .cand__subject {
+  font-size: var(--t-title);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+  line-height: var(--lh-tight);
+}
+.templates .cand__sender {
+  font-size: var(--t-body);
+  font-weight: var(--w-body);
+  color: var(--ink-soft);
+}
+
+.templates .cand__seen {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+
+.templates .cand__verdict {
+  max-width: 44rem;
+  padding-left: var(--s3);
+  border-left: 3px solid var(--accent);
+}
+.templates .cand__verdict--fail {
+  border-left: 3px double var(--margin);
+}
+.templates .cand__verdict ul {
+  margin-top: var(--s1);
+  padding-left: var(--s4);
+  color: var(--ink-soft);
+}
+
+/* ---------- an example: the email beside its readings ---------- */
+.templates .cand__example {
+  padding-top: var(--s4);
+  border-top: 1px solid var(--rule);
+}
+.templates .cand__example-head {
+  margin-bottom: var(--s2);
+  font-weight: var(--w-strong);
+}
+.templates .cand__pair {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) minmax(0, 1.1fr);
+  gap: var(--s4);
+  align-items: start;
+}
+.templates .cand__text {
+  max-height: 22rem;
+  overflow: auto;
+  padding: var(--s3) var(--s4);
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+  line-height: var(--lh-body);
+  overflow-wrap: anywhere;
+}
+.templates .cand__text mark {
+  padding: 0 0.15em;
+  color: var(--ink);
+  background: var(--accent-wash);
+  border-bottom: 2px solid var(--accent);
+  border-radius: 2px;
+}
+
+.templates .cand__table th[scope="row"] {
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.templates .cand__table td {
+  overflow-wrap: anywhere;
+}
+.templates .cand__same {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+  white-space: nowrap;
+}
+.templates .cand__miss th[scope="row"] {
+  box-shadow: inset 4px 0 0 -1px var(--margin), inset 7px 0 0 -2px var(--paper-raised),
+              inset 8px 0 0 -2px var(--margin);
+  padding-left: calc(var(--s3) + 6px);
+}
+.templates .cand__miss .cand__same {
+  font-weight: var(--w-strong);
+  color: var(--margin);
+}
+
+.templates .cand__spec summary {
+  min-height: var(--touch);
+  display: flex;
+  align-items: center;
+  font-weight: var(--w-strong);
+  color: var(--accent);
+  cursor: pointer;
+}
+.templates .cand__spec pre {
+  max-height: 24rem;
+  overflow: auto;
+  padding: var(--s3);
+  font-size: var(--t-small);
+  background: var(--paper-sunk);
+  border-radius: var(--r-control);
+}
+
+.templates .cand__actions {
+  flex-wrap: wrap;
+  align-items: center;
+}
+
+/* ---------- demoted ---------- */
+.templates__demoted {
+  max-width: 44rem;
+  margin-bottom: var(--s6);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--rule);
+}
+.templates__demoted h2 {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+}
+.templates__demoted ul {
+  margin-top: var(--s3);
+  list-style: none;
+  padding: 0;
+}
+.templates__gone {
+  display: grid;
+  gap: var(--s1);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.templates__gone--action {
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+}
+.templates__name {
+  font-weight: var(--w-strong);
+}
+
+@media (max-width: 44rem) {
+  .templates .cand {
+    padding: var(--s4) var(--s4) var(--s4) calc(var(--s6) + var(--s3));
+  }
+  .templates .cand__pair {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .templates .cand__text {
+    max-height: 14rem;
+  }
+}

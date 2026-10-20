@@ -20,6 +20,9 @@ subject, the interpreters. Then it compares.
   that cannot bind its account (the preview would ask) gets every row's
   account wrong: strict, because "correct account" is what the PRD counts.
 
+Templates approved in the promotion loop (slice 22) are measured too: approval exports their three
+examples with the spec beside them (promoted/<name>.template.json), loaded with the seeds.
+
 The rate is correct transactions over all transactions. Hold-outs (examples
 kept out of spec authoring) are also reported on their own.
 """
@@ -32,7 +35,7 @@ from pathlib import Path
 from typing import Any
 
 from hisaab.parsing.email_interpreter import EmailArtifact, EmailTemplate, Interpretation, interpret, parse_eml
-from hisaab.parsing.email_spec import parse_email_spec
+from hisaab.parsing.email_spec import parse_email_spec, same_value
 from hisaab.parsing.pdf import Page, PdfError, read_pdf
 from hisaab.parsing.statement_interpreter import (
     StatementResult,
@@ -97,6 +100,20 @@ def load_seed_templates(seed_dir: Path) -> Templates:
     return Templates(email, statement)
 
 
+def load_templates(seed_dir: Path, fixtures_dir: Path) -> Templates:
+    """The seeds, plus the promoted templates exported beside their fixtures."""
+    seeds: Templates = load_seed_templates(seed_dir)
+    return Templates(seeds.email + load_promoted_templates(fixtures_dir), seeds.statement)
+
+
+def load_promoted_templates(fixtures_dir: Path) -> list[EmailTemplate]:
+    """Templates approved in the promotion loop live in the database, not the seeds; approval writes each one's
+    spec beside its exported fixtures (<name>.template.json), so those fixtures are measured with it."""
+    return [EmailTemplate(path.name.removesuffix(".template.json"), path.name.removesuffix(".template.json"),
+                          parse_email_spec(json.loads(path.read_text())))
+            for path in sorted(fixtures_dir.rglob("*.template.json"))]
+
+
 def measure(fixtures_dir: Path, templates: Templates, held_out: frozenset[str]) -> list[FixtureResult]:
     results: list[FixtureResult] = []
     for path in sorted(fixtures_dir.rglob("*.eml")):
@@ -137,7 +154,8 @@ def _email(path: Path, expected: dict[str, Any], templates: Templates, held_out:
     if notice:
         detail: str = "" if result.extraction["outcome"] == "non_transactional" else "parsed as a transaction"
         return FixtureResult(**base, kind="notice", transactions=0, correct=0, detail=detail)
-    wrong: list[str] = [k for k in expected if k != "missing_fields" and result.extraction.get(k) != expected[k]]
+    wrong: list[str] = [k for k in expected
+                        if k != "missing_fields" and not same_value(k, expected[k], result.extraction.get(k))]
     critical: list[str] = [k for k in wrong if k in CRITERION]
     detail = "; ".join(f"{k}: got {result.extraction.get(k)!r}, expected {expected[k]!r}" for k in wrong)
     return FixtureResult(**base, kind="email", transactions=1, correct=0 if critical else 1, detail=detail)

@@ -22,6 +22,7 @@ from sqlalchemy.exc import SQLAlchemyError
 from hisaab.accounts import repository as accounts_repo
 from hisaab.api import (
     accounts,
+    admin_templates,
     admin_users,
     auth,
     balances,
@@ -46,6 +47,8 @@ from hisaab.jobs.kinds import job_kinds
 from hisaab.jobs.queue import JobQueue
 from hisaab.jobs.scheduler import start_scheduler
 from hisaab.payees import repository as payees_repo
+from hisaab.promotion import promote
+from hisaab.promotion.sightings import NotExcluded
 from hisaab.spa import SpaStaticFiles
 from hisaab.transactions import repository as txns_repo
 from hisaab.transactions.legs import LegError
@@ -69,6 +72,7 @@ def health(request: Request) -> JSONResponse:
 def register_routes(app: FastAPI) -> None:
     app.include_router(auth.router)
     app.include_router(admin_users.router)
+    app.include_router(admin_templates.router)
     app.include_router(accounts.router)
     app.include_router(transactions.router)
     app.include_router(categories.categories_router)
@@ -100,6 +104,9 @@ def _require_session_secret(settings: Settings) -> None:
 # classes are listed before their bases (Starlette matches by class anyway).
 _ERROR_STATUS: tuple[tuple[type[Exception], int], ...] = (
     (WriterBusy, 503),
+    (promote.NotFound, 404),
+    (promote.NotApprovable, 409),
+    (NotExcluded, 404),
     (GmailNotConfigured, 409),
     (accounts_repo.NotFound, 404),
     (accounts_repo.DuplicateLast4, 409),

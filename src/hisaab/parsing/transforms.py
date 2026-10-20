@@ -108,7 +108,7 @@ def field_transform(name: str) -> Callable[[str], object]:
 # --- preprocessors ------------------------------------------------------------------
 
 _BLOCK_TAGS: set[str] = {"br", "p", "div", "tr", "td", "th", "li", "table", "h1", "h2", "h3", "h4", "h5", "h6"}
-_HIDDEN_TAGS: set[str] = {"head", "style", "script"}
+HIDDEN_TAGS: set[str] = {"head", "style", "script"}
 
 
 class _TextExtractor(HTMLParser):
@@ -121,13 +121,13 @@ class _TextExtractor(HTMLParser):
         self.hidden = 0
 
     def handle_starttag(self, tag: str, attrs: list[tuple[str, str | None]]) -> None:
-        if tag in _HIDDEN_TAGS:
+        if tag in HIDDEN_TAGS:
             self.hidden += 1
         elif tag in _BLOCK_TAGS:
             self.parts.append(" ")
 
     def handle_endtag(self, tag: str) -> None:
-        if tag in _HIDDEN_TAGS:
+        if tag in HIDDEN_TAGS:
             self.hidden = max(0, self.hidden - 1)
         elif tag in _BLOCK_TAGS:
             self.parts.append(" ")

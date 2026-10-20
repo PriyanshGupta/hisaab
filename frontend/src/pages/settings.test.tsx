@@ -1,4 +1,4 @@
-import { screen, waitFor } from "@testing-library/react";
+import { cleanup, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -98,4 +98,14 @@ test("coming back from Google having declined says nothing was connected", async
     "GET /api/gmail": gmail({ status: "not_connected", email_address: null, last_successful_sync_at: null }),
   });
   expect(await screen.findByText(/Nothing was connected/)).toBeInTheDocument();
+});
+
+test("an admin gets a link to the template queue; a member doesn't", async () => {
+  mockApi({ "GET /api/auth/me": { ...ME, body: { ...ME.body, role: "admin" } }, "GET /api/gmail": gmail() });
+  renderApp("/settings");
+  expect(await screen.findByRole("link", { name: "Template queue" })).toHaveAttribute("href", "/templates");
+  cleanup();
+  setup("/settings", { "GET /api/gmail": gmail() });
+  await screen.findByText("asha@example.test");
+  expect(screen.queryByRole("link", { name: "Template queue" })).not.toBeInTheDocument();
 });

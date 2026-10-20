@@ -44,6 +44,18 @@ def _strict_problems(schema: Any, where: str) -> list[str]:
     return found
 
 
+UNION_LIMIT: int = 16  # strict tools: "limit: 16 parameters with unions" (the live API's 400, 2026-10-20)
+
+
+def _unions(schema: Any) -> int:
+    """Parameters whose type is a list (["string", "null"]) or an anyOf, anywhere in the schema."""
+    if not isinstance(schema, dict):
+        return 0
+    own: int = int(isinstance(schema.get("type"), list) or "anyOf" in schema)
+    nested: int = sum(_unions(sub) for sub in schema.get("properties", {}).values())
+    return own + nested + _unions(schema.get("items"))
+
+
 def request_problem(request: dict[str, Any]) -> str | None:
     """The first thing about a request the real Messages API would reject, as far as these tests need."""
     choice: dict[str, Any] = request.get("tool_choice", {})
@@ -54,6 +66,10 @@ def request_problem(request: dict[str, Any]) -> str | None:
             problems: list[str] = _strict_problems(tool.get("input_schema"), tool.get("name", "tool"))
             if problems:
                 return problems[0]
+            unions: int = _unions(tool.get("input_schema"))
+            if unions > UNION_LIMIT:
+                return (f"Schemas contains too many parameters with union types ({unions} parameters with type "
+                        f"arrays or anyOf). (limit: {UNION_LIMIT} parameters with unions).")
     return None
 
 

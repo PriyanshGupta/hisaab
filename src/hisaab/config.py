@@ -39,6 +39,8 @@ class Settings(BaseSettings):
     port: int = 8765  # the OAuth loopback callback targets this port (§2.3, §5.5)
     # The built SPA (npm run build in frontend/). Served at / with a client-route fallback.
     frontend_dist: Path = Path("frontend/dist")
+    # Where a promoted template's three examples are exported, redacted (promotion loop, tech-design §4.10).
+    fixtures_dir: Path = Path("fixtures/emails")
 
     # Optional until the slice that needs each one makes it required.
     anthropic_api_key: SecretStr | None = None
@@ -51,8 +53,12 @@ class Settings(BaseSettings):
     llm_base_url: str = "https://api.anthropic.com"
     email_model: str = "claude-haiku-5-5"
     statement_model: str = "claude-sonnet-5-5"  # tier 3: unknown statement layouts (tech-design §4.11)
+    template_model: str = "claude-sonnet-5-5"  # template proposals (§4.10 step 2; §4.11)
 
-    @field_validator("database_path", "frontend_dist")
+    # The promotion loop (§4.10). Off: a candidate that passes replay waits for an admin's approval.
+    auto_promote_templates: bool = False
+
+    @field_validator("database_path", "frontend_dist", "fixtures_dir")
     @classmethod
     def _anchor_to_project_root(cls, value: Path) -> Path:
         value = value.expanduser()

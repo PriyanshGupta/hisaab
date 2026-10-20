@@ -34,7 +34,8 @@ own side's leg when that leg is empty. Re-parsing a Source finds its transaction
 through the link table and updates it in place, so user edits (the overlay) stay
 attached. Per routed Source this also records the template failure counters
 (§4.3 step 9), stores a new cache entry, sets processing_state, writes the
-diagnostic, and discards content when routing said so (§3.7).
+diagnostic, discards content when routing said so (§3.7), and counts a model-read email
+under its format's fingerprint (§4.10; once per Source, so a re-read never counts twice).
 """
 
 import json
@@ -62,6 +63,7 @@ from hisaab.parsing.statement_interpreter import StatementRow
 from hisaab.parsing.templates import record_outcome
 from hisaab.payees.normalization import PatternRule, load_rules, match_payee
 from hisaab.pipeline.routing import Routed
+from hisaab.promotion.sightings import record_sighting
 from hisaab.transactions.repository import derived_key
 from hisaab.transactions.review import CARD_PAYMENT, review_reasons
 from hisaab.tunables import tunable
@@ -130,8 +132,10 @@ def _new_run(session: Session, user_id: str) -> _Run:
 def apply(session: Session, user_id: str, batch: Sequence[tuple[str, Routed]]) -> PipelineCounts:
     """batch: (source id, how it was routed), in ingest order."""
     run: _Run = _new_run(session, user_id)
+    threshold: int = tunable(session, "template_promotion_sightings")
     for source_id, routed in batch:
         source: Source = session.get_one(Source, source_id)
+        counted_as: str | None = json.loads(source.diagnostic or "{}").get("fingerprint")
         if routed.interpretation is not None:
             record_outcome(session, routed.interpretation)
         if routed.cache_entry is not None and session.get(ExtractionCache, routed.cache_entry.content_hash) is None:
@@ -139,10 +143,13 @@ def apply(session: Session, user_id: str, batch: Sequence[tuple[str, Routed]]) -
         source.processing_state = routed.state
         diagnostic: dict[str, Any] = dict(routed.diagnostic)
         if routed.state == "parsed" and routed.extraction is not None:
-            diagnostic["review"] = _parse_reasons(routed.extraction)
+            diagnostic["review"] = _parse_reasons(routed.extraction) + list(routed.review)
         source.diagnostic = json.dumps(diagnostic)
         if routed.discard_content:
             source.content = None
+        if routed.fingerprint is not None and routed.extraction is not None and routed.fingerprint.value != counted_as:
+            session.flush()  # the non-transactional count reads the Sources' diagnostics
+            record_sighting(session, routed.fingerprint, source, routed.extraction["outcome"], threshold)
         if routed.state == "parsed" and routed.extraction is not None:
             _place(run, source, routed.extraction, diagnostic.get("sender"))
         run.counts.non_transactional += routed.state == "non_transactional"

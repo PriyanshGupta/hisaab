@@ -3,7 +3,8 @@
 // here; only routes that exist are listed.
 // tab: false keeps an occasional destination out of the phone's tab bar, which fits about seven labels;
 // the page is linked from a related screen instead (Statements from Transactions).
-export type NavItem = { to: string; label: string; end?: boolean; tab?: boolean };
+// admin: true shows only to admins (the template queue; Settings links to it on phones).
+export type NavItem = { to: string; label: string; end?: boolean; tab?: boolean; admin?: boolean };
 
 export const NAV_ITEMS: readonly NavItem[] = [
   { to: "/", label: "Report", end: true },
@@ -14,4 +15,5 @@ export const NAV_ITEMS: readonly NavItem[] = [
   { to: "/accounts", label: "Accounts" },
   { to: "/categories", label: "Categories" },
   { to: "/settings", label: "Settings" },
+  { to: "/templates", label: "Templates", tab: false, admin: true },
 ];

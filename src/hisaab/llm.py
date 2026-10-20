@@ -165,7 +165,8 @@ def tool_call(settings: Settings, system: str, tool: str, description: str, sche
         messages.append({"role": "assistant", "content": reply.get("content", [])})  # resume where it paused
         status, reply = _post(settings, request(searching), transport, sleep, retries)
     if status != 200:
-        raise LLMUnavailable(f"LLM refused the request: HTTP {status}")
+        reason: Any = (reply.get("error") or {}).get("message")
+        raise LLMUnavailable(f"LLM refused the request: HTTP {status}" + (f": {str(reason)[:300]}" if reason else ""))
     if reply.get("stop_reason") == "max_tokens":  # a cut-off answer is a partial one: never treat it as whole
         raise ContractError(f"the model's {tool} answer was cut off at {max_tokens} tokens")
     for block in reply.get("content", []):
@@ -191,8 +192,14 @@ def _post(settings: Settings, body: dict[str, Any], transport: Transport, sleep:
             sleep(2 ** attempt)
     else:
         raise LLMUnavailable(f"LLM unavailable: HTTP {status or 'no response'} after {retries} retries")
+    if status != 200:  # keep the API's own reason (it describes the request, never the email): {"error": {...}}
+        try:
+            error: Any = json.loads(raw or b"{}").get("error")
+        except (json.JSONDecodeError, AttributeError):
+            error = None
+        return status, {"error": error} if isinstance(error, dict) else {}
     try:
-        parsed: dict[str, Any] = json.loads(raw or b"{}") if status == 200 else {}
+        parsed: dict[str, Any] = json.loads(raw or b"{}")
     except json.JSONDecodeError:
         raise ContractError("the model's reply wasn't JSON") from None
     return status, parsed
@@ -396,3 +403,92 @@ def validate_statement(raw: dict[str, Any], page_count: int) -> dict[str, Any]:
             unreadable.append({"page": page if type(page) is int else 0, "text": text, "reason": problem})
     return {"outcome": outcome, "account_kind": kind, "account_last4": last4, "institution": institution,
             "opening": raw.get("opening"), "closing": raw.get("closing"), "rows": good, "unreadable": unreadable}
+
+
+# --- template proposals (tech-design §4.10 step 2) ------------------------------------------------------------
+
+PROPOSAL_TOOL: str = "propose_template"
+PROPOSAL_MAX_TOKENS: int = 8_000
+_PROPOSAL_FIELD: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "kind": {"type": "string", "enum": ["pattern", "const", "absent"]},
+        # plain strings, empty when unused: strict tools allow at most 16 nullable (union-typed) parameters
+        "pattern": {"type": "string", "description": "RE2; capture group 1 is the value. Empty unless kind is pattern"},
+        "transform": {"type": "string", "description": "a transform name from the list, or empty"},
+        "value": {"type": "string", "description": "the constant. Empty unless kind is const"},
+        "required": {"type": "boolean"},
+    },
+    "required": ["kind", "pattern", "transform", "value", "required"],
+    "additionalProperties": False,
+}
+PROPOSAL_SCHEMA: dict[str, Any] = {
+    "type": "object",
+    "properties": {
+        "name": {"type": "string", "description": "snake_case, bank_product_kind, e.g. lantern_card_purchase"},
+        "subject_pattern": {"type": "string", "description": "RE2 matched against the subject"},
+        "fields": {"type": "object", "properties": {name: _PROPOSAL_FIELD for name in CONTRACT_FIELDS},
+                   "required": list(CONTRACT_FIELDS), "additionalProperties": False},
+    },
+    "required": ["name", "subject_pattern", "fields"],
+    "additionalProperties": False,
+}
+PROPOSAL_SYSTEM: str = """You write a parsing template for one bank alert email format, from three examples of it.
+
+Each example gives the email's sender, subject and received time, the text your patterns will run against
+(HTML already stripped, whitespace collapsed), and the reading another model made of it. The template is
+run on all three and must reproduce that reading EXACTLY, field by field, character for character. Do not
+correct the reading: copy its conventions (for example, if account_identifier is "XX1234", capture "XX1234";
+if it is "1234", capture only the digits).
+
+Call propose_template once.
+
+- subject_pattern: an RE2 pattern anchored on the subject's fixed words (start with ^), never on amounts,
+  dates or names.
+- For each field choose a kind:
+  - "pattern": an RE2 pattern whose capture group 1 is the value, anchored on fixed words around it. RE2 has no
+    lookarounds and no backreferences. Keep patterns short (under 200 characters).
+  - "const": the format implies the value without stating it, e.g. direction "debit" for a debit alert, currency
+    "INR". Put it in value.
+  Leave pattern, transform and value as empty strings where they don't apply.
+  - "absent": the format never states it (required false). For date, "absent" means "use the email's
+    received date", which is right only when the body states no date and the reading's date is the received
+    date in India.
+- transform (or an empty string for none), from this list only:
+  - inr_to_paise: "1,250.00" -> 125000. REQUIRED for amount and balance.
+  - date:<strptime format>, e.g. date:%d-%m-%y or date:%d %b %Y. REQUIRED for a date pattern; the result is YYYY-MM-DD.
+  - time:<strptime format>, e.g. time:%H:%M:%S. REQUIRED for a time pattern; the result is HH:MM:SS, compared
+    with the reading to the minute. Capture the time exactly as printed, seconds included if shown.
+  - digits_only, normalize_vpa, upper, trim.
+- amount, date and account_identifier must be required patterns (date may instead be "absent").
+- required: true when every email of this format states the field; false when it is sometimes missing.
+- A field whose reading is null in all three examples is "absent" with required false."""
+
+
+def propose_template(settings: Settings, examples: list[tuple[EmailArtifact, dict[str, Any]]], *,
+                     transport: Transport = default_transport,
+                     sleep: Callable[[float], None] = time.sleep) -> dict[str, Any]:
+    """Sonnet's form for a template over three examples (artifact, cached reading). The answer is checked only
+    for shape here; promotion.propose builds the spec and replay validates it. Raises LLMUnavailable or
+    ContractError."""
+    prompt: str = "\n\n".join(
+        f"=== Email {n} ===\n{prompt_for(artifact)}\n\n--- The reading to reproduce ---\n"
+        f"{json.dumps({k: reading.get(k) for k in ('outcome', *CONTRACT_FIELDS)}, ensure_ascii=False)}"
+        for n, (artifact, reading) in enumerate(examples, start=1))
+
+    def ask() -> dict[str, Any]:
+        # tool_choice "auto": the 5.5 models refuse forced tool use; strict keeps the arguments schema-valid
+        return tool_call(settings, PROPOSAL_SYSTEM, PROPOSAL_TOOL, "Record the template.", PROPOSAL_SCHEMA, prompt,
+                         transport=transport, sleep=sleep, max_tokens=PROPOSAL_MAX_TOKENS,
+                         model=settings.template_model, forced=False, strict=True)
+    try:
+        answer: dict[str, Any] = ask()
+    except ContractError as e:
+        if "without calling" not in str(e):
+            raise
+        answer = ask()  # "auto" doesn't guarantee the call: ask once more, then refuse
+    fields: Any = answer.get("fields")
+    if not isinstance(answer.get("subject_pattern"), str) or not isinstance(fields, dict) \
+            or set(fields) != set(CONTRACT_FIELDS) or not all(isinstance(v, dict) for v in fields.values()):
+        raise ContractError("propose_template: the answer is missing its subject pattern or a field")
+    return answer

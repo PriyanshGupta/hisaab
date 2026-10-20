@@ -8,7 +8,7 @@ import pytest
 from sqlalchemy import func, select
 
 from hisaab.db import Database
-from hisaab.models import ParserTemplate
+from hisaab.models import ParserTemplate, Setting
 from hisaab.parsing import templates
 from hisaab.parsing.email_interpreter import EmailArtifact, EmailTemplate, Interpretation, interpret
 from hisaab.parsing.email_spec import InvalidSpec
@@ -140,6 +140,54 @@ def test_a_failure_after_the_30_day_window_starts_a_new_streak(db: Database) -> 
     later: datetime = NOW + timedelta(days=31)
     run(db, now=later)
     assert counter(db, a) == (1, "2026-11-11T12:00:00.000Z")
+
+
+# --- automatic demotion (§4.10, tunable template_demotion) ---------------------------------
+
+def status(db: Database, template_id: str) -> tuple[str, str | None]:
+    with db.read_session() as s:
+        row: ParserTemplate = s.get_one(ParserTemplate, template_id)
+        return row.status, row.demoted_at
+
+
+def test_three_failures_within_30_days_demote_the_template(db: Database) -> None:
+    a: str = save(db, "A", broken())
+    run(db)
+    run(db, now=NOW + timedelta(days=10))
+    assert status(db, a) == ("active", None)
+    run(db, now=NOW + timedelta(days=20))
+    assert status(db, a) == ("demoted", "2026-10-31T12:00:00.000Z")
+    assert candidates(db) == []  # a demoted template no longer reads anything
+
+
+def test_a_match_between_failures_restarts_the_count(db: Database) -> None:
+    a: str = save(db, "A", broken())
+    run(db)
+    run(db)
+    with db.write_session() as s:  # one email it read: a match resets the streak (tested above)
+        row: ParserTemplate = s.get_one(ParserTemplate, a)
+        row.consecutive_failures, row.failure_window_started_at = 0, None
+    run(db)
+    run(db)
+    assert status(db, a)[0] == "active"
+
+
+def test_three_failures_spread_over_more_than_30_days_do_not_demote(db: Database) -> None:
+    a: str = save(db, "A", broken())
+    run(db)
+    run(db, now=NOW + timedelta(days=20))
+    run(db, now=NOW + timedelta(days=31))
+    assert status(db, a)[0] == "active" and counter(db, a)[0] == 1
+
+
+def test_the_threshold_is_a_tunable(db: Database) -> None:
+    a: str = save(db, "A", broken())
+    with db.write_session() as s:
+        s.get_one(Setting, ("template_demotion", "")).value = json.dumps({"consecutive_failures": 2,
+                                                                         "window_days": 30})
+    run(db)
+    run(db)
+    assert status(db, a)[0] == "demoted"
 
 
 # --- statement templates (§4.7 step 2) -----------------------------------------------------
