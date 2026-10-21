@@ -124,7 +124,9 @@ def record_outcome(session: Session, result: Interpretation, now: datetime | Non
     """Ruling 2026-10-11, amending §4.3 step 9. A match resets the winner's streak.
     Templates that declined while another matched are left alone: templates sharing
     a sender and subject decline each other's emails by design. Only when every
-    candidate declined (fall-through to tier 2) is each one charged a failure.
+    candidate declined (fall-through to tier 2) and the model then read a
+    transaction is each one charged a failure (routing decides; user, 2026-10-21:
+    a notice under a shared subject is not a failure).
     A streak runs from its first failure; one that comes after the window
     starts a new streak at 1. A streak reaching the threshold demotes the template
     (§4.10; tunable template_demotion, 3 within 30 days): it stops matching, and its

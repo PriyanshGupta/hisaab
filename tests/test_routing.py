@@ -138,3 +138,42 @@ def test_a_cache_hit_names_the_sender_too(db: Database, routed: Callable[[bytes,
         s.add(ExtractionCache(content_hash=hashlib.sha256(UNKNOWN_EML).hexdigest(), outcome="transaction",
                               extracted=json.dumps(TRANSACTION), model=MODEL, tier=2))
     assert routed(UNKNOWN_EML, Llm()).diagnostic["sender"] == "offers@shop.example"
+
+
+# --- what charges a template a failure (user, 2026-10-21) ---------------------------------------------------------
+# HDFC sends notices ("biometric authentication enabled") under the subject its credit and mandate alerts use. Every
+# template declines them, rightly, and the model calls them non-transactional; charging each a failure for that had
+# demoted all three working HDFC templates within one backfill. A failure is now an email the templates declined
+# that turned out to be a transaction: what a bank changing its format looks like.
+
+def changed_alert() -> bytes:
+    from tests.gmail_fake import make_eml
+    return make_eml("alerts@example-bank.in", "Debit alert", "<p>A redesigned alert with no amount</p>")
+
+
+def test_templates_that_declined_a_real_transaction_are_charged(routed: Callable[[bytes, Llm], Routed]) -> None:
+    result: Routed = routed(changed_alert(), Llm(TRANSACTION))
+    assert result.interpretation is not None and len(result.interpretation.attempts) == 1
+
+
+@pytest.mark.parametrize("llm", [Llm(MARKETING), Llm(LLMUnavailable("down")),
+                                 Llm(ContractError("amount: not paise"))],
+                         ids=["a notice", "model unreachable: read again later", "an unreadable reply"])
+def test_templates_that_declined_anything_else_are_not_charged(routed: Callable[[bytes, Llm], Routed],
+                                                              llm: Llm) -> None:
+    result: Routed = routed(changed_alert(), llm)
+    assert result.interpretation is None
+    assert [a["template"] for a in result.diagnostic["tier1_attempts"]] == ["Example debit"]  # still named
+
+
+def test_three_notices_every_template_declines_leave_it_active(db: Database, user_id: str) -> None:
+    from hisaab.models import ParserTemplate
+    from hisaab.pipeline.derive import apply
+    from sqlalchemy import select
+    for n in range(3):
+        with db.write_session() as s:
+            source: Source = add_source(s, user_id, changed_alert() + bytes([n]), f"notice-{n}")
+            apply(s, user_id, [(source.id, route(s, source, Llm(MARKETING), MODEL))])
+    with db.read_session() as s:
+        template: ParserTemplate = s.scalars(select(ParserTemplate).where(ParserTemplate.name == "Example debit")).one()
+        assert (template.status, template.consecutive_failures) == ("active", 0)

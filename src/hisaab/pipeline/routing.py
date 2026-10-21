@@ -92,25 +92,31 @@ def _route(session: Session, source: Source, artifact: EmailArtifact, llm: LlmEx
                       None, interpretation)
 
     tried: list[dict[str, Any]] = _attempts(interpretation)
-    counted: Interpretation | None = interpretation if interpretation.attempts else None
+    # The templates that declined are charged a failure (record_outcome) only when the model then reads a
+    # transaction: a format they should have read and missed, what a bank changing its wording looks like. A notice
+    # sharing their sender and subject (HDFC's "biometric authentication enabled") is theirs to decline, and an
+    # email the model couldn't answer yet proves nothing (user, 2026-10-21: three such notices had demoted every
+    # HDFC template in one backfill).
+    charge: Interpretation | None = interpretation if interpretation.attempts else None
     fp: Fingerprint = fingerprint(artifact)
     if excluded(session, fp.value):  # a known non-transactional format: no model call (ruling 2026-10-10)
         notice: dict[str, Any] = {"outcome": "non_transactional", **dict.fromkeys(CONTRACT_FIELDS),
                                   "missing_fields": []}
         return Routed(notice, "non_transactional", True, {"route": "excluded", "fingerprint": fp.value,
                                                           "outcome": "non_transactional", "missing_fields": [],
-                                                          "tier1_attempts": tried}, None, counted, fp)
+                                                          "tier1_attempts": tried}, None, None, fp)
     try:
         contract: dict[str, Any] = llm(artifact)
     except LLMUnavailable as e:
         return Routed(None, "pending_llm", False, {"route": "pending_llm", "reason": str(e), "tier1_attempts": tried,
-                                                   "fingerprint": fp.value}, None, counted)
+                                                   "fingerprint": fp.value}, None, None)
     except ContractError as e:  # the field name only: the message quotes the model's value
         return Routed(None, "failed", False, {"route": "tier2", "model": model, "contract_violation":
                                               str(e).split(":", 1)[0], "tier1_attempts": tried,
-                                              "fingerprint": fp.value}, None, counted)
+                                              "fingerprint": fp.value}, None, None)
     entry: ExtractionCache = ExtractionCache(content_hash=source.content_hash, outcome=contract["outcome"],
                                              extracted=json.dumps(contract), model=model, tier=2)
     return Routed(contract, STATE_FOR_OUTCOME[contract["outcome"]], False,
                   {"route": "tier2", "model": model, "outcome": contract["outcome"], "fingerprint": fp.value,
-                   "missing_fields": contract["missing_fields"], "tier1_attempts": tried}, entry, counted, fp)
+                   "missing_fields": contract["missing_fields"], "tier1_attempts": tried}, entry,
+                  charge if contract["outcome"] == "transaction" else None, fp)
