@@ -106,6 +106,157 @@
   color: var(--accent-strong);
 }
 
+/* ---------- the header: the title, and the switch between one chart and a chart per category ---------- */
+.report .trends__head {
+  align-items: flex-start;
+}
+
+/* ---------- every category in one chart ---------- */
+/* The chart and its legend side by side on a wide screen, the legend under the chart on a narrow one. The legend is
+   also the readout: each entry's value is for the month being read. Colours live in one mapping, by slot. */
+/* side by side when the section itself is wide enough (a container query: with the sidebar open, the window's
+   width says little about the chart's) */
+.report .trends {
+  container-type: inline-size;
+}
+.report .trend-all {
+  margin: 0;
+  display: grid;
+  gap: var(--s4);
+}
+@container (min-width: 52rem) {
+  .report .trend-all {
+    grid-template-columns: minmax(0, 1fr) 17rem;
+    align-items: start;
+  }
+  .report .trend-all__legend {
+    grid-template-columns: 1fr;
+  }
+}
+.report [data-slot="1"] { --line: var(--series-1); }
+.report [data-slot="2"] { --line: var(--series-2); }
+.report [data-slot="3"] { --line: var(--series-3); }
+.report [data-slot="4"] { --line: var(--series-4); }
+.report [data-slot="5"] { --line: var(--series-5); }
+.report [data-slot="6"] { --line: var(--series-6); }
+.report [data-slot="7"] { --line: var(--series-7); }
+.report [data-slot="8"] { --line: var(--series-8); }
+.report [data-slot="rest"] { --line: var(--series-rest); }
+
+.report .trend-all__plot {
+  min-width: 0;
+}
+.report .trend-all svg {
+  display: block;
+  max-width: 100%;
+  overflow: visible;
+  border-radius: var(--r-control);
+  touch-action: pan-y;
+  cursor: crosshair;
+}
+.report .trend-all svg:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.report .trend-all__line path {
+  fill: none;
+  stroke: var(--line);
+  stroke-width: 2;
+  stroke-linejoin: round;
+  stroke-linecap: round;
+  transition: opacity 140ms ease-out, stroke-width 140ms ease-out;
+}
+.report .trend-all__line path.trend-all__partial {
+  stroke-dasharray: 3 4;
+}
+.report .trend-all__dot {
+  fill: var(--line);
+  stroke: var(--paper-raised); /* the surface ring keeps a point legible where lines meet */
+  stroke-width: 2;
+}
+.report .trend-all__line--dim {
+  opacity: 0.16;
+}
+.report .trend-all__line--lit path {
+  stroke-width: 3;
+}
+
+.report .trend-all__side {
+  display: grid;
+  gap: var(--s2);
+  min-width: 0;
+}
+.report .trend-all__month {
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.report .trend-all__legend {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0 var(--s4);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.report .trend-all__entry {
+  display: grid;
+  grid-template-columns: 1.25rem minmax(0, 1fr) auto;
+  align-items: center;
+  column-gap: var(--s2);
+  width: 100%;
+  min-height: 2.25rem;
+  padding: var(--s1) var(--s2);
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink);
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+  transition: opacity 140ms ease-out, background-color 120ms ease-out;
+}
+.report .trend-all__entry:hover {
+  background: var(--paper-sunk);
+}
+.report .trend-all__entry[aria-pressed="true"] {
+  background: var(--accent-wash);
+}
+.report .trend-all__entry--dim {
+  opacity: 0.45;
+}
+/* a line key, as the legend of a line chart should be: the series' colour, never its text */
+.report .trend-all__key {
+  width: 1.25rem;
+  height: 3px;
+  border-radius: 2px;
+  background: var(--line);
+}
+.report .trend-all__name {
+  min-width: 0;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.report .trend-all__value {
+  font-weight: var(--w-strong);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.report .trend-all__members {
+  grid-column: 2 / -1;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+  line-height: 1.35;
+}
+@media (prefers-reduced-motion: reduce) {
+  .report .trend-all__line path,
+  .report .trend-all__entry {
+    transition: none;
+  }
+}
+
 /* ---------- recurring charges ---------- */
 .report .recurring__list {
   padding: 0;

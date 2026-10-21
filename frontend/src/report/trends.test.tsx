@@ -1,4 +1,4 @@
-import { fireEvent, screen, within } from "@testing-library/react";
+import { cleanup, fireEvent, screen, within } from "@testing-library/react";
 import { afterEach, beforeEach, expect, test, vi } from "vitest";
 
 import { mockApi } from "../test/mockApi";
@@ -29,7 +29,20 @@ const STORAGE = { ...STREAMING, payee: "Cloud Drive", category: null, latest_pai
 beforeEach(() => { vi.useFakeTimers({ toFake: ["Date"] }); vi.setSystemTime(new Date("2026-10-19T06:00:00Z")); });
 afterEach(() => { vi.useRealTimers(); });
 
+const VIEW_KEY = "hisaab.report.trendsView";
+
+/** The chart-per-category view (the tests written for it); `openOne` is the default, one chart for everything. */
 function open(trends: unknown = TRENDS, recurring: unknown[] = [STREAMING, STORAGE]) {
+  localStorage.setItem(VIEW_KEY, "each");
+  render(trends, recurring);
+}
+
+function openOne(trends: unknown = TRENDS, recurring: unknown[] = [STREAMING, STORAGE]) {
+  localStorage.removeItem(VIEW_KEY);
+  render(trends, recurring);
+}
+
+function render(trends: unknown, recurring: unknown[]) {
   mockApi({ "GET /api/auth/me": ME, "GET /api/setup": SETUP_DONE, "GET /api/report": REPORT, "GET /api/review": NO_REVIEW,
     "GET /api/balances": { status: 200, body: [] }, "GET /api/trends": { status: 200, body: trends },
     "GET /api/recurring": { status: 200, body: recurring } });
@@ -111,4 +124,99 @@ test("with no recurring charges and no spending, both sections say so", async ()
   expect(await screen.findByText("No recurring charges yet. They show up after three charges at a steady rhythm."))
     .toBeInTheDocument();
   expect(screen.getByText("No spending yet. Each category gets a chart once money goes out.")).toBeInTheDocument();
+});
+
+
+// ---- one chart for every category (user, 2026-10-21): the default; a legend names each colour ----
+
+const allChart = async () => within(await screen.findByRole("figure", { name: "All categories" }));
+const line = (chart: ReturnType<typeof within>, name: string) =>
+  chart.getByTestId("trend-all-line-" + name);
+const LETTERS = "ABCDEFGHIJ";
+const MANY = { ...TRENDS, categories: [...LETTERS].map((l, i) => ({ category_id: "c-" + l, name: "Cat " + l,
+  months: [...before, 1000 * (10 - i), 1000 * (10 - i), 1000 * (10 - i), 500], total_paise: 1000 * (10 - i) * 3 + 500 })) };
+
+test("by default one chart draws every category as its own line, keyed in a legend", async () => {
+  openOne();
+  const section = await screen.findByRole("region", { name: "Last 12 months, by category" });
+  expect(within(section).queryByRole("figure", { name: "Rent" })).not.toBeInTheDocument();
+  const chart = await allChart();
+  const rows = within(chart.getByRole("list", { name: "Categories" })).getAllByRole("button");
+  expect(rows.map((r) => r.querySelector(".trend-all__name")?.textContent))
+    .toEqual(["Rent", "Food", "Gifts", "Shopping", "Returns", "Not categorized yet"]);
+  for (const r of rows) {  // each legend key wears its own line's colour slot
+    const name = r.querySelector(".trend-all__name")?.textContent ?? "";
+    expect(r.querySelector(".trend-all__key")?.getAttribute("data-slot")).toBe(line(chart, name).getAttribute("data-slot"));
+  }
+  expect(new Set(rows.map((r) => r.querySelector(".trend-all__key")?.getAttribute("data-slot"))).size).toBe(6);
+  expect(within(section).getByText(/One scale for every category/)).toBeInTheDocument();
+});
+
+test("the legend reads the latest full month, and the running month is drawn dashed", async () => {
+  openOne();
+  const chart = await allChart();
+  expect(chart.getByTestId("trend-all-month")).toHaveTextContent("Sep 2026");
+  const rent = chart.getByRole("button", { name: /Rent/ });
+  expect(rent).toHaveTextContent("₹24,000.00");
+  expect(chart.getByRole("button", { name: /Gifts/ })).toHaveTextContent("No data");
+  expect(chart.getByTestId("trend-all-partial-Food")).toBeInTheDocument();  // Oct, so far
+});
+
+test("hovering a legend entry lights its line and dims the rest; a click pins it", async () => {
+  openOne();
+  const chart = await allChart();
+  const food = chart.getByRole("button", { name: /Food/ });
+  fireEvent.pointerEnter(food);
+  expect(line(chart, "Food")).toHaveClass("trend-all__line--lit");
+  expect(line(chart, "Rent")).toHaveClass("trend-all__line--dim");
+  fireEvent.pointerLeave(food);
+  expect(line(chart, "Rent")).not.toHaveClass("trend-all__line--dim");
+  fireEvent.click(food);
+  expect(food).toHaveAttribute("aria-pressed", "true");
+  expect(line(chart, "Rent")).toHaveClass("trend-all__line--dim");
+  fireEvent.click(food);
+  expect(food).toHaveAttribute("aria-pressed", "false");
+  expect(line(chart, "Rent")).not.toHaveClass("trend-all__line--dim");
+});
+
+test("the arrow keys move the reading month by month", async () => {
+  openOne();
+  const chart = await allChart();
+  const plot = chart.getByRole("img");
+  fireEvent.focus(plot);
+  expect(chart.getByTestId("trend-all-month")).toHaveTextContent("Oct 2026, so far");
+  fireEvent.keyDown(plot, { key: "ArrowLeft" });
+  expect(chart.getByTestId("trend-all-month")).toHaveTextContent("Sep 2026");
+  expect(chart.getByRole("button", { name: /Food/ })).toHaveTextContent("₹18,240.00");
+});
+
+test("past eight categories, the rest share one grey line named for what it holds", async () => {
+  openOne(MANY);
+  const chart = await allChart();
+  const names = within(chart.getByRole("list", { name: "Categories" })).getAllByRole("button")
+    .map((r) => r.querySelector(".trend-all__name")?.textContent);
+  expect(names).toEqual([..."ABCDEFGH"].map((l) => "Cat " + l).concat("Everything else"));
+  const rest = chart.getByRole("button", { name: /Everything else/ });
+  expect(rest).toHaveTextContent("Cat I, Cat J");
+  expect(rest).toHaveTextContent("₹30.00");  // Sep: 20 + 10 rupees
+  expect(rest.querySelector(".trend-all__key")).toHaveAttribute("data-slot", "rest");
+});
+
+test("the toggle shows a chart per category, and the choice is remembered", async () => {
+  openOne();
+  fireEvent.click(await screen.findByRole("button", { name: "Chart per category" }));
+  expect(await screen.findByRole("figure", { name: "Rent" })).toBeInTheDocument();
+  expect(screen.queryByRole("figure", { name: "All categories" })).not.toBeInTheDocument();
+  expect(screen.getByText(/Each chart has its own scale/)).toBeInTheDocument();
+  cleanup();
+  render(TRENDS, [STREAMING, STORAGE]);  // a reload
+  expect(await screen.findByRole("figure", { name: "Rent" })).toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Chart per category" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the one chart has every value as a table too", async () => {
+  openOne();
+  const table = (await allChart()).getByRole("table", { name: "Every category by month" });
+  expect(within(table).getByRole("columnheader", { name: "Rent" })).toBeInTheDocument();
+  expect(within(table).getAllByRole("row")).toHaveLength(13);  // a header row and 12 months
 });

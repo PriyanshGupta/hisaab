@@ -1,5 +1,8 @@
-// Per-category trends for the last 12 months (PRD §7.7; slice 21): small multiples, one per category.
+// Per-category trends for the last 12 months (PRD §7.7; slice 21), two views (user, 2026-10-21): every category in
+// one chart (TrendsAll, the default) or small multiples, one chart per category (below). The choice is remembered in
+// this browser.
 //
+// Small multiples:
 // Each chart has its own vertical scale, labelled at its top: rent and coffee share no axis worth reading.
 // History is short at first, so the charts are sparse but never broken: the axis starts where the history starts
 // (three months at least), one month of data is a point, two or more are a line, and the running month (and a
@@ -10,11 +13,9 @@ import { type KeyboardEvent, type PointerEvent, useState } from "react";
 
 import { type TrendCategory, type Trends as TrendsData, useTrends } from "../api/report";
 import { formatPaise } from "../money";
+import { compact, monthLong, monthShort, nice } from "./trendMath";
+import { TrendsAll } from "./TrendsAll";
 import "../styles/trends.css";
-
-const MONTH_NAMES = ["Jan", "Feb", "Mar", "Apr", "May", "Jun", "Jul", "Aug", "Sep", "Oct", "Nov", "Dec"];
-const monthShort = (ym: string) => MONTH_NAMES[Number(ym.slice(5, 7)) - 1] ?? ym;
-const monthLong = (ym: string) => `${monthShort(ym)} ${ym.slice(0, 4)}`;
 
 // The chart's own coordinate space (SVG user units); it scales with its panel.
 const W = 240;
@@ -23,28 +24,31 @@ const LEFT = 34;
 const RIGHT = W - 8;
 const TOP = 10;
 const BOTTOM = 82;
-const STEPS = [1, 1.5, 2, 3, 4, 5, 6, 8, 10];
 const MIN_MONTHS = 3; // the narrowest axis: fewer months than this would draw one lonely point mid-chart
 
-/** The smallest "nice" number at or above `v` (in paise): 27,000 → 30,000; 18,240 → 20,000. */
-function nice(v: number): number {
-  if (v <= 0) return 0;
-  const power = 10 ** Math.floor(Math.log10(v));
-  return (STEPS.find((s) => s * power >= v) ?? 10) * power;
-}
+type View = "one" | "each";
+const VIEW_KEY = "hisaab.report.trendsView";
 
-/** ₹30K, ₹1.5K, ₹2.4L: a scale label, never a money figure the person reads as exact. */
-function compact(paise: number): string {
-  const rupees = Math.abs(paise) / 100;
-  const sign = paise < 0 ? "−" : "";
-  const [div, unit] = rupees >= 1e7 ? [1e7, "Cr"] : rupees >= 1e5 ? [1e5, "L"] : rupees >= 1e3 ? [1e3, "K"] : [1, ""];
-  const n = rupees / div;
-  return `${sign}₹${Number.isInteger(n) ? n : n.toFixed(1).replace(/\.0$/, "")}${unit}`;
+function readView(): View {
+  try {
+    return localStorage.getItem(VIEW_KEY) === "each" ? "each" : "one";
+  } catch {
+    return "one";  // storage blocked: the default
+  }
 }
 
 export function Trends() {
   const trends = useTrends();
+  const [view, setView] = useState<View>(readView);
   if (!trends.data) return null;
+  const choose = (v: View) => {
+    setView(v);
+    try {
+      localStorage.setItem(VIEW_KEY, v);
+    } catch {
+      // storage blocked: this visit only
+    }
+  };
   const t = trends.data;
   // the first month on the axis: where the history starts, or the first month any category has data
   const known = t.categories.flatMap((c) => c.months.flatMap((v, i) => (v === null ? [] : [i])));
@@ -53,16 +57,28 @@ export function Trends() {
   const from = Math.max(0, Math.min(first, t.months.length - MIN_MONTHS));
   return (
     <section className="sheet sheet--pad trends" aria-labelledby="trends-h">
-      <div className="section-head">
-        <h2 id="trends-h">Last 12 months, by category</h2>
-        <p>
-          Each chart has its own scale.
-          {t.history_from && ` History starts ${monthLong(t.history_from.slice(0, 7))}.`}
-        </p>
+      <div className="section-head trends__head">
+        <div>
+          <h2 id="trends-h">Last 12 months, by category</h2>
+          <p>
+            {view === "one"
+              ? "One scale for every category; a chart per category shows the small ones better."
+              : "Each chart has its own scale."}
+            {t.history_from && ` History starts ${monthLong(t.history_from.slice(0, 7))}.`}
+          </p>
+        </div>
+        {t.categories.length > 0 && (
+          <div className="seg" role="group" aria-label="Chart layout">
+            <button type="button" aria-pressed={view === "one"} onClick={() => choose("one")}>One chart</button>
+            <button type="button" aria-pressed={view === "each"} onClick={() => choose("each")}>Chart per category</button>
+          </div>
+        )}
       </div>
       {t.categories.length === 0
         ? <p className="muted">No spending yet. Each category gets a chart once money goes out.</p>
-        : <div className="trends__grid">{t.categories.map((c) => <Panel key={c.category_id ?? "none"} t={t} c={c} from={from} />)}</div>}
+        : view === "one"
+          ? <TrendsAll t={t} from={from} />
+          : <div className="trends__grid">{t.categories.map((c) => <Panel key={c.category_id ?? "none"} t={t} c={c} from={from} />)}</div>}
     </section>
   );
 }
