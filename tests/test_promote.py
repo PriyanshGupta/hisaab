@@ -194,3 +194,14 @@ def test_auto_promotion_approves_a_passing_candidate_with_nobody_clicking(db: Da
 
 def test_auto_promotion_is_off_by_default(settings: Settings) -> None:
     assert settings.auto_promote_templates is False
+
+
+def test_approval_writes_a_resync_notice_covering_the_formats_emails(db: Database, uid: str, cfg: Settings) -> None:
+    """Slice 24: the format's emails whose cached readings approval deleted need a re-sync to be read by it."""
+    from hisaab.models import ResyncNotice
+    feed(db, uid, [alert_eml(n) for n in range(3)], Haiku(*[reading(n) for n in range(3)]))
+    run_approve(db, proposed(db, uid, cfg), cfg)
+    with db.read_session() as s:
+        [notice] = s.scalars(select(ResyncNotice)).all()
+        assert (notice.template_name, notice.reason) == ("lantern_upi_debit", "approved")
+        assert notice.range_from == notice.range_to == "2026-10-06"  # add_source's received_at, in India

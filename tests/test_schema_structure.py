@@ -16,6 +16,7 @@ from tests.conftest import alembic_config
 GLOBAL_TABLES: set[str] = {
     "payees", "parser_templates", "extraction_cache",
     "format_sightings", "normalization_patterns", "senders",
+    "correction_dismissals", "resync_notices",  # slice 24 (migration 0012)
 }
 ALL_TABLES: set[str] = GLOBAL_TABLES | {
     # §3.2 core
@@ -101,9 +102,9 @@ def _objects(conn: Connection, kind: str) -> set[str]:
     return {r[0] for r in rows}
 
 
-def test_migration_creates_exactly_the_26_tables(conn: Connection) -> None:
+def test_migration_creates_exactly_the_28_tables(conn: Connection) -> None:
     assert _objects(conn, "table") == ALL_TABLES
-    assert len(ALL_TABLES) == 26
+    assert len(ALL_TABLES) == 28
 
 
 def test_migration_creates_the_effective_view(conn: Connection) -> None:

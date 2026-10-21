@@ -1,6 +1,10 @@
 // The route table, shared by the app (browser router) and tests (memory router).
 import { Navigate, type RouteObject } from "react-router";
 
+import { AdminLayout } from "./admin/AdminLayout";
+import { PayeeNamesPage } from "./admin/PayeeNamesPage";
+import { ResyncPage } from "./admin/ResyncPage";
+import { UsersPage } from "./admin/UsersPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AccountsPage } from "./pages/AccountsPage";
 import { AddPage } from "./pages/AddPage";
@@ -35,8 +39,20 @@ export const routes: RouteObject[] = [
       { path: "settings", element: <SettingsPage /> },
       { path: "setup", element: <SetupPage /> },
       { path: "review", element: <ReviewPage /> },
-      { path: "templates", element: <TemplatesPage /> },
-      { path: "senders", element: <SendersPage /> },
+      {
+        path: "admin",
+        element: <AdminLayout />,
+        children: [
+          { index: true, element: <Navigate to="/admin/templates" replace /> },
+          { path: "templates", element: <TemplatesPage /> },
+          { path: "senders", element: <SendersPage /> },
+          { path: "payee-names", element: <PayeeNamesPage /> },
+          { path: "users", element: <UsersPage /> },
+          { path: "resync", element: <ResyncPage /> },
+        ],
+      },
+      { path: "templates", element: <Navigate to="/admin/templates" replace /> }, // slice 22's address
+      { path: "senders", element: <Navigate to="/admin/senders" replace /> }, // slice 23's address
       { path: "categorize", element: <Navigate to="/review?lane=categories" replace /> }, // slice 16's landing
       { path: "*", element: <NotFoundPage /> },
     ],

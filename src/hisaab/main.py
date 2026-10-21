@@ -22,6 +22,8 @@ from sqlalchemy.exc import SQLAlchemyError
 from hisaab.accounts import repository as accounts_repo
 from hisaab.api import (
     accounts,
+    admin_payees,
+    admin_resync,
     admin_senders,
     admin_templates,
     admin_users,
@@ -48,6 +50,7 @@ from hisaab.jobs.kinds import job_kinds
 from hisaab.jobs.queue import JobQueue
 from hisaab.jobs.scheduler import start_scheduler
 from hisaab.payees import repository as payees_repo
+from hisaab.payees.corrections import InvalidPattern
 from hisaab.promotion import promote
 from hisaab.promotion.sightings import NotExcluded
 from hisaab.senders import review as sender_review
@@ -76,6 +79,8 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(admin_users.router)
     app.include_router(admin_templates.router)
     app.include_router(admin_senders.router)
+    app.include_router(admin_payees.router)
+    app.include_router(admin_resync.router)
     app.include_router(accounts.router)
     app.include_router(transactions.router)
     app.include_router(categories.categories_router)
@@ -111,6 +116,7 @@ _ERROR_STATUS: tuple[tuple[type[Exception], int], ...] = (
     (promote.NotApprovable, 409),
     (NotExcluded, 404),
     (sender_review.SenderNotFound, 404),
+    (InvalidPattern, 422),
     (sender_review.NotACandidate, 409),
     (GmailNotConfigured, 409),
     (accounts_repo.NotFound, 404),

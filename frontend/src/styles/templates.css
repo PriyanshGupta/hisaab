@@ -154,6 +154,44 @@
   align-items: center;
 }
 
+/* ---------- templates in use ---------- */
+.templates__in-use {
+  max-width: 52rem;
+  margin-bottom: var(--s6);
+  padding-top: var(--s4);
+  border-top: 1px solid var(--rule);
+}
+.templates__in-use h2 {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+}
+.templates__in-use ul {
+  margin-top: var(--s3);
+  list-style: none;
+  padding: 0;
+}
+.templates__use {
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.templates__use-head {
+  display: grid;
+}
+.templates__use-edit {
+  display: grid;
+  gap: var(--s3);
+}
+.templates__spec-box {
+  min-height: 14rem;
+  font-size: var(--t-small);
+  line-height: var(--lh-data);
+}
+.templates__use-saved {
+  color: var(--accent);
+}
+
 /* ---------- demoted ---------- */
 .templates__demoted {
   max-width: 44rem;

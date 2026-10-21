@@ -13,7 +13,8 @@ approve, in the caller's one write transaction:
    declines waits as pending_llm for the next sync, and is not charged as a failure of the template just
    approved. A re-read whose amount, date or account differs from
    the old reading sends the transaction to review (PRD §4.8 "Promotion re-tiers history");
-5. the sighting becomes promoted.
+5. the sighting becomes promoted, and a re-sync notice names the format's date range (slice 24): emails of it
+   whose content is gone are read by the template only when re-synced.
 
 Only a 'validated' candidate (replay passed) can be approved. reject turns a waiting candidate into a
 discarded one (status 'proposed', passed: false) and the sighting back to accumulating. The row stays, as
@@ -34,6 +35,7 @@ from hisaab.config import Settings
 from hisaab.llm import LLMUnavailable
 from hisaab.models import ExtractionCache, FormatSighting, ParserTemplate, Source, User, utc_now
 from hisaab.parsing.email_interpreter import EmailArtifact
+from hisaab.parsing.notices import write_notice
 from hisaab.pipeline.derive import apply
 from hisaab.pipeline.routing import Routed, route
 from hisaab.promotion.redact import redact
@@ -92,6 +94,8 @@ def approve(session: Session, template_id: str, settings: Settings, now: datetim
     for user_id, batch in by_user.items():
         apply(session, user_id, batch)
     sighting.state = "promoted"
+    # the format's emails whose cached readings went: a re-sync reads them with the template (tech-design §5.2)
+    write_notice(session, template, "approved", [m.received_at for m in members])
     session.flush()
     routed: list[Routed] = [r for batch in by_user.values() for _, r in batch]
     return ApproveResult(reread=sum(r.diagnostic["route"] == "tier1" for r in routed),

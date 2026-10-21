@@ -26,6 +26,8 @@ const candidate = (over: Record<string, unknown> = {}) => ({
 
 function setup(routes: Record<string, Reply>, me: Reply = ADMIN) {
   const api = mockApi({ "GET /api/auth/me": me, "GET /api/review/count": { status: 200, body: { count: 0 } },
+    "GET /api/admin/templates/active": { status: 200, body: [] },
+    "GET /api/admin/resync/notices": { status: 200, body: [] },
     ...routes });
   renderApp("/templates");
   return { api, user: userEvent.setup() };
@@ -92,16 +94,17 @@ test("an empty queue says what will appear, and demoted templates are listed", a
   expect(within(demoted).getByText(/Stopped after 3 failed reads, 19 Oct/)).toBeInTheDocument();
 });
 
-test("the navigation offers Templates to an admin only", async () => {
+test("the navigation offers the Admin area, with Templates in it", async () => {
   setup({ "GET /api/admin/templates": { status: 200, body: { candidates: [], demoted: [], excluded: [] } } });
-  expect(await screen.findByRole("link", { name: "Templates" })).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: "Admin" })).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: "Templates" })).toHaveAttribute("aria-current", "page");
 });
 
-test("a member sees no Templates link, and the page shows the server's refusal", async () => {
+test("a member who opens the address is told the area is for admins, with no Admin link", async () => {
   setup({ "GET /api/admin/templates": { status: 403, body: { detail: "Only an admin can do this." } } }, MEMBER);
-  expect(await screen.findByRole("alert")).toHaveTextContent("Only an admin can do this.");
+  expect(await screen.findByText("This area is for admins.")).toBeInTheDocument();
   expect(screen.getAllByRole("link", { name: "Review" }).length).toBeGreaterThan(0);
-  expect(screen.queryByRole("link", { name: "Templates" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
 });
 
 test("a format treated as not a transaction can be read again", async () => {

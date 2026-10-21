@@ -2,7 +2,7 @@
 
 A backfill is a sync whose window reaches back backfill_window_months (slice
 16); its own kind only for the longer timeout. Kinds join their slices'
-handlers here: resync, reprocess_normalization.
+handlers here: reprocess_normalization.
 """
 
 from hisaab.config import Settings
@@ -20,6 +20,9 @@ def job_kinds(settings: Settings) -> dict[str, JobKind]:
         "backfill": JobKind(run=make_sync(settings), timeout=30 * 60, joins=True),
         # an approved sender's mail for one inbox (params {"senders": [...]}): never joins another job
         "sender_backfill": JobKind(run=make_sync(settings), timeout=30 * 60),
+        # an admin's re-sync of a date range for one inbox (params {"from", "to"}), tech-design §5.2. Never joins:
+        # joining ignores params, so a second range would be swallowed; the queue runs one job at a time anyway
+        "resync": JobKind(run=make_sync(settings), timeout=30 * 60),
         "statement_merge": JobKind(run=merge.run, timeout=5 * 60),  # one write transaction (§7 step 6)
         "sweep": JobKind(run=make_sweep(settings), timeout=10 * 60, joins=True),  # one per inbox (§5.3)
     }

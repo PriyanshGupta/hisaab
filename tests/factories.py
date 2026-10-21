@@ -213,6 +213,19 @@ def setting(conn: Connection, **kw: Any) -> Row:
     return _insert(conn, "settings", {"key": f"test_{new_id()}", "value": "1", "updated_at": utc_now()}, kw)
 
 
+def resync_notice(conn: Connection, **kw: Any) -> Row:
+    return _insert(conn, "resync_notices", {
+        "id": new_id(), "template_name": "Test template", "reason": "edited", "range_from": "2026-09-01",
+        "range_to": "2026-09-30",
+    }, kw)
+
+
+def correction_dismissal(conn: Connection, **kw: Any) -> Row:
+    return _insert(conn, "correction_dismissals", {
+        "id": new_id(), "raw_key": f"raw{new_id()}", "payee_id": payee(conn)["id"], "dismissed_by": user(conn)["id"],
+    }, kw)
+
+
 FACTORIES: dict[str, Callable[..., Row]] = {
     "users": user, "accounts": account, "account_identifiers": account_identifier,
     "sources": source, "payees": payee, "categories": category, "transactions": transaction,
@@ -223,4 +236,5 @@ FACTORIES: dict[str, Callable[..., Row]] = {
     "normalization_patterns": normalization_pattern, "senders": sender,
     "sender_candidates": sender_candidate, "gmail_connections": gmail_connection,
     "statement_staging": statement_staging, "jobs": job, "sessions": session, "settings": setting,
+    "resync_notices": resync_notice, "correction_dismissals": correction_dismissal,
 }

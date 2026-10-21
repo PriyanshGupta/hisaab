@@ -8,21 +8,24 @@ text is the point: the admin checks the values against the email itself.
 
 POST .../approve runs promote.approve in one write (409 unless replay passed); POST .../reject discards;
 POST /formats/{id}/include sends an excluded format's emails back to the model.
+GET /active lists the templates in use; PUT /{id}/spec edits a learned one and writes a re-sync notice (slice 24).
 Members get 403 and anonymous callers 401 before any handler runs (require_admin).
 """
 
 import json
 from typing import Any
 
-from fastapi import APIRouter, Depends, Request, Response, status
+from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
-from sqlalchemy import select
+from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from hisaab.api.deps import get_db, require_admin
 from hisaab.db import Database
 from hisaab.models import FormatSighting, ParserTemplate, Source
 from hisaab.parsing.email_interpreter import EmailArtifact, parse_eml
+from hisaab.parsing.email_spec import EmailSpec, InvalidSpec, parse_email_spec
+from hisaab.parsing.notices import write_notice
 from hisaab.parsing.transforms import collapse_whitespace, strip_html
 from hisaab.promotion import promote
 from hisaab.promotion.sightings import include_again
@@ -73,6 +76,20 @@ class Excluded(BaseModel):
     subject_masked: str
     sightings: int
     last_seen_at: str
+
+
+class TemplateInUse(BaseModel):
+    id: str
+    name: str
+    origin: str  # human (shipped with the app) | llm_proposed (learned here)
+    editable: bool
+    spec: dict[str, Any]
+    emails_read: int
+    last_read_at: str | None
+
+
+class SpecIn(BaseModel):
+    spec: dict[str, Any]
 
 
 class Queue(BaseModel):
@@ -147,3 +164,42 @@ def reject(template_id: str, request: Request, db: Database = Depends(get_db)) -
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         promote.reject(s, template_id)
     return Response(status_code=status.HTTP_204_NO_CONTENT)
+
+
+@router.get("/active")
+def templates_in_use(db: Database = Depends(get_db)) -> list[TemplateInUse]:
+    """Active email templates, with how many emails each has read: learned ones can be edited here."""
+    with db.read_session() as s:
+        used: dict[str, tuple[int, str]] = {name: (n, last) for name, n, last in s.execute(
+            select(func.json_extract(Source.diagnostic, "$.template"), func.count(), func.max(Source.received_at))
+            .where(func.json_extract(Source.diagnostic, "$.route") == "tier1")
+            .group_by(func.json_extract(Source.diagnostic, "$.template"))).tuples()}
+        return [TemplateInUse(id=t.id, name=t.name, origin=t.origin, editable=t.origin == "llm_proposed",
+                              spec=json.loads(t.spec), emails_read=used.get(t.name, (0, ""))[0],
+                              last_read_at=used.get(t.name, (0, None))[1])
+                for t in s.scalars(select(ParserTemplate).where(ParserTemplate.artifact_type == "email",
+                                                                ParserTemplate.status == "active")
+                                   .order_by(ParserTemplate.name))]
+
+
+@router.put("/{template_id}/spec")
+def edit_spec(template_id: str, body: SpecIn, request: Request, db: Database = Depends(get_db)) -> TemplateInUse:
+    """Save a learned template's spec (validated like any spec) and write a re-sync notice for what it read
+    (tech-design §5.2). Shipped templates are files: sync-seeds would overwrite an edit made here."""
+    with db.write_session(timeout=request.app.state.writer_timeout) as s:
+        template: ParserTemplate | None = s.get(ParserTemplate, template_id)
+        if template is None or template.artifact_type != "email":
+            raise HTTPException(status.HTTP_404_NOT_FOUND, "No such template.")
+        if template.origin != "llm_proposed":
+            raise HTTPException(status.HTTP_409_CONFLICT,
+                                f"{template.name} ships with the app: change src/hisaab/parsing/seed/{template.name}.json "
+                                "in the repository, and the next start updates it.")
+        try:
+            parsed: EmailSpec = parse_email_spec(body.spec)
+        except InvalidSpec as e:
+            raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "; ".join(e.problems)) from None
+        template.spec = json.dumps(body.spec, ensure_ascii=False)
+        template.sender_address, template.subject_pattern = parsed.senders[0], body.spec["match"]["subject"]
+        write_notice(s, template, "edited")
+        return TemplateInUse(id=template.id, name=template.name, origin=template.origin, editable=True,
+                             spec=body.spec, emails_read=0, last_read_at=None)

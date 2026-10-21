@@ -153,3 +153,31 @@ class StatementStaging(Base):
     validation_result: Mapped[str]  # JSON diagnostic (§4.8)
     created_at: Mapped[str] = created_column()
     expires_at: Mapped[str]
+
+
+class CorrectionDismissal(Base):  # GLOBAL: the admin set this captured correction aside (slice 24, migration 0012)
+    __tablename__: str = "correction_dismissals"
+    __table_args__: tuple[Any, ...] = (UniqueConstraint("raw_key", "payee_id"),)
+
+    id: Mapped[str] = id_column()
+    raw_key: Mapped[str]  # the raw payee text squashed (lower-case letters and digits), as exact patterns match
+    payee_id: Mapped[str] = mapped_column(ForeignKey("payees.id"))
+    dismissed_by: Mapped[str] = mapped_column(ForeignKey("users.id"))
+    created_at: Mapped[str] = created_column()
+
+
+RESYNC_REASONS: tuple[str, ...] = ("edited", "approved", "shipped_updated")
+
+
+class ResyncNotice(Base):  # GLOBAL: a parser changed; history it read may now read differently (tech-design §5.2)
+    __tablename__: str = "resync_notices"
+    __table_args__: tuple[Any, ...] = (one_of("reason", RESYNC_REASONS, "reason"),)
+
+    id: Mapped[str] = id_column()
+    template_id: Mapped[str | None] = mapped_column(ForeignKey("parser_templates.id"))
+    template_name: Mapped[str]
+    reason: Mapped[str]
+    range_from: Mapped[str]  # India date, YYYY-MM-DD: the first email that template read
+    range_to: Mapped[str]  # the last one
+    created_at: Mapped[str] = created_column()
+    resolved_at: Mapped[str | None]

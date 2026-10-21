@@ -100,12 +100,12 @@ test("coming back from Google having declined says nothing was connected", async
   expect(await screen.findByText(/Nothing was connected/)).toBeInTheDocument();
 });
 
-test("an admin gets a link to the template queue; a member doesn't", async () => {
+test("an admin gets a link to the Admin area; a member doesn't", async () => {
   mockApi({ "GET /api/auth/me": { ...ME, body: { ...ME.body, role: "admin" } }, "GET /api/gmail": gmail() });
   renderApp("/settings");
-  expect(await screen.findByRole("link", { name: "Template queue" })).toHaveAttribute("href", "/templates");
+  expect((await screen.findAllByRole("link", { name: "Admin" })).map((l) => l.getAttribute("href"))).toContain("/admin");
   cleanup();
   setup("/settings", { "GET /api/gmail": gmail() });
   await screen.findByText("asha@example.test");
-  expect(screen.queryByRole("link", { name: "Template queue" })).not.toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
 });

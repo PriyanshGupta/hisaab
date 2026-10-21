@@ -232,3 +232,10 @@ def test_discover_keeps_the_query_short_by_dropping_the_last_exclusions() -> Non
     assert len(query) <= MAX_QUERY_CHARS
     assert query.startswith(DISCOVERY_TERMS + " -from:news000@") and query.endswith("-from:me after:1784505600")
     assert "news299@" not in query
+
+
+def test_search_until_adds_before() -> None:
+    fake: FakeGmail = FakeGmail()
+    since, until = datetime(2026, 10, 4, 18, 30, tzinfo=UTC), datetime(2026, 10, 7, 18, 30, tzinfo=UTC)
+    list(open_box(fake).search(["alerts@bank.example"], since, until))
+    assert fake.queries == [f"(from:alerts@bank.example) after:{int(since.timestamp())} before:{int(until.timestamp())}"]

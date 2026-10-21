@@ -16,10 +16,13 @@ import {
   type CandidateExample,
   type Excluded,
   type ReplayField,
+  type TemplateInUse,
   useApproveTemplate,
+  useEditSpec,
   useIncludeFormat,
   useRejectTemplate,
   useTemplateQueue,
+  useTemplatesInUse,
 } from "../api/templates";
 import { formatDate, formatInstantDate } from "../dates";
 import { formatPaise } from "../money";
@@ -79,6 +82,7 @@ export function TemplatesPage() {
             <p className="empty__body">A format shows up here after three emails Haiku had to read.</p>
           </div>
         : queue.data.candidates.map((c) => <CandidateSheet key={c.id} c={c} onApproved={setDone} />))}
+      <InUse />
       {queue.data && queue.data.demoted.length > 0 && (
         <section className="templates__demoted" aria-labelledby="demoted-h">
           <h2 id="demoted-h">Demoted</h2>
@@ -98,6 +102,62 @@ export function TemplatesPage() {
       )}
       {queue.data && queue.data.excluded.length > 0 && <ExcludedList formats={queue.data.excluded} />}
     </div>
+  );
+}
+
+function InUse() {
+  const inUse = useTemplatesInUse();
+  if (!inUse.data || inUse.data.length === 0) return null;
+  return (
+    <section className="templates__in-use" aria-labelledby="in-use-h">
+      <h2 id="in-use-h">Templates in use</h2>
+      <p className="muted">Editing one raises a notice above to re-sync the emails it read.</p>
+      <ul>{inUse.data.map((t) => <InUseRow key={t.id} t={t} />)}</ul>
+    </section>
+  );
+}
+
+function InUseRow({ t }: { t: TemplateInUse }) {
+  const edit = useEditSpec();
+  const [text, setText] = useState<string | null>(null);
+  const [notJson, setNotJson] = useState(false);
+  const [saved, setSaved] = useState(false);
+  const where = t.editable ? "Learned here" : "Ships with the app";
+  const save = () => {
+    let spec: Record<string, unknown>;
+    try {
+      spec = JSON.parse(text ?? "") as Record<string, unknown>;
+    } catch {
+      setNotJson(true);
+      return;
+    }
+    setNotJson(false);
+    edit.mutate({ id: t.id, spec }, { onSuccess: () => { setText(null); setSaved(true); } });
+  };
+  return (
+    <li className="templates__use" role="group" aria-label={t.name}>
+      <span className="templates__use-head">
+        <span className="templates__name">{t.name}</span>
+        <span className="muted">{where}, read {plural(t.emails_read, "email", "emails")}</span>
+      </span>
+      {t.editable ? (text === null
+        ? <button className="button button--quiet" type="button" onClick={() => { setText(JSON.stringify(t.spec, null, 2)); setSaved(false); }}>Edit</button>
+        : <div className="templates__use-edit">
+            <label className="field"><span className="field__label">Spec for {t.name}</span>
+              <textarea className="field__input templates__spec-box" rows={14} value={text} spellCheck={false}
+                onChange={(e) => setText(e.target.value)} /></label>
+            <div className="actions">
+              <button className="button button--quiet" type="button" onClick={() => { setText(null); setNotJson(false); }}>Cancel</button>
+              <button className="button button--primary" type="button" disabled={edit.isPending} onClick={save}>Save</button>
+            </div>
+          </div>)
+        : <p className="muted templates__use-note">Ships with the app: its file is in the repository, and the next
+            start picks up a change to it.</p>}
+      {saved && <p className="templates__use-saved" role="status">Saved.</p>}
+      {(notJson || edit.isError) && (
+        <p className="form-error" role="alert">{notJson ? "That spec isn't valid JSON." : describeError(edit.error)}</p>
+      )}
+    </li>
   );
 }
 

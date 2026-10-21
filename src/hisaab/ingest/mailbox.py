@@ -214,11 +214,13 @@ class Mailbox:
         address: str = self._get("profile")["emailAddress"]
         return address
 
-    def search(self, senders: Sequence[str], since: datetime) -> Iterator[list[str]]:
-        """Pages of message ids (newest first) from any of `senders`, received after `since`."""
+    def search(self, senders: Sequence[str], since: datetime, until: datetime | None = None) -> Iterator[list[str]]:
+        """Pages of message ids (newest first) from any of `senders`, received after `since` (and before `until`)."""
         if not senders:  # a query with no from: terms would match the whole mailbox
             raise ValueError("search needs at least one sender")
         query: str = "(" + " OR ".join(f"from:{s}" for s in senders) + f") after:{int(since.timestamp())}"
+        if until is not None:
+            query += f" before:{int(until.timestamp())}"
         params: dict[str, str] = {"q": query, "maxResults": str(PAGE_SIZE)}
         while True:
             answer: dict[str, Any] = self._get("messages", params)

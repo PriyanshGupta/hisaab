@@ -23,6 +23,14 @@ is the same job limited to those senders, from where the first backfill starts
 whatever the clock says, and it never moves the clock: an approved sender's
 history arrives without changing what the regular sync covers next.
 
+A re-sync (job kind resync, params {"from": day, "to": day}, slice 24; tech-design
+§5.2) is the same job over that range of India days only, with every stored
+message in it fetched again and re-parsed (reparse), never moving the clock.
+derive.apply updates each transaction in place, so the precedence is per field:
+an edited field keeps its edit (the overlay), a statement-primary transaction
+keeps the statement's values (an email is never primary over it), and the rest
+takes the new parse.
+
 A dead grant (revoked, expired, or undecryptable with the current key) moves
 the connection to needs_reauth and fails the job; the clock is untouched.
 """
@@ -95,12 +103,16 @@ def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transpo
         with ctx.read() as s:
             since = _backfill_from(s, user_id, started)
         senders = sorted(only)
-    reparse: bool = bool(ctx.params.get("reparse"))
+    until: datetime | None = None
+    span: tuple[str, str] | None = (ctx.params["from"], ctx.params["to"]) if ctx.params.get("from") else None
+    if span:  # a re-sync (slice 24): this range only, every stored message in it re-parsed
+        since, until = local_midnight(span[0]), local_midnight(span[1]) + timedelta(days=1)
+    reparse: bool = bool(ctx.params.get("reparse")) or span is not None
     counts: dict[str, int] = {"stored": 0, "already_had": 0, "reparsed": 0, "failed": 0, "with_attachments": 0}
     try:
         box: Mailbox = Mailbox.open(connection.oauth_client(settings),
                                     decrypt(connection.encryption_key(settings), blob), http=transport, sleep=sleep)
-        for page in box.search(senders, since) if senders else ():
+        for page in box.search(senders, since, until) if senders else ():
             ctx.checkpoint()
             _sync_page(ctx, user_id, box, page, counts, reparse)
     except (MailboxAuthError, DecryptionFailed) as exc:
@@ -108,7 +120,7 @@ def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transpo
             connection.mark_needs_reauth(s, user_id)
         raise SyncError(REAUTH) from exc
     pipeline: dict[str, int] = process_pending(ctx, user_id, settings, llm_transport, sleep)
-    if counts["failed"] == 0 and not only:  # pending_llm does not hold the clock; a sender backfill never moves it
+    if counts["failed"] == 0 and not only and not span:  # pending_llm doesn't hold the clock; backfills never move it
         with ctx.write() as s:
             now_row: GmailConnection = s.get_one(GmailConnection, user_id)
             if now_row.email_address == mailbox:  # a reconnect to another mailbox reset the clock for its backfill
@@ -165,6 +177,11 @@ def _store(session: Session, user_id: str, message: Message) -> None:
         attachments=json.dumps([asdict(a) for a in message.attachments]) if message.attachments else None,
     ))
     session.flush()  # so the next message's ingest_seq sees this one
+
+
+def local_midnight(day: str) -> datetime:
+    """The start of an India day (YYYY-MM-DD), as an aware datetime."""
+    return datetime.combine(date.fromisoformat(day), day_time(), LOCAL_TZ)
 
 
 def _backfill_from(session: Session, user_id: str, now: datetime) -> datetime:

@@ -65,6 +65,8 @@ class FakeGmail:
         address: str = parseaddr(sender)[1].lower()
         if int(self.messages[message_id][0] / 1000) <= int(m.group(1)) if (m := re.search(r"after:(\d+)", q)) else False:
             return False
+        if int(self.messages[message_id][0] / 1000) >= int(m.group(1)) if (m := re.search(r"before:(\d+)", q)) else False:
+            return False
         if address in {x.lower() for x in re.findall(r"-from:(\S+)", q)} or ("-from:me" in q and address == self.address):
             return False
         wanted: list[str] = [x.lower() for x in re.findall(r"(?<!-)from:(\S+?)\)?(?:\s|$)", q)]

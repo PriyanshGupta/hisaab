@@ -4,6 +4,7 @@ import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
 import { api, apiError, send } from "./client";
 import type { components } from "./schema";
+import { noticesKey } from "./resync";
 import { reviewKey } from "./review";
 import { transactionsKey } from "./transactions";
 
@@ -64,5 +65,36 @@ export function useIncludeFormat() {
       if (!response.ok) throw apiError(response, error);
     },
     onSuccess: () => void qc.invalidateQueries({ queryKey: templatesKey }),
+  });
+}
+
+export type TemplateInUse = components["schemas"]["TemplateInUse"];
+export const inUseKey = ["admin", "templates", "active"] as const;
+
+export function useTemplatesInUse() {
+  return useQuery({
+    queryKey: inUseKey,
+    queryFn: async () => {
+      const { data, error, response } = await send(() => api.GET("/api/admin/templates/active"));
+      if (data === undefined) throw apiError(response, error);
+      return data;
+    },
+  });
+}
+
+/** Save a learned template's spec; the server writes the re-sync notice the banner shows. */
+export function useEditSpec() {
+  const qc = useQueryClient();
+  return useMutation({
+    mutationFn: async ({ id, spec }: { id: string; spec: Record<string, unknown> }) => {
+      const { data, error, response } = await send(() =>
+        api.PUT("/api/admin/templates/{template_id}/spec", { params: { path: { template_id: id } }, body: { spec } }));
+      if (data === undefined) throw apiError(response, error);
+      return data;
+    },
+    onSuccess: () => {
+      void qc.invalidateQueries({ queryKey: inUseKey });
+      void qc.invalidateQueries({ queryKey: noticesKey });
+    },
   });
 }

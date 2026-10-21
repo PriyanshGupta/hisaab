@@ -75,17 +75,17 @@ test("an empty queue says what the sweep does, and ignored senders are listed", 
   expect(within(ignored).getByText("news@kite-mart.example")).toBeInTheDocument();
 });
 
-test("the navigation and Settings offer sender review to an admin only", async () => {
+test("Senders is a section of the Admin area, for admins only", async () => {
   setup({ "GET /api/admin/senders": queue({ candidates: [] }) });
-  expect(await screen.findByRole("link", { name: "Senders" })).toBeInTheDocument();
+  expect(await screen.findByRole("link", { name: "Senders" })).toHaveAttribute("aria-current", "page");
   cleanup();
   setup({ "GET /api/admin/senders": { status: 403, body: { detail: "Only an admin can do this." } } }, MEMBER);
-  expect(await screen.findByRole("alert")).toHaveTextContent("Only an admin can do this.");
+  expect(await screen.findByText("This area is for admins.")).toBeInTheDocument();
   expect(screen.queryByRole("link", { name: "Senders" })).not.toBeInTheDocument();
 });
 
-test("Settings links admins to sender review", async () => {
+test("Settings links admins to the Admin area", async () => {
   setup({ "GET /api/gmail": { status: 200, body: { configured: true, status: "connected", email_address: "asha@example.test",
     last_successful_sync_at: "2026-10-11T04:30:00.000Z" } } }, ADMIN, "/settings");
-  expect(await screen.findByRole("link", { name: "Sender review" })).toHaveAttribute("href", "/senders");
+  expect((await screen.findAllByRole("link", { name: "Admin" })).map((l) => l.getAttribute("href"))).toContain("/admin");
 });

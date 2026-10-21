@@ -28,6 +28,7 @@ from sqlalchemy.orm import Session
 from hisaab.models import NormalizationPattern, ParserTemplate, Payee, Sender
 from hisaab.parsing.email_spec import InvalidSpec, parse_email_spec
 from hisaab.parsing.statement_spec import InvalidStatementSpec, parse_statement_spec
+from hisaab.parsing.notices import write_notice
 from hisaab.parsing.templates import save_email_template, save_statement_template
 from hisaab.payees import repository as payees
 
@@ -96,6 +97,7 @@ def _sync_templates(session: Session, template_dir: Path) -> tuple[int, int]:
             row.spec = json.dumps(spec, ensure_ascii=False)
             if not is_statement:
                 row.sender_address, row.subject_pattern = parsed_sender, spec["match"]["subject"]
+                write_notice(session, row, "shipped_updated")  # what it read may now read differently (§5.2)
             updated += 1
     session.flush()
     return added, updated

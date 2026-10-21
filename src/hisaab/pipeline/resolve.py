@@ -11,6 +11,8 @@
 
 - A name for a payee's text (name_text): the admin's global pattern, or a
   member's edits.
+- A promoted pattern (reapply_pattern, slice 24): every row its text matches
+  is resolved again with all patterns, so it can replace a weaker answer.
 
 All refresh status, since the answer may take the row out of review. Neither
 touches the overlay: an edit on the same field still wins in the effective view.
@@ -24,7 +26,7 @@ from sqlalchemy.orm import Session
 from hisaab.accounts.identifiers import normalize_for_lookup
 from hisaab.accounts.repository import AccountError
 from hisaab.models import Account, NormalizationPattern, Source, Transaction, TransactionEffective
-from hisaab.payees.normalization import PatternRule, match_payee
+from hisaab.payees.normalization import PatternRule, load_rules, match_payee
 from hisaab.pipeline.derive import LEGS, kind_from_legs, pair_resolved
 from hisaab.transactions.repository import apply_edits
 from hisaab.transactions.review import refresh
@@ -89,6 +91,28 @@ def renormalize(session: Session, rule: PatternRule) -> dict[str, list[str]]:
                                                          Transaction.payee_raw.is_not(None))):
         if match_payee([rule], txn.payee_raw or "") is not None:
             txn.payee_id = rule.payee_id
+            touched[txn.user_id].append(txn.id)
+    session.flush()
+    for user_id, ids in touched.items():
+        refresh(session, user_id, ids)
+    return dict(touched)
+
+
+def reapply_pattern(session: Session, rule: PatternRule) -> dict[str, list[str]]:
+    """A newly promoted pattern, applied to history (tech-design §6.4: a pure database operation, no re-fetch):
+    every transaction whose raw payee text it matches has its payee resolved again with ALL patterns, so it can
+    replace a weaker pattern's answer while a stronger one still wins. Edits stay in the overlay on top.
+    User id -> the ids whose payee changed."""
+    rules: list[PatternRule] = load_rules(session)
+    touched: defaultdict[str, list[str]] = defaultdict(list)
+    for txn in session.scalars(select(Transaction).join(Source, Source.id == Transaction.primary_source_id)
+                               .where(Transaction.payee_raw.is_not(None), Source.kind != "manual")):
+        raw: str = txn.payee_raw or ""  # a typed entry's payee_raw is the name the user typed: never re-resolved
+        if match_payee([rule], raw) is None:
+            continue
+        resolved: str | None = match_payee(rules, raw)
+        if resolved != txn.payee_id:
+            txn.payee_id = resolved
             touched[txn.user_id].append(txn.id)
     session.flush()
     for user_id, ids in touched.items():

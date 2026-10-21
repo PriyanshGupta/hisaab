@@ -1,5 +1,6 @@
 """/api/admin/templates: the promotion queue (PRD §6.8). Admin only; every email here is invented."""
 
+import json
 from typing import Any
 
 import pytest
@@ -121,3 +122,63 @@ def test_excluded_formats_are_listed_and_can_be_read_again(app: FastAPI, as_admi
     assert as_admin.post(f"/api/admin/templates/formats/{item['id']}/include").status_code == 204
     assert as_admin.get("/api/admin/templates").json()["excluded"] == []
     assert as_admin.post(f"/api/admin/templates/formats/{item['id']}/include").status_code == 404
+
+
+# --- templates in use, and editing a learned one (slice 24) ---------------------------------------------------
+
+def test_templates_in_use_are_listed_and_only_learned_ones_are_editable(app: FastAPI, as_admin: TestClient) -> None:
+    from tests.test_email_spec import SPEC
+    with app.state.db.write_session() as s:
+        s.add(ParserTemplate(artifact_type="email", name="shipped_one", spec=json.dumps(SPEC), origin="human",
+                             status="active"))
+        s.add(ParserTemplate(artifact_type="email", name="learned_one", spec=json.dumps(SPEC), origin="llm_proposed",
+                             status="active", promoted_at="2026-10-20T00:00:00.000Z"))
+    active: list[dict[str, Any]] = as_admin.get("/api/admin/templates/active").json()
+    assert [(t["name"], t["editable"]) for t in active] == [("learned_one", True), ("shipped_one", False)]
+    assert active[0]["spec"]["match"]["subject"] == "^Debit alert"
+
+
+def test_editing_a_learned_template_saves_it_and_raises_a_notice(app: FastAPI, as_admin: TestClient,
+                                                                  admin_id: str) -> None:
+    import copy
+
+    from hisaab.models import ResyncNotice, Source
+    from tests.test_email_spec import SPEC
+    with app.state.db.write_session() as s:
+        t: ParserTemplate = ParserTemplate(artifact_type="email", name="learned_one", spec=json.dumps(SPEC),
+                                           origin="llm_proposed", status="active")
+        s.add(t)
+        s.flush()
+        tid: str = t.id
+        from tests.pipeline_helpers import add_source
+        add_source(s, admin_id, b"x", "m1", processing_state="parsed",
+                   diagnostic=json.dumps({"route": "tier1", "template": "learned_one"}))
+    edited: dict[str, Any] = copy.deepcopy(SPEC)
+    edited["fields"]["reference_number"] = {"pattern": r"Ref (\d+)", "required": False}
+    resp: Response = as_admin.put(f"/api/admin/templates/{tid}/spec", json={"spec": edited})
+    assert resp.status_code == 200
+    with app.state.db.read_session() as s:
+        assert json.loads(s.get_one(ParserTemplate, tid).spec) == edited
+        [notice] = s.scalars(select(ResyncNotice)).all()
+        assert (notice.template_name, notice.reason, notice.range_from) == ("learned_one", "edited", "2026-10-06")
+        assert s.scalars(select(Source)).one()  # the template's email
+
+
+def test_an_invalid_edit_is_refused_and_a_shipped_template_cannot_be_edited(app: FastAPI, as_admin: TestClient) -> None:
+    from hisaab.models import ResyncNotice
+    from tests.test_email_spec import SPEC
+    with app.state.db.write_session() as s:
+        learned: ParserTemplate = ParserTemplate(artifact_type="email", name="learned_one", spec=json.dumps(SPEC),
+                                                 origin="llm_proposed", status="active")
+        shipped: ParserTemplate = ParserTemplate(artifact_type="email", name="shipped_one", spec=json.dumps(SPEC),
+                                                 origin="human", status="active")
+        s.add_all([learned, shipped])
+        s.flush()
+        ids: tuple[str, str] = (learned.id, shipped.id)
+    bad: Response = as_admin.put(f"/api/admin/templates/{ids[0]}/spec", json={"spec": {"version": 1}})
+    assert bad.status_code == 422 and "match" in bad.json()["detail"]
+    refused: Response = as_admin.put(f"/api/admin/templates/{ids[1]}/spec", json={"spec": SPEC})
+    assert refused.status_code == 409 and "repository" in refused.json()["detail"]
+    with app.state.db.read_session() as s:
+        assert json.loads(s.get_one(ParserTemplate, ids[0]).spec) == SPEC
+        assert s.scalars(select(ResyncNotice)).all() == []

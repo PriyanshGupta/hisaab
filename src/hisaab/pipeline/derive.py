@@ -210,6 +210,8 @@ def _place(run: _Run, source: Source, extraction: dict[str, Any], sender: str | 
         if PRECEDENCE[source.kind] > PRECEDENCE[current.kind]:  # supersession: a statement over an email
             txn.primary_source_id = source.id
         _write(txn, record, primary=txn.primary_source_id == source.id)
+        if txn.id in run.reparsed and current.kind == "statement" and source.kind == "email":
+            _email_fields(txn, record)
         txn.kind = kind_from_legs(session, txn, txn.kind)
     if session.get(TransactionSource, (txn.id, source.id)) is None:
         session.add(TransactionSource(transaction_id=txn.id, source_id=source.id))
@@ -304,9 +306,26 @@ def _write(txn: Transaction, record: _Record, *, primary: bool) -> None:
     if primary or (getattr(txn, leg) is None and getattr(txn, unresolved) is None):
         setattr(txn, leg, record.account_id)
         setattr(txn, unresolved, record.unresolved)
+    if primary:  # a re-parse that reads the other direction moves the account across: it can't pay itself
+        if record.account_id is not None and getattr(txn, other_leg) == record.account_id:
+            setattr(txn, other_leg, None)
+        if record.unresolved is not None and getattr(txn, other_unresolved) == record.unresolved:
+            setattr(txn, other_unresolved, None)
     if record.other_account_id is not None and getattr(txn, other_unresolved) is None \
             and getattr(txn, other_leg) in (None, record.other_account_id):
         setattr(txn, other_leg, record.other_account_id)  # §6.3 condition 2: the other side is the user's too
+
+
+def _email_fields(txn: Transaction, record: _Record) -> None:
+    """A re-parsed email under a statement-primary transaction (a re-sync, slice 24): the statement owns the
+    amount and posted date; the email owns the transaction date, and its time, reference and payee when it reads
+    them (amendment 11; apply_statement and _absorb keep exactly these from the email). Per field, as §5.2 asks:
+    a parser fix reaches statement-matched history too."""
+    txn.transaction_date = record.transaction_date
+    txn.transaction_time = record.transaction_time or txn.transaction_time
+    txn.reference_number = record.reference_number or txn.reference_number
+    if record.payee_raw:
+        txn.payee_raw, txn.payee_id = record.payee_raw, record.payee_id
 
 
 def kind_from_legs(session: Session, txn: Transaction, fallback: str) -> str:

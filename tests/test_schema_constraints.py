@@ -41,6 +41,7 @@ ENUM_CHECKS: list[tuple[str, str, str]] = [
     ("jobs", "kind", "kind"),
     ("jobs", "state", "state"),
     ("payee_categories", "origin", "origin"),
+    ("resync_notices", "reason", "reason"),
 ]
 
 

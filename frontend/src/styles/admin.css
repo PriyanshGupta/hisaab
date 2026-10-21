@@ -1,0 +1,203 @@
+/*
+ * The Admin area (slice 24). One bold thing: the parser-change banner, the only thing on these pages that asks
+ * for action, set on the red double margin rule (the app's one motif) with the template and date range in plain
+ * words. The section row is quiet text links marked like the sidebar's current page. Scoped under .admin.
+ */
+.admin .visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.admin__sections {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s4);
+  margin-bottom: var(--s5);
+  padding-bottom: var(--s2);
+  border-bottom: 1px solid var(--rule);
+}
+.admin__section {
+  min-height: var(--touch);
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+  text-decoration: none;
+  border-bottom: 3px solid transparent;
+}
+.admin__section:hover {
+  color: var(--ink);
+}
+.admin__section.active {
+  color: var(--ink);
+  border-bottom-color: var(--accent);
+}
+
+.admin__lead {
+  max-width: 38rem;
+  margin-bottom: var(--s5);
+  color: var(--ink-soft);
+}
+.admin__done {
+  max-width: 44rem;
+  margin-bottom: var(--s5);
+  padding: var(--s3) var(--s4);
+  background: var(--accent-wash);
+  border-radius: var(--r-control);
+}
+
+/* the banner */
+.resync-banner {
+  position: relative;
+  max-width: 52rem;
+  margin-bottom: var(--s6);
+  padding: var(--s3) var(--s4) var(--s3) calc(var(--s5) + var(--s2));
+  background: var(--margin-wash);
+  border-radius: var(--r-control);
+}
+.resync-banner::before {
+  content: "";
+  position: absolute;
+  inset: var(--s2) auto var(--s2) var(--s3);
+  width: calc(var(--margin-rule-gap) + 2px);
+  border-inline: 1px solid var(--margin);
+}
+.resync-banner ul {
+  list-style: none;
+  padding: 0;
+  display: grid;
+  gap: var(--s3);
+}
+.resync-banner__item {
+  display: grid;
+  gap: var(--s2);
+}
+.resync-banner__actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s3);
+  align-items: center;
+}
+.resync-banner__actions .button--primary {
+  text-decoration: none;
+  display: inline-flex;
+  align-items: center;
+}
+
+/* users */
+.admin-users {
+  max-width: 44rem;
+}
+.admin-users__add {
+  display: grid;
+  gap: var(--s3);
+  margin-bottom: var(--s5);
+  padding: var(--s4);
+}
+.admin-users__list {
+  list-style: none;
+  padding: 0;
+  border-top: 1px solid var(--rule-strong);
+}
+.admin-users__person {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  gap: var(--s2) var(--s4);
+  align-items: center;
+  padding: var(--s3) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.admin-users__who {
+  display: grid;
+}
+.admin-users__name {
+  font-weight: var(--w-strong);
+}
+.admin-users__actions {
+  flex-wrap: wrap;
+  justify-content: flex-end;
+}
+.admin-users__reset,
+.admin-users__done,
+.admin-users__person > .form-error {
+  grid-column: 1 / -1;
+}
+.admin-users__reset {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s3);
+  align-items: end;
+}
+.admin-users__done {
+  color: var(--accent);
+}
+
+/* payee names */
+.admin-payees {
+  max-width: 52rem;
+}
+.admin-payee {
+  display: grid;
+  gap: var(--s2);
+  margin-bottom: var(--s5);
+  padding: var(--s5) var(--s5) var(--s5) calc(var(--s7) + var(--s2));
+}
+.admin-payee__raw {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+  overflow-wrap: anywhere;
+}
+.admin-payee__name {
+  font-size: var(--t-title);
+  font-weight: var(--w-title);
+  color: var(--accent);
+}
+.admin-payee__edit {
+  display: grid;
+  gap: var(--s3);
+}
+.admin-payee .actions {
+  flex-wrap: wrap;
+}
+
+/* re-sync */
+.admin-resync {
+  max-width: 44rem;
+}
+.admin-resync__form {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
+  gap: var(--s3) var(--s4);
+  align-items: end;
+  margin-bottom: var(--s5);
+}
+.admin-resync__confirm {
+  display: grid;
+  gap: var(--s3);
+  padding: var(--s5) var(--s5) var(--s5) calc(var(--s7) + var(--s2));
+}
+.admin-resync__confirm h2 {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+}
+.admin-resync__count {
+  font-size: var(--t-title);
+  font-weight: var(--w-title);
+}
+
+@media (max-width: 44rem) {
+  .admin-users__person {
+    grid-template-columns: minmax(0, 1fr);
+  }
+  .admin-users__actions {
+    justify-content: flex-start;
+  }
+  .admin-resync__confirm,
+  .admin-payee {
+    padding: var(--s4) var(--s4) var(--s4) calc(var(--s6) + var(--s3));
+  }
+}
