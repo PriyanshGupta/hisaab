@@ -35,4 +35,4 @@ def write_notice(session: Session, template: ParserTemplate, reason: str,
 
 
 def _india_day(utc_text: str) -> str:
-    return datetime.fromisoformat(utc_text.replace("Z", "+00:00")).astimezone(LOCAL_TZ).date().isoformat()
+    return datetime.fromisoformat(utc_text).astimezone(LOCAL_TZ).date().isoformat()

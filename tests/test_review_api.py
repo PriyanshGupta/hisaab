@@ -156,7 +156,7 @@ def test_adding_a_upi_id_on_the_accounts_page_resolves_past_rows(app: FastAPI, a
     me: str = uid(admin)
     accounts: dict[str, str] = make_accounts(db_of(app), me)
     _, [src] = ingest(db_of(app), me, (contract(account_identifier="asha@okhdfc"), BANK_EMAIL))
-    admin.post(f"/api/accounts/{accounts['bank']}/identifiers", json={"kind": "vpa", "identifier": "Asha@OKHDFC"})
+    admin.post("/api/review/identifier", json={"account_id": accounts["bank"], "identifier": "Asha@OKHDFC"})
     assert base(app, txn_ids(app, [src])[0]).from_account_id == accounts["bank"]
 
 

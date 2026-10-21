@@ -3,7 +3,7 @@
 // queue, the transactions list and the first-run step (all three move together).
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, unwrap } from "./client";
 import type { components } from "./schema";
 import { setupKey } from "./setup";
 import { transactionsKey } from "./transactions";
@@ -20,12 +20,6 @@ export function refreshReview(queryClient: QueryClient) {
     queryClient.invalidateQueries({ queryKey: transactionsKey }),
     queryClient.invalidateQueries({ queryKey: setupKey }),
   ]);
-}
-
-async function unwrap<T>(call: () => Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
-  const { data, error, response } = await send(call);
-  if (data === undefined) throw apiError(response, error);
-  return data;
 }
 
 function useReviewMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {

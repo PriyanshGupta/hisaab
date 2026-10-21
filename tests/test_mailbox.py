@@ -239,3 +239,19 @@ def test_search_until_adds_before() -> None:
     since, until = datetime(2026, 10, 4, 18, 30, tzinfo=UTC), datetime(2026, 10, 7, 18, 30, tzinfo=UTC)
     list(open_box(fake).search(["alerts@bank.example"], since, until))
     assert fake.queries == [f"(from:alerts@bank.example) after:{int(since.timestamp())} before:{int(until.timestamp())}"]
+
+
+@pytest.mark.parametrize("dropped", ["incomplete", "ssl"])
+def test_a_connection_dropped_mid_answer_is_no_response_so_it_is_retried(monkeypatch: pytest.MonkeyPatch,
+                                                                         dropped: str) -> None:
+    """The same rule as the Claude calls (llm): a Gmail answer cut off part-way is status 0, not a crash."""
+    import http.client
+    import ssl
+    import urllib.request
+
+    from hisaab.ingest.mailbox import default_transport
+
+    def cut_off(*args: object, **kwargs: object) -> object:
+        raise http.client.IncompleteRead(b"partial") if dropped == "incomplete" else ssl.SSLError("bad record mac")
+    monkeypatch.setattr(urllib.request, "urlopen", cut_off)
+    assert default_transport("GET", "https://example.invalid/gmail/v1/users/me/messages", None, {}) == (0, b"")

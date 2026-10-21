@@ -20,7 +20,7 @@ from hisaab.ingest.mailbox import Grant
 from hisaab.ingest.sweep import CANDIDATE_CAP, enqueue_due_sweeps, make_sweep
 from hisaab.ingest.sync import SyncError, backfill_start
 from hisaab.jobs.queue import JobContext, JobQueue
-from hisaab.models import GmailConnection, Job, Sender, SenderCandidate, Setting
+from hisaab.models import GmailConnection, Sender, SenderCandidate, Setting
 from tests import factories as f
 from tests.gmail_fake import FakeGmail, make_eml
 

@@ -27,7 +27,7 @@ def _fill(client: TestClient, prefix: str, last4s: list[str]) -> None:
             "type": "bank", "display_name": f"{prefix} bank {i}", "last4": last4,
             "opening_balance_paise": 100000, "opening_balance_date": ANCHOR,
         }).json()
-        client.post(f"/api/accounts/{acct['id']}/identifiers", json={"kind": "vpa", "identifier": f"{prefix}{i}@ybl"})
+        client.post("/api/review/identifier", json={"account_id": acct["id"], "identifier": f"{prefix}{i}@ybl"})
         ids.append(acct["id"])
     wallet: Any = client.post("/api/accounts", json={"type": "cash", "display_name": f"{prefix} wallet",
                                                 "opening_balance_paise": 0, "opening_balance_date": ANCHOR}).json()["id"]

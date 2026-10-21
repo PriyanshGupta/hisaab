@@ -93,7 +93,7 @@ def try_template(spec_path: str, fixture_paths: list[str], show_text: bool, out:
 def _report(spec: EmailSpec, problems: list[str], artifact: EmailArtifact, show_text: bool, say: Say) -> bool:
     sender_ok: bool = artifact.sender in spec.senders
     say(f"  sender   {artifact.sender}  {'ok' if sender_ok else f'not in spec {list(spec.senders)}'}")
-    subject_ok: bool = spec.subject is not None and _matches(spec.subject, artifact.subject)
+    subject_ok: bool = spec.subject is not None and patterns.matches(spec.subject, artifact.subject)
     say(f"  subject  {artifact.subject!r}  {'ok' if subject_ok else 'does not match the spec subject pattern'}")
     tried: bool = sender_ok and subject_ok
     if not tried:
@@ -174,10 +174,3 @@ def _describe(name: str, r: FieldResult | None, problems: list[str]) -> str:
     if r.value is not None:
         return f"ok const -> {r.value!r}" if name != "date" else f"ok received time (no date in body) -> {r.value!r}"
     return "-  not in this format"
-
-
-def _matches(compiled: patterns.Pattern, subject: str) -> bool:
-    try:
-        return patterns.search(compiled, subject) is not None
-    except patterns.PatternTimeout:
-        return False

@@ -3,7 +3,7 @@
 // refreshes the transactions query.
 import { type QueryClient, useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, unwrap } from "./client";
 import type { components } from "./schema";
 import { setupKey } from "./setup";
 import { transactionsKey } from "./transactions";
@@ -17,22 +17,14 @@ export const payeesKey = ["payees"] as const;
 export function useCategories() {
   return useQuery({
     queryKey: categoriesKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/categories"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/categories")),
   });
 }
 
 export function usePayees() {
   return useQuery({
     queryKey: payeesKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/payees"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/payees")),
   });
 }
 
@@ -49,12 +41,6 @@ function refreshAfter(queryClient: QueryClient) {
 function useCategoryMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResult>) {
   const queryClient = useQueryClient();
   return useMutation({ mutationFn: fn, onSuccess: () => refreshAfter(queryClient) });
-}
-
-async function unwrap<T>(call: () => Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
-  const { data, error, response } = await send(call);
-  if (data === undefined) throw apiError(response, error);
-  return data;
 }
 
 export function useCreateCategory() {

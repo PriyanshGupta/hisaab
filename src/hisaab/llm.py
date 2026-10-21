@@ -12,18 +12,16 @@ LLMUnavailable (no key, network down, overloaded after retries) is not a parse
 failure: the Source waits as pending_llm and is retried on the next sync.
 """
 
-import http.client
 import json
 import re
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable
 from datetime import date
 from typing import Any, TypeAlias
 
 from hisaab.clock import LOCAL_TZ
 from hisaab.config import Settings
+from hisaab.net import send
 from hisaab.parsing.email_interpreter import EmailArtifact
 from hisaab.parsing.email_spec import CONTRACT_FIELDS
 from hisaab.parsing.transforms import collapse_whitespace, strip_html
@@ -93,24 +91,12 @@ class ContractError(ValueError):
 
 
 def default_transport(method: str, url: str, body: bytes | None, headers: dict[str, str]) -> tuple[int, bytes]:
-    return _send(method, url, body, headers, TIMEOUT_S)
+    return send(method, url, body, headers, TIMEOUT_S)
 
 
 def long_transport(timeout: float) -> Transport:
     """default_transport with its own timeout: a statement's answer can run to thousands of tokens."""
-    return lambda method, url, body, headers: _send(method, url, body, headers, timeout)
-
-
-def _send(method: str, url: str, body: bytes | None, headers: dict[str, str], timeout: float) -> tuple[int, bytes]:
-    request: urllib.request.Request = urllib.request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(request, timeout=timeout) as response:
-            status: int = response.status
-            return status, response.read()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()
-    except (urllib.error.URLError, TimeoutError, OSError, http.client.HTTPException):
-        return 0, b""  # incl. a connection dropped mid-answer (IncompleteRead, SSL errors): no response
+    return lambda method, url, body, headers: send(method, url, body, headers, timeout)
 
 
 def prompt_for(artifact: EmailArtifact) -> str:

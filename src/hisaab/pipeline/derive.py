@@ -65,7 +65,7 @@ from hisaab.payees.normalization import PatternRule, load_rules, match_payee
 from hisaab.pipeline.routing import Routed
 from hisaab.promotion.sightings import record_sighting
 from hisaab.transactions.repository import derived_key
-from hisaab.transactions.review import CARD_PAYMENT, review_reasons
+from hisaab.transactions.review import review_reasons
 from hisaab.tunables import tunable
 
 EMAIL_DISCRIMINATOR: str = "0"  # an email yields one transaction: its ordinal when there is no reference
@@ -538,8 +538,8 @@ def apply_statement(session: Session, user_id: str, source: Source, account_id: 
             txn.kind = kind_from_legs(session, txn, txn.kind)
         else:
             txn = Transaction(user_id=user_id, primary_source_id=source.id, status="confirmed", posted_date=row.date,
-                              derived_key=derived_key(user_id, source.ingest_seq, record.reference_number
-                                                      if record.reference_number else f"row:{ordinal}"))
+                              derived_key=derived_key(user_id, source.ingest_seq,
+                                                      record.reference_number or f"row:{ordinal}"))
             _write(txn, record, primary=True)
             txn.reference_number = row.reference  # kept as printed, even when it identifies nothing
             txn.kind = kind_from_legs(session, txn, "expense" if record.side == "from" else "income")

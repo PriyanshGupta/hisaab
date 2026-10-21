@@ -2,7 +2,7 @@
 // invalidates the one transactions query.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 
 export type Transaction = components["schemas"]["TransactionOut"];
@@ -16,12 +16,8 @@ export const transactionsKey = ["transactions"] as const;
 export function useTransactions(range: { start: string; end: string } | null = null) {
   return useQuery({
     queryKey: [...transactionsKey, "list", range?.start ?? null, range?.end ?? null],
-    queryFn: async () => {
-      const { data, error, response } = await send(() =>
-        api.GET("/api/transactions", range ? { params: { query: range } } : {}));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() =>
+        api.GET("/api/transactions", range ? { params: { query: range } } : {})),
     placeholderData: (previous) => previous, // a new range keeps the old list on screen until it arrives
   });
 }
@@ -36,31 +32,19 @@ function useTransactionsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TR
 }
 
 export function useCreateTransaction() {
-  return useTransactionsMutation(async (body: NewTransaction) => {
-    const { data, error, response } = await send(() => api.POST("/api/transactions", { body }));
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+  return useTransactionsMutation((body: NewTransaction) => unwrap(() => api.POST("/api/transactions", { body })));
 }
 
 export function useCorrectTransaction() {
-  return useTransactionsMutation(async ({ id, change }: { id: string; change: TransactionChange }) => {
-    const { data, error, response } = await send(() =>
+  return useTransactionsMutation(({ id, change }: { id: string; change: TransactionChange }) => unwrap(() =>
       api.PATCH("/api/transactions/{txn_id}", { params: { path: { txn_id: id } }, body: change }),
-    );
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+    ));
 }
 
 export function useUndoCorrection() {
-  return useTransactionsMutation(async ({ id, fields }: { id: string; fields: EditableField[] }) => {
-    const { data, error, response } = await send(() =>
+  return useTransactionsMutation(({ id, fields }: { id: string; fields: EditableField[] }) => unwrap(() =>
       api.POST("/api/transactions/{txn_id}/revert", { params: { path: { txn_id: id } }, body: { fields } }),
-    );
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+    ));
 }
 
 export function useDeleteTransaction() {

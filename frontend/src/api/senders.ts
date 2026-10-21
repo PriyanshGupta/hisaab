@@ -2,7 +2,7 @@
 // sender's mail in the background; the transactions it brings arrive through the normal sync pipeline.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 
 export type CandidateSender = components["schemas"]["CandidateSender"];
@@ -14,23 +14,15 @@ export const sendersKey = ["admin", "senders"] as const;
 export function useSenderQueue() {
   return useQuery({
     queryKey: sendersKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/admin/senders"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/admin/senders")),
   });
 }
 
 export function useApproveSender() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error, response } = await send(() =>
-        api.POST("/api/admin/senders/{sender_id}/approve", { params: { path: { sender_id: id } } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: (id: string) => unwrap(() =>
+        api.POST("/api/admin/senders/{sender_id}/approve", { params: { path: { sender_id: id } } })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: sendersKey }),
   });
 }

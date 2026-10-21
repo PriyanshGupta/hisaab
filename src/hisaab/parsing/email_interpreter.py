@@ -120,11 +120,7 @@ def confirm_failures(spec: EmailSpec, text: str) -> list[FieldFailure]:
     """A non_transactional spec's gate: one failure per confirm phrase that is not in the text."""
     failures: list[FieldFailure] = []
     for pattern in spec.confirm:
-        try:
-            found: bool = patterns.search(pattern, text) is not None
-        except patterns.PatternTimeout:
-            found = False
-        if not found:
+        if not patterns.matches(pattern, text):
             failures.append(FieldFailure("confirm", f"no match for /{pattern.pattern}/"))
     return failures
 

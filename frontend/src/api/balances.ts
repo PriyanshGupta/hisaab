@@ -2,7 +2,7 @@
 // correction, review answer, merge and sync refreshes the balances and their gaps along with the report.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, unwrap } from "./client";
 import type { components } from "./schema";
 import { transactionsKey } from "./transactions";
 
@@ -14,11 +14,7 @@ export const balancesKey = [...transactionsKey, "balances"] as const;
 export function useBalances() {
   return useQuery({
     queryKey: balancesKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/balances"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/balances")),
   });
 }
 
@@ -32,21 +28,15 @@ function useBalanceMutation<TArgs>(fn: (args: TArgs) => Promise<AccountBalance>)
 }
 
 export function useCheckpoint(accountId: string) {
-  return useBalanceMutation(async (body: { balance_paise: number; on: string }) => {
-    const { data, error, response } = await send(() => api.POST("/api/accounts/{account_id}/checkpoints",
-      { params: { path: { account_id: accountId } }, body }));
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+  return useBalanceMutation((body: { balance_paise: number; on: string }) => unwrap(() =>
+    api.POST("/api/accounts/{account_id}/checkpoints", { params: { path: { account_id: accountId } }, body })));
 }
 
 export function useResolveGap(action: "accept" | "close") {
   return useBalanceMutation(async (observationId: string) => {
     const path = { params: { path: { observation_id: observationId } } };
-    const { data, error, response } = await send(() => action === "accept"
+    return unwrap(() => action === "accept"
       ? api.POST("/api/balances/checks/{observation_id}/accept", path)
       : api.POST("/api/balances/checks/{observation_id}/close", path));
-    if (data === undefined) throw apiError(response, error);
-    return data;
   });
 }

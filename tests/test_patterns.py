@@ -60,3 +60,10 @@ def test_a_match_that_overruns_its_deadline_raises_instead_of_blocking() -> None
 
 def test_the_default_deadline_is_100ms() -> None:
     assert patterns.MATCH_TIMEOUT_SECONDS == 0.1
+
+
+def test_matches_is_a_plain_yes_or_no_and_a_timeout_counts_as_no(monkeypatch: pytest.MonkeyPatch) -> None:
+    assert patterns.matches(compile_pattern(r"Debit"), "Debit alert") is True
+    assert patterns.matches(compile_pattern(r"Credit"), "Debit alert") is False
+    monkeypatch.setattr(patterns, "MATCH_TIMEOUT_SECONDS", 0.001)
+    assert patterns.matches(compile_pattern(r"(a+)+b"), "a" * 20_000_000) is False

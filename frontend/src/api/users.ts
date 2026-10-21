@@ -1,7 +1,7 @@
 // User management (PRD §6.9): admin only. The API is slice 3's /api/admin/users.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 
 export type ManagedUser = components["schemas"]["ManagedUser"];
@@ -12,22 +12,14 @@ export const usersKey = ["admin", "users"] as const;
 export function useUsers() {
   return useQuery({
     queryKey: usersKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/admin/users"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/admin/users")),
   });
 }
 
 export function useAddUser() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: NewUser) => {
-      const { data, error, response } = await send(() => api.POST("/api/admin/users", { body }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: (body: NewUser) => unwrap(() => api.POST("/api/admin/users", { body })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: usersKey }),
   });
 }
@@ -45,12 +37,8 @@ export function useResetPassword() {
 export function useChangeRole() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, role }: { id: string; role: string }) => {
-      const { data, error, response } = await send(() =>
-        api.PATCH("/api/admin/users/{user_id}", { params: { path: { user_id: id } }, body: { role } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: ({ id, role }: { id: string; role: string }) => unwrap(() =>
+        api.PATCH("/api/admin/users/{user_id}", { params: { path: { user_id: id } }, body: { role } })),
     onSuccess: () => void qc.invalidateQueries({ queryKey: usersKey }),
   });
 }

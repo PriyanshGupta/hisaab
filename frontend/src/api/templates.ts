@@ -2,7 +2,7 @@
 // transactions into review, so it refreshes those queries too.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 import { noticesKey } from "./resync";
 import { reviewKey } from "./review";
@@ -19,23 +19,15 @@ export const templatesKey = ["admin", "templates"] as const;
 export function useTemplateQueue() {
   return useQuery({
     queryKey: templatesKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/admin/templates"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/admin/templates")),
   });
 }
 
 export function useApproveTemplate() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (id: string) => {
-      const { data, error, response } = await send(() =>
-        api.POST("/api/admin/templates/{template_id}/approve", { params: { path: { template_id: id } } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: (id: string) => unwrap(() =>
+        api.POST("/api/admin/templates/{template_id}/approve", { params: { path: { template_id: id } } })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: templatesKey });
       void qc.invalidateQueries({ queryKey: transactionsKey });
@@ -74,11 +66,7 @@ export const inUseKey = ["admin", "templates", "active"] as const;
 export function useTemplatesInUse() {
   return useQuery({
     queryKey: inUseKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/admin/templates/active"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/admin/templates/active")),
   });
 }
 
@@ -86,12 +74,8 @@ export function useTemplatesInUse() {
 export function useEditSpec() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async ({ id, spec }: { id: string; spec: Record<string, unknown> }) => {
-      const { data, error, response } = await send(() =>
-        api.PUT("/api/admin/templates/{template_id}/spec", { params: { path: { template_id: id } }, body: { spec } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: ({ id, spec }: { id: string; spec: Record<string, unknown> }) => unwrap(() =>
+        api.PUT("/api/admin/templates/{template_id}/spec", { params: { path: { template_id: id } }, body: { spec } })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: inUseKey });
       void qc.invalidateQueries({ queryKey: noticesKey });

@@ -2,7 +2,7 @@
 // (a correction, a review answer, a category change) already invalidates that prefix.
 import { useQuery } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, unwrap } from "./client";
 import type { components } from "./schema";
 import { transactionsKey } from "./transactions";
 
@@ -15,12 +15,8 @@ export type ReportTransfer = components["schemas"]["ReportTransfer"];
 export function useReport(start: string, end: string) {
   return useQuery({
     queryKey: [...transactionsKey, "report", start, end],
-    queryFn: async () => {
-      const { data, error, response } = await send(() =>
-        api.GET("/api/report", { params: { query: { start, end } } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() =>
+        api.GET("/api/report", { params: { query: { start, end } } })),
     placeholderData: (previous) => previous, // stepping months keeps the last report on screen, no flash
   });
 }
@@ -33,21 +29,13 @@ export type RecurringCharge = components["schemas"]["RecurringOut"];
 export function useTrends() {
   return useQuery({
     queryKey: [...transactionsKey, "trends"],
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/trends"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/trends")),
   });
 }
 
 export function useRecurring() {
   return useQuery({
     queryKey: [...transactionsKey, "recurring"],
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/recurring"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/recurring")),
   });
 }

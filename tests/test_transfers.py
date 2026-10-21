@@ -232,7 +232,7 @@ def test_card_repayment_fixtures_are_transfers_in_neither_total(db: Database, us
         accounts.create_account(s, user_id, type="bank", display_name="Savings", opening_balance=0,
                                 opening_balance_date="2026-01-01", last4="0000")
         if not by_digits:  # Scapia's repayment email names the card, not its digits
-            accounts.add_identifier(s, user_id, card, "other", identifier)
+            accounts.assign_identifier(s, user_id, card, identifier)
         source_id: str = add_source(s, user_id, (CARDS / f"{name}.eml").read_bytes(), name).id
     llm: Llm = Llm(AssertionError("a seeded format must not reach the LLM"))
     with db.read_session() as s:

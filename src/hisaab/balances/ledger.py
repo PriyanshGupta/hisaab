@@ -85,7 +85,7 @@ def _local(observed_at: str) -> tuple[str, str | None]:
     ('...Z'), or already a bare date."""
     if len(observed_at) == 10:
         return observed_at, None
-    local: datetime = datetime.fromisoformat(observed_at.replace("Z", "+00:00")).astimezone(LOCAL_TZ)
+    local: datetime = datetime.fromisoformat(observed_at).astimezone(LOCAL_TZ)
     clock: str = local.strftime("%H:%M:%S")
     return local.date().isoformat(), None if clock == END_OF_DAY else clock
 

@@ -2,7 +2,7 @@
 // cookie the browser manages; the SPA only ever asks the server who it is.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { type SessionUser, ApiError, api, apiError, describeError, send } from "./client";
+import { api, ApiError, apiError, describeError, send, type SessionUser, unwrap } from "./client";
 
 export const meQueryKey = ["auth", "me"] as const;
 
@@ -21,11 +21,8 @@ export function useMe() {
 export function useLogin() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (credentials: { username: string; password: string }) => {
-      const { data, error, response } = await send(() => api.POST("/api/auth/login", { body: credentials }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: (credentials: { username: string; password: string }) =>
+      unwrap(() => api.POST("/api/auth/login", { body: credentials })),
     onSuccess: (user) => queryClient.setQueryData(meQueryKey, user),
   });
 }

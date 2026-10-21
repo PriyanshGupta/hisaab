@@ -14,7 +14,7 @@ from hisaab.categories import repository as cats
 from hisaab.categories.repository import CategoryError, DuplicateCategory, NotFound
 from hisaab.config import Settings
 from hisaab.db import Database
-from hisaab.models import Category, PayeeCategory
+from hisaab.models import PayeeCategory
 from tests import factories as f
 from tests.conftest import alembic_config
 

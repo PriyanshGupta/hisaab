@@ -2,7 +2,6 @@
 override if present (uncategorized if its category is archived), else the payee
 rule (if its category is active), else uncategorized. Nothing is ever written."""
 
-from typing import Any
 
 import pytest
 from sqlalchemy import Connection, func, select

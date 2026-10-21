@@ -1,6 +1,6 @@
 """Accounts repository: create, edit, archive, identifiers, resolution. All user-scoped."""
 
-from datetime import date, timedelta
+from datetime import timedelta
 from typing import Any
 
 import pytest
@@ -114,7 +114,7 @@ def test_create_registers_the_last4_identifier(db: Database, asha: str) -> None:
 def test_vpa_lookup_is_case_insensitive(db: Database, asha: str) -> None:
     bank: str = create(db, asha)
     with db.write_session() as s:
-        accounts.add_identifier(s, asha, bank, "vpa", "upi@ybl")
+        accounts.assign_identifier(s, asha, bank, "upi@ybl")
     assert resolve(db, asha, "UPI@YBL") == bank
     assert resolve(db, asha, "  Upi@Ybl ") == bank
 
@@ -122,7 +122,7 @@ def test_vpa_lookup_is_case_insensitive(db: Database, asha: str) -> None:
 def test_vpa_stored_in_capitals_is_found_in_lower_case(db: Database, asha: str) -> None:
     bank: str = create(db, asha)
     with db.write_session() as s:
-        accounts.add_identifier(s, asha, bank, "vpa", "UPI@YBL")
+        accounts.assign_identifier(s, asha, bank, "UPI@YBL")
     assert resolve(db, asha, "upi@ybl") == bank
 
 
@@ -142,10 +142,10 @@ def test_duplicate_active_identifier_is_refused_with_the_holders_name(db: Databa
     a: str = create(db, asha, display_name="HDFC Savings", last4="5512")
     b: str = create(db, asha, display_name="ICICI Savings", last4="2218")
     with db.write_session() as s:
-        accounts.add_identifier(s, asha, a, "vpa", "asha@ybl")
+        accounts.assign_identifier(s, asha, a, "asha@ybl")
     with pytest.raises(DuplicateIdentifier, match="asha@ybl is already on HDFC Savings"):
         with db.write_session() as s:
-            accounts.add_identifier(s, asha, b, "vpa", "ASHA@YBL")
+            accounts.assign_identifier(s, asha, b, "ASHA@YBL")
 
 
 def test_setup_identifier_cannot_be_removed(db: Database, asha: str) -> None:
@@ -160,7 +160,7 @@ def test_setup_identifier_cannot_be_removed(db: Database, asha: str) -> None:
 def test_removed_vpa_stops_resolving(db: Database, asha: str) -> None:
     bank: str = create(db, asha)
     with db.write_session() as s:
-        ident: str = accounts.add_identifier(s, asha, bank, "vpa", "asha@ybl").id
+        ident: str = accounts.assign_identifier(s, asha, bank, "asha@ybl")[0].id
     with db.write_session() as s:
         accounts.remove_identifier(s, asha, bank, ident)
     assert resolve(db, asha, "asha@ybl") is None
@@ -171,7 +171,7 @@ def test_removed_vpa_stops_resolving(db: Database, asha: str) -> None:
 def test_archive_hides_account_and_stops_its_identifiers_resolving(db: Database, asha: str) -> None:
     bank: str = create(db, asha)
     with db.write_session() as s:
-        accounts.add_identifier(s, asha, bank, "vpa", "upi@ybl")
+        accounts.assign_identifier(s, asha, bank, "upi@ybl")
     with db.write_session() as s:
         accounts.archive_account(s, asha, bank)
     with db.read_session() as s:
@@ -185,12 +185,12 @@ def test_archive_hides_account_and_stops_its_identifiers_resolving(db: Database,
 def test_archived_identifiers_can_be_reused_by_a_new_account(db: Database, asha: str) -> None:
     old: str = create(db, asha, display_name="Old HDFC", last4="5512")
     with db.write_session() as s:
-        accounts.add_identifier(s, asha, old, "vpa", "asha@ybl")
+        accounts.assign_identifier(s, asha, old, "asha@ybl")
     with db.write_session() as s:
         accounts.archive_account(s, asha, old)
     new: str = create(db, asha, display_name="New HDFC", last4="5512")
     with db.write_session() as s:
-        accounts.add_identifier(s, asha, new, "vpa", "asha@ybl")
+        accounts.assign_identifier(s, asha, new, "asha@ybl")
     assert resolve(db, asha, "asha@ybl") == new
     assert resolve(db, asha, "5512") == new
 
@@ -204,7 +204,7 @@ def test_archived_account_is_read_only(db: Database, asha: str) -> None:
             accounts.update_account(s, asha, bank, display_name="Renamed")
     with pytest.raises(AccountError, match="archived"):
         with db.write_session() as s:
-            accounts.add_identifier(s, asha, bank, "vpa", "x@ybl")
+            accounts.assign_identifier(s, asha, bank, "x@ybl")
 
 
 # --- edit ------------------------------------------------------------------
@@ -231,7 +231,7 @@ def test_edit_applies_the_same_balance_rules(db: Database, asha: str) -> None:
 def test_other_users_accounts_are_invisible(db: Database, asha: str, ravi: str) -> None:
     bank: str = create(db, asha)
     with db.write_session() as s:
-        accounts.add_identifier(s, asha, bank, "vpa", "asha@ybl")
+        accounts.assign_identifier(s, asha, bank, "asha@ybl")
     with db.read_session() as s:
         assert accounts.list_accounts(s, ravi, include_archived=True) == []
         with pytest.raises(NotFound):
@@ -241,7 +241,7 @@ def test_other_users_accounts_are_invisible(db: Database, asha: str, ravi: str) 
     for action in (
         lambda s: accounts.update_account(s, ravi, bank, display_name="Mine now"),
         lambda s: accounts.archive_account(s, ravi, bank),
-        lambda s: accounts.add_identifier(s, ravi, bank, "vpa", "ravi@ybl"),
+        lambda s: accounts.assign_identifier(s, ravi, bank, "ravi@ybl"),
     ):
         with pytest.raises(NotFound):
             with db.write_session() as s:

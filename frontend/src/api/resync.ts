@@ -1,7 +1,7 @@
 // Re-sync a date range, and the parser-change notices that suggest one (tech-design §5.2): admin only.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 
 export type ResyncNotice = components["schemas"]["ResyncNoticeOut"];
@@ -12,11 +12,7 @@ export const noticesKey = ["admin", "resync", "notices"] as const;
 export function useResyncNotices() {
   return useQuery({
     queryKey: noticesKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/admin/resync/notices"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/admin/resync/notices")),
   });
 }
 
@@ -36,12 +32,8 @@ export type ResyncRange = { start: string; end: string; user_id: string | null }
 
 export function useResyncPreview() {
   return useMutation({
-    mutationFn: async ({ start, end, user_id }: ResyncRange) => {
-      const { data, error, response } = await send(() => api.GET("/api/admin/resync/preview",
-        { params: { query: { start, end, ...(user_id ? { user_id } : {}) } } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: ({ start, end, user_id }: ResyncRange) => unwrap(() => api.GET("/api/admin/resync/preview",
+        { params: { query: { start, end, ...(user_id ? { user_id } : {}) } } })),
   });
 }
 

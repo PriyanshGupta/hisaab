@@ -40,8 +40,6 @@ from hisaab.models.core import ACCOUNT_TYPES
 
 # The identifier each account type registers for itself at creation.
 SETUP_IDENTIFIER_KIND: dict[str, str] = {"bank": "last4", "credit_card": "card_last4"}
-# Kinds a user may add to an account afterwards.
-USER_IDENTIFIER_KINDS: tuple[str, ...] = ("vpa", "other")
 
 _ISO_DATE: re.Pattern[str] = re.compile(r"\d{4}-\d{2}-\d{2}")
 # ₹10 lakh crore. Far beyond any household balance, inside SQLite's BIGINT and
@@ -295,29 +293,6 @@ def archive_account(session: Session, user_id: str, account_id: str) -> Account:
             .values(retired_at=now)
         )
     return account
-
-
-def add_identifier(session: Session, user_id: str, account_id: str, kind: str, raw: str) -> AccountIdentifier:
-    account: Account = _active_account(session, user_id, account_id)
-    if kind not in USER_IDENTIFIER_KINDS:
-        raise AccountError("Add UPI IDs or other references here; last 4 digits are set when the account is created.")
-    try:
-        canonical: str = normalize(kind, raw)
-    except IdentifierError as exc:
-        raise AccountError(str(exc)) from None
-    holder: Account | None = session.scalars(
-        select(Account)
-        .join(AccountIdentifier, AccountIdentifier.account_id == Account.id)
-        .where(AccountIdentifier.user_id == user_id, AccountIdentifier.kind == kind,
-               AccountIdentifier.identifier == canonical, AccountIdentifier.retired_at.is_(None))
-    ).first()
-    if holder is not None:
-        raise DuplicateIdentifier(f"{canonical} is already on {holder.display_name}.")
-    identifier: AccountIdentifier = AccountIdentifier(account_id=account.id, user_id=user_id, kind=kind,
-                                   identifier=canonical, origin="account_setup")
-    session.add(identifier)
-    session.flush()
-    return identifier
 
 
 def assign_identifier(session: Session, user_id: str, account_id: str, raw: str) -> tuple[AccountIdentifier, str]:

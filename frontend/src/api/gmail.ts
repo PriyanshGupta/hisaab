@@ -2,7 +2,7 @@
 // POST returns its id and the screen polls GET /api/jobs/{id} until it ends.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 import { transactionsKey } from "./transactions";
 
@@ -15,11 +15,7 @@ const POLL_MS = 500;
 export function useGmailStatus() {
   return useQuery({
     queryKey: gmailKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/gmail"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/gmail")),
   });
 }
 

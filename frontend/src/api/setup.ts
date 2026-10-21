@@ -3,7 +3,7 @@
 // payee-rule changes refresh it (they all move the step).
 import { useQuery } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, unwrap } from "./client";
 import type { components } from "./schema";
 
 export type Setup = components["schemas"]["SetupOut"];
@@ -14,11 +14,7 @@ const POLL_MS = 1000;
 export function useSetup() {
   return useQuery({
     queryKey: setupKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/setup"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/setup")),
     refetchInterval: (query) => (query.state.data?.step === "backfill" ? POLL_MS : false),
   });
 }

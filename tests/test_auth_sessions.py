@@ -3,7 +3,6 @@
 import hashlib
 import hmac
 from datetime import UTC, datetime, timedelta
-from typing import Any
 
 import pytest
 from sqlalchemy import Connection, select

@@ -5,7 +5,7 @@ import time
 from collections.abc import Callable
 from datetime import UTC, date, datetime
 from threading import Thread
-from typing import Any, NoReturn
+from typing import NoReturn
 
 import pytest
 from argon2.exceptions import VerifyMismatchError

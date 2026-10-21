@@ -15,7 +15,6 @@ from hisaab.db import Database
 from hisaab.jobs.queue import JobContext
 from hisaab.models import ParserTemplate
 from hisaab.promotion.propose import propose_ready
-from tests import factories as f
 from tests.claude_fake import FakeClaude
 from tests.conftest import login, make_user
 from tests.promotion_helpers import Haiku, alert_eml, feed, reading

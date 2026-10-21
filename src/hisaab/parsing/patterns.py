@@ -63,3 +63,11 @@ def search(compiled: Pattern, text: str, timeout: float | None = None) -> Match 
         return future.result(timeout=MATCH_TIMEOUT_SECONDS if timeout is None else timeout)
     except concurrent.futures.TimeoutError:
         raise PatternTimeout("pattern timed out") from None
+
+
+def matches(compiled: Pattern, text: str) -> bool:
+    """Whether it matches within the deadline; a pattern that runs out of time counts as no match."""
+    try:
+        return search(compiled, text) is not None
+    except PatternTimeout:
+        return False

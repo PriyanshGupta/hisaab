@@ -65,11 +65,6 @@ class AccountChange(BaseModel):
     opening_balance_date: str | None = None
 
 
-class NewIdentifier(BaseModel):
-    kind: Literal["vpa", "other"]
-    identifier: str
-
-
 def _out(session: Session, user_id: str, account: Account) -> AccountOut:
     return AccountOut(
         # a CHECK constraint holds accounts.type to AccountType's values
@@ -145,15 +140,6 @@ def archive_account(account_id: str, request: Request, user: CurrentUser = Depen
                     db: Database = Depends(get_db)) -> AccountOut:
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         return _out(s, user.id, accounts.archive_account(s, user.id, account_id))
-
-
-@router.post("/{account_id}/identifiers", response_model=IdentifierOut, status_code=status.HTTP_201_CREATED)
-def add_identifier(account_id: str, body: NewIdentifier, request: Request,
-                   user: CurrentUser = Depends(current_user), db: Database = Depends(get_db)) -> IdentifierOut:
-    with db.write_session(timeout=request.app.state.writer_timeout) as s:
-        i: AccountIdentifier = accounts.add_identifier(s, user.id, account_id, body.kind, body.identifier)
-        resolve_identifier_everywhere(s, user.id, accounts.get_account(s, user.id, account_id), i.identifier)
-        return IdentifierOut(id=i.id, kind=i.kind, identifier=i.identifier, removable=True)
 
 
 @router.delete("/{account_id}/identifiers/{identifier_id}", status_code=status.HTTP_204_NO_CONTENT)

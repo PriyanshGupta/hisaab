@@ -3,7 +3,7 @@
 // refreshes transactions and review when it ends.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 
 export type StatementPreview = components["schemas"]["StatementPreview"];
@@ -18,23 +18,15 @@ const previewKey = (id: string) => [...statementsKey, "preview", id] as const;
 export function useOpenStatements() {
   return useQuery({
     queryKey: openKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/statements"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/statements")),
   });
 }
 
 export function useStatement(id: string) {
   return useQuery({
     queryKey: previewKey(id),
-    queryFn: async () => {
-      const { data, error, response } = await send(() =>
-        api.GET("/api/statements/{staging_id}", { params: { path: { staging_id: id } } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() =>
+        api.GET("/api/statements/{staging_id}", { params: { path: { staging_id: id } } })),
     retry: false, // a 404 means expired or discarded: say so at once
   });
 }
@@ -52,9 +44,7 @@ export function useUploadStatement() {
   return useMutation({
     mutationFn: async ({ file, password }: { file: File; password: string }) => {
       const body = { filename: file.name, password: password || null, content_base64: await toBase64(file) };
-      const { data, error, response } = await send(() => api.POST("/api/statements", { body }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
+      return unwrap(() => api.POST("/api/statements", { body }));
     },
     onSuccess: (data) => {
       queryClient.setQueryData(previewKey(data.id), data); // the page opens it without a second read
@@ -66,12 +56,8 @@ export function useUploadStatement() {
 export function usePickAccount(id: string) {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: async (accountId: string) => {
-      const { data, error, response } = await send(() => api.PATCH("/api/statements/{staging_id}",
-        { params: { path: { staging_id: id } }, body: { account_id: accountId } }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: (accountId: string) => unwrap(() => api.PATCH("/api/statements/{staging_id}",
+        { params: { path: { staging_id: id } }, body: { account_id: accountId } })),
     onSuccess: (data) => {
       queryClient.setQueryData(previewKey(id), data);
       return queryClient.invalidateQueries({ queryKey: openKey });

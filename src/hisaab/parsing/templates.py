@@ -90,11 +90,8 @@ def select_email_candidates(templates: list[EmailTemplate], sender: str, subject
         spec: EmailSpec = template.spec
         if sender not in spec.senders:
             continue
-        try:
-            # SQLite has no RE2, so subjects filter here (a parsed spec always has one)
-            if spec.subject is None or patterns.search(spec.subject, subject) is None:
-                continue
-        except patterns.PatternTimeout:
+        # SQLite has no RE2, so subjects filter here (a parsed spec always has one)
+        if spec.subject is None or not patterns.matches(spec.subject, subject):
             continue
         found.append(template)
     return found

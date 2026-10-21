@@ -35,8 +35,6 @@ import hashlib
 import html
 import json
 import time
-import urllib.error
-import urllib.request
 from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
@@ -44,6 +42,8 @@ from email.message import EmailMessage
 from email.utils import parseaddr
 from typing import Any, TypeAlias
 from urllib.parse import quote, urlencode
+
+from hisaab.net import send
 
 AUTH_URL: str = "https://accounts.google.com/o/oauth2/v2/auth"
 TOKEN_URL: str = "https://oauth2.googleapis.com/token"
@@ -113,15 +113,7 @@ class Message:
 
 
 def default_transport(method: str, url: str, body: bytes | None, headers: dict[str, str]) -> tuple[int, bytes]:
-    request: urllib.request.Request = urllib.request.Request(url, data=body, headers=headers, method=method)
-    try:
-        with urllib.request.urlopen(request, timeout=TIMEOUT_S) as response:
-            status: int = response.status
-            return status, response.read()
-    except urllib.error.HTTPError as e:
-        return e.code, e.read()
-    except (urllib.error.URLError, TimeoutError, ConnectionError):
-        return 0, b""
+    return send(method, url, body, headers, TIMEOUT_S)
 
 
 def _call(http: Transport, sleep: Callable[[float], None], method: str, url: str, body: bytes | None,

@@ -2,7 +2,7 @@
 // invalidates the one accounts query, so all views of accounts stay in step.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import type { components } from "./schema";
 import { setupKey } from "./setup";
 import { transactionsKey } from "./transactions";
@@ -18,13 +18,9 @@ export const accountsKey = ["accounts"] as const;
 export function useAccounts() {
   return useQuery({
     queryKey: accountsKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() =>
+    queryFn: () => unwrap(() =>
         api.GET("/api/accounts", { params: { query: { include_archived: true } } }),
-      );
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+      ),
   });
 }
 
@@ -40,43 +36,27 @@ function useAccountsMutation<TArgs, TResult>(fn: (args: TArgs) => Promise<TResul
 }
 
 export function useCreateAccount() {
-  return useAccountsMutation(async (body: NewAccount) => {
-    const { data, error, response } = await send(() => api.POST("/api/accounts", { body }));
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+  return useAccountsMutation((body: NewAccount) => unwrap(() => api.POST("/api/accounts", { body })));
 }
 
 export function useUpdateAccount() {
-  return useAccountsMutation(async ({ id, change }: { id: string; change: AccountChange }) => {
-    const { data, error, response } = await send(() =>
+  return useAccountsMutation(({ id, change }: { id: string; change: AccountChange }) => unwrap(() =>
       api.PATCH("/api/accounts/{account_id}", { params: { path: { account_id: id } }, body: change }),
-    );
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+    ));
 }
 
 export function useArchiveAccount() {
-  return useAccountsMutation(async (id: string) => {
-    const { data, error, response } = await send(() =>
+  return useAccountsMutation((id: string) => unwrap(() =>
       api.POST("/api/accounts/{account_id}/archive", { params: { path: { account_id: id } } }),
-    );
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+    ));
 }
 
 /** Another number, UPI ID or name the bank's alerts use for this account, kind worked out by the server
  *  (review's own "ending 4821 is my HDFC savings"). Earlier transactions that mention it move here. */
 export function useAddIdentifier() {
-  return useAccountsMutation(async ({ id, identifier }: { id: string; identifier: string }) => {
-    const { data, error, response } = await send(() =>
+  return useAccountsMutation(({ id, identifier }: { id: string; identifier: string }) => unwrap(() =>
       api.POST("/api/review/identifier", { body: { account_id: id, identifier } }),
-    );
-    if (data === undefined) throw apiError(response, error);
-    return data;
-  });
+    ));
 }
 
 export function useRemoveIdentifier() {

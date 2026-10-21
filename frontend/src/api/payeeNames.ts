@@ -2,7 +2,7 @@
 // transactions, review and report queries are refreshed too.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
-import { api, apiError, send } from "./client";
+import { api, apiError, send, unwrap } from "./client";
 import { reviewKey } from "./review";
 import type { components } from "./schema";
 import { transactionsKey } from "./transactions";
@@ -15,22 +15,14 @@ export const payeeNamesKey = ["admin", "payee-names"] as const;
 export function useCorrections() {
   return useQuery({
     queryKey: payeeNamesKey,
-    queryFn: async () => {
-      const { data, error, response } = await send(() => api.GET("/api/admin/payee-names"));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    queryFn: () => unwrap(() => api.GET("/api/admin/payee-names")),
   });
 }
 
 export function usePromote() {
   const qc = useQueryClient();
   return useMutation({
-    mutationFn: async (body: PromoteIn) => {
-      const { data, error, response } = await send(() => api.POST("/api/admin/payee-names/promote", { body }));
-      if (data === undefined) throw apiError(response, error);
-      return data;
-    },
+    mutationFn: (body: PromoteIn) => unwrap(() => api.POST("/api/admin/payee-names/promote", { body })),
     onSuccess: () => {
       void qc.invalidateQueries({ queryKey: payeeNamesKey });
       void qc.invalidateQueries({ queryKey: transactionsKey });

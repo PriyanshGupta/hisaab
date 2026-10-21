@@ -14,7 +14,6 @@ that span give it away (_coincidence). A series whose next charge is overdue has
 The thresholds are the tunable recurring_detection; the week floor is MIN_GAP_DAYS.
 """
 
-import statistics
 from collections.abc import Sequence
 from dataclasses import dataclass
 from datetime import date, timedelta

@@ -61,7 +61,7 @@ def process_pending(ctx: JobContext, user_id: str, settings: Settings, transport
         with ctx.write() as s:
             counts: PipelineCounts = apply(s, user_id, batch)
             ctx.report(s, {"read": start + len(batch), "to_read": len(waiting)})
-        totals.update({k: v for k, v in vars(counts).items()})
+        totals.update(vars(counts))
         totals.update("route:" + r.diagnostic["route"] for _, r in batch)
     proposals: dict[str, int] = propose_ready(ctx, settings, transport, sleep)  # outside the writer lock
     return {"templates_proposed": proposals["proposed"], "tier1": totals["route:tier1"], "cache_hits": totals["route:cache"], "llm_calls": totals["llm_calls"],

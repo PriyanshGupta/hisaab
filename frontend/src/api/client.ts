@@ -44,6 +44,13 @@ export async function send<T extends { response: Response }>(call: () => Promise
   }
 }
 
+/** The response's data, or the server's error as an ApiError (a dropped connection as NetworkError). */
+export async function unwrap<T>(call: () => Promise<{ data?: T; error?: unknown; response: Response }>): Promise<T> {
+  const { data, error, response } = await send(call);
+  if (data === undefined) throw apiError(response, error);
+  return data;
+}
+
 /**
  * The server's own sentence when it sent one ({"detail": "You already have…"}).
  * FastAPI's field-validation errors carry a list instead; those become one

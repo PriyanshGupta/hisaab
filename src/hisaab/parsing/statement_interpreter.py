@@ -129,13 +129,6 @@ def _bind(spec: StatementSpec, text: str) -> tuple[str, str] | None:
 
 # --- rows -------------------------------------------------------------------------------
 
-def _matches(compiled: patterns.Pattern, text: str) -> bool:
-    try:
-        return patterns.search(compiled, text) is not None
-    except patterns.PatternTimeout:
-        return False
-
-
 def _is_header(spec: StatementSpec, line: Line) -> bool:
     return all(label in line.text for label in spec.table.header_contains)
 
@@ -158,17 +151,17 @@ def _raw_rows(spec: StatementSpec, pages: list[Page]) -> tuple[list[_RawRow], in
                 continue
             if not in_table:
                 resumes: patterns.Pattern | None = spec.table.resumes_after
-                if found_header and resumes is not None and _matches(resumes, line.text):
+                if found_header and resumes is not None and patterns.matches(resumes, line.text):
                     in_table = True
                 continue
-            if spec.table.ends_at is not None and _matches(spec.table.ends_at, line.text):
+            if spec.table.ends_at is not None and patterns.matches(spec.table.ends_at, line.text):
                 in_table = False
                 continue
-            if spec.stop_at is not None and _matches(spec.stop_at, line.text):
+            if spec.stop_at is not None and patterns.matches(spec.stop_at, line.text):
                 if not found_header:
                     break
                 return rows, skipped, pages_seen
-            if any(_matches(p, line.text) for p in spec.skip_matching):
+            if any(patterns.matches(p, line.text) for p in spec.skip_matching):
                 skipped += 1
                 continue
             fields, cells = _cells(spec, line, edges)
@@ -316,5 +309,5 @@ def _finish(spec: StatementSpec, raw: _RawRow) -> StatementRow:
         direction=direction,
         amount=amount,
         balance=as_paise("balance", balance_text) if balance_text else None,
-        payment=direction == "credit" and any(_matches(p, narration) for p in spec.payment_matching),
+        payment=direction == "credit" and any(patterns.matches(p, narration) for p in spec.payment_matching),
     )
