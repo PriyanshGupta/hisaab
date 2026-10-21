@@ -116,7 +116,14 @@ firewall once. Run it now and at every logon, elevated:
 
     schtasks /Create /TN "Hisaab port proxy" /SC ONLOGON /RL HIGHEST /TR "powershell -ExecutionPolicy Bypass -File \\wsl$\Ubuntu\<path to this project>\scripts\windows\hisaab-portproxy.ps1" /F
 
-**What worked on this PC:** to be filled in after the slice 25 phone check.
+**What worked on this PC:** mirrored networking (path 1), on Windows 11 build 26300 with WSL 2.7.12:
+`.wslconfig` from the template, `wsl --shutdown`, and the one Hyper-V firewall rule. After the restart, `ip addr`
+in WSL showed the PC's Wi-Fi address, and a phone on the same Wi-Fi signed in at `http://<that address>:8765`. The
+port proxy (path 2) wasn't needed.
+
+**The reboot check on this PC (2026-10-21):** after a Windows restart, with no terminal opened, the service was
+running within two seconds of WSL booting and the phone loaded the app. WSL then stayed up for over 15 minutes
+with nothing open, so the `.wslconfig` idle settings work and the `sleep infinity` fallback wasn't needed.
 
 ## Security
 
