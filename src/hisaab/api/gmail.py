@@ -28,6 +28,7 @@ from hisaab.db import Database
 from hisaab.ingest import connection
 from hisaab.ingest.mailbox import Grant, MailboxError, OAuthClient, authorization_url, exchange_code
 from hisaab.ingest.sync import enqueue_sync, sync_kind
+from hisaab.senders.review import enqueue_missed_backfills
 from hisaab.jobs.queue import JobQueue
 from hisaab.models import GmailConnection
 
@@ -146,4 +147,5 @@ def oauth_callback(request: Request, state: str = "", code: str = "", error: str
     with db.write_session(timeout=request.app.state.writer_timeout) as s:
         connection.save_grant(s, user_id, grant, key)
     enqueue_sync(request.app.state.jobs, user_id)  # the backfill, on a first connection
+    enqueue_missed_backfills(request.app.state.jobs, user_id)  # senders approved while the grant was dead
     return back("connected")

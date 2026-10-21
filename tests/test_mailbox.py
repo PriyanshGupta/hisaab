@@ -191,3 +191,44 @@ def test_real_alerts_parse_the_same_after_the_gmail_round_trip(path: Path) -> No
     templates: Templates = load_seed_templates(SEED_DIR)
     assert interpret(select_email_candidates(templates.email, again.sender, again.subject), again).extraction == \
         interpret(select_email_candidates(templates.email, original.sender, original.subject), original).extraction
+
+
+# --- discovery (slice 23): a query of words excluding senders, and metadata only -----------------------------
+
+from hisaab.ingest.mailbox import DISCOVERY_TERMS, SNIPPET_CHARS, Peek  # noqa: E402
+
+
+def test_discover_asks_for_the_words_excluding_senders_and_the_user_since_a_time() -> None:
+    fake: FakeGmail = FakeGmail(page_size=2)
+    for i in range(3):
+        fake.add(f"m{i}", make_eml("alerts@harbour-bank.example", f"Rs.10 debited {i}", "<p>debited</p>"), OCT_10 + i)
+    since: datetime = datetime(2026, 7, 20, tzinfo=UTC)
+    ids, token = open_box(fake).discover(DISCOVERY_TERMS, ["alerts@bank.example", "cards@bank.example"], since)
+    assert (ids, token) == (["m2", "m1"], "2")  # one page, and where the next starts
+    assert fake.queries == [f"{DISCOVERY_TERMS} -from:alerts@bank.example -from:cards@bank.example -from:me "
+                            f"after:{int(since.timestamp())}"]
+    assert DISCOVERY_TERMS == '(debited OR credited OR "transaction alert" OR UPI OR "statement of account")'
+
+
+def test_peek_reads_headers_and_gmails_preview_never_the_body() -> None:
+    fake: FakeGmail = FakeGmail()
+    body: str = "<p>" + "Rs.1,250.00 has been debited from your account. " * 10 + "</p>"
+    fake.add("m1", make_eml('"Harbour Bank" <Alerts@Harbour-Bank.example>', "Debit alert", body), OCT_10)
+    peek: Peek = open_box(fake).peek("m1")
+    assert (peek.message_id, peek.sender, peek.subject) == ("m1", "alerts@harbour-bank.example", "Debit alert")
+    assert peek.snippet.startswith("Rs.1,250.00 has been debited") and len(peek.snippet) <= SNIPPET_CHARS == 160
+    assert peek.received_at == datetime.fromtimestamp(OCT_10 / 1000, UTC)
+    assert fake.formats == ["metadata"] and fake.metadata_headers == [["From", "Subject"]]
+
+
+def test_discover_keeps_the_query_short_by_dropping_the_last_exclusions() -> None:
+    """Slice 23 review: the ignore list grows week after week; a query past Gmail's limits would fail every sweep.
+    Exclusions are a speed-up (the sweep filters in code too), so the ones at the end of the list are dropped."""
+    from hisaab.ingest.mailbox import MAX_QUERY_CHARS
+    fake: FakeGmail = FakeGmail()
+    exclude: list[str] = [f"news{i:03d}@long-newsletter-domain.example" for i in range(300)]
+    open_box(fake).discover(DISCOVERY_TERMS, exclude, datetime(2026, 7, 20, tzinfo=UTC))
+    query: str = fake.queries[0]
+    assert len(query) <= MAX_QUERY_CHARS
+    assert query.startswith(DISCOVERY_TERMS + " -from:news000@") and query.endswith("-from:me after:1784505600")
+    assert "news299@" not in query

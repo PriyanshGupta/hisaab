@@ -406,3 +406,40 @@ def test_the_job_row_shows_progress_while_fetching_then_reading(db: Database, us
     assert seen == [{"fetched": 2, "estimate": 4}, {"fetched": 4, "estimate": 4}, {"read": 4, "to_read": 4}]
     with db.read_session() as s:
         assert json.loads(s.get_one(Job, "job").progress or "null") == {"read": 4, "to_read": 4}
+
+
+# --- an approved sender's backfill (slice 23) -----------------------------------------------------------------
+
+def test_a_sender_backfill_fetches_three_months_of_that_sender_only_and_leaves_the_clock(
+        db: Database, user_id: str, gmail_settings: Settings) -> None:
+    new: str = "alerts@harbour-bank.example"
+    fake: FakeGmail = FakeGmail(page_size=2, honor_query=True)
+    day: int = 86_400_000
+    for mid, sender, days in (("h70", new, 70), ("h30", new, 30), ("h1", new, 1), ("old", new, 100),
+                              ("other", BANK, 5)):
+        fake.add(mid, make_eml(sender, f"Alert {mid}", "<p>Rs. 10.00 debited</p>"), NOW_MS - days * day)
+    with db.write_session() as s:
+        s.get_one(GmailConnection, user_id).last_successful_sync_at = "2026-10-19T00:00:00.000Z"
+    result: dict[str, Any] = make_sync(gmail_settings, transport=fake, sleep=lambda s: None)(
+        JobContext(db, "job", user_id, {"senders": [new]}))
+    with db.read_session() as s:
+        stored: set[str | None] = set(s.scalars(select(Source.external_message_id)))
+    assert stored == {"h70", "h30", "h1"} and result["stored"] == 3  # not the 100-day-old one, not another sender
+    assert fake.queries[0].startswith(f"(from:{new}) after:")
+    assert clock(db, user_id) == "2026-10-19T00:00:00.000Z"
+
+
+def test_a_sender_backfill_reaches_back_to_an_opening_balance_older_than_the_window(
+        db: Database, conn: Connection, user_id: str, gmail_settings: Settings) -> None:
+    """As the first backfill does: history from each anchor on must arrive, or reconciliation can't close."""
+    new: str = "alerts@harbour-bank.example"
+    day: int = 86_400_000
+    anchor: date = (datetime.now(LOCAL_TZ) - timedelta(days=110)).date()
+    f.account(conn, user_id, opening_balance=0, opening_balance_date=anchor.isoformat(), last4="7777")
+    conn.commit()
+    fake: FakeGmail = FakeGmail(page_size=2, honor_query=True)
+    for mid, days in (("h105", 105), ("h120", 120)):
+        fake.add(mid, make_eml(new, f"Alert {mid}", "<p>Rs. 10.00 debited</p>"), NOW_MS - days * day)
+    make_sync(gmail_settings, transport=fake, sleep=lambda s: None)(JobContext(db, "job", user_id, {"senders": [new]}))
+    with db.read_session() as s:
+        assert set(s.scalars(select(Source.external_message_id))) == {"h105"}  # from the anchor on, not before

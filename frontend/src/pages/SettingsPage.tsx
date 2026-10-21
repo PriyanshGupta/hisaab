@@ -28,8 +28,13 @@ export function SettingsPage() {
     <>
       <header className="page-head">
         <h1 className="page-title">Settings</h1>
-        {/* the queue is a sidebar destination; phones have no sidebar, so admins reach it from here */}
-        {me.data?.role === "admin" && <Link className="page-head__link" to="/templates">Template queue</Link>}
+        {/* the admin queues are sidebar destinations; phones have no sidebar, so admins reach them from here */}
+        {me.data?.role === "admin" && (
+          <span className="settings-admin-links">
+            <Link className="page-head__link" to="/templates">Template queue</Link>
+            <Link className="page-head__link" to="/senders">Sender review</Link>
+          </span>
+        )}
       </header>
       <section className="settings-section" aria-labelledby="gmail-heading">
         <h2 id="gmail-heading" className="settings-section__title">Gmail</h2>

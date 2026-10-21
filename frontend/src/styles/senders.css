@@ -1,0 +1,109 @@
+/*
+ * Sender review (slice 23). One bold thing: each candidate's examples set like a slice of an inbox (subject
+ * in strong ink, the date at the right edge, Gmail's preview muted beneath), grouped by whose inbox they came
+ * from, because that excerpt is what tells a bank from a newsletter. Everything else is the quiet ledger of
+ * the Templates page. Scoped under .senders so the short names never meet another screen's.
+ */
+.senders {
+  max-width: 52rem;
+}
+
+.senders__lead {
+  max-width: 38rem;
+  margin-bottom: var(--s5);
+  color: var(--ink-soft);
+}
+
+.senders__done {
+  max-width: 44rem;
+  margin-bottom: var(--s5);
+  padding: var(--s3) var(--s4);
+  background: var(--accent-wash);
+  border-radius: var(--r-control);
+}
+
+.senders .sender {
+  display: grid;
+  gap: var(--s4);
+  margin-bottom: var(--s6);
+  padding: var(--s5) var(--s5) var(--s5) calc(var(--s7) + var(--s2));
+}
+
+.senders .sender__address {
+  font-size: var(--t-title);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+  line-height: var(--lh-tight);
+  overflow-wrap: anywhere;
+}
+
+.senders .sender__where {
+  margin-bottom: var(--s2);
+  font-weight: var(--w-strong);
+}
+
+/* the inbox excerpt */
+.senders .sender__mail {
+  list-style: none;
+  padding: 0;
+  border-top: 1px solid var(--rule-strong);
+}
+.senders .sender__mail li {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  column-gap: var(--s4);
+  row-gap: var(--s1);
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--rule);
+}
+.senders .sender__subject {
+  font-weight: var(--w-strong);
+  overflow-wrap: anywhere;
+}
+.senders .sender__when {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+  font-variant-numeric: tabular-nums;
+  white-space: nowrap;
+}
+.senders .sender__preview {
+  grid-column: 1 / -1;
+  color: var(--ink-muted);
+  overflow-wrap: anywhere;
+}
+
+.senders .sender__actions {
+  flex-wrap: wrap;
+}
+
+.senders__ignored {
+  max-width: 44rem;
+  padding-top: var(--s4);
+  border-top: 1px solid var(--rule);
+}
+.senders__ignored h2 {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+}
+.senders__ignored ul {
+  margin-top: var(--s3);
+  list-style: none;
+  padding: 0;
+}
+.senders__ignored li {
+  padding: var(--s2) 0;
+  border-bottom: 1px solid var(--rule);
+  overflow-wrap: anywhere;
+}
+.senders__address {
+  font-weight: var(--w-strong);
+}
+
+@media (max-width: 44rem) {
+  .senders .sender {
+    padding: var(--s4) var(--s4) var(--s4) calc(var(--s6) + var(--s3));
+  }
+  .senders .sender__mail li {
+    grid-template-columns: minmax(0, 1fr);
+  }
+}

@@ -8,6 +8,10 @@ Its interface is all the rest of the app sees:
   - fetch(message_id): a Message: RFC 822 content, received time, and the
     metadata of its attachments (filename, size, type), which comes back with
     the message at no extra cost
+  - discover(terms, exclude, since, page_token) / peek(message_id): the discovery
+    sweep (slice 23). One page of ids for words from anyone but `exclude`; then per
+    message only From, Subject, the date and Gmail's short preview
+    (format=metadata). The sweep never sees a body.
 - MailboxAuthError: the grant is dead (revoked, expired, or invalid); the user
   must reconnect. MailboxError: anything else, after retries.
 
@@ -28,6 +32,7 @@ and 5xx back off exponentially, 5 retries, then fail cleanly (§5.6).
 
 import base64
 import hashlib
+import html
 import json
 import time
 import urllib.error
@@ -36,6 +41,7 @@ from collections.abc import Callable, Iterator, Sequence
 from dataclasses import dataclass
 from datetime import UTC, datetime
 from email.message import EmailMessage
+from email.utils import parseaddr
 from typing import Any, TypeAlias
 from urllib.parse import quote, urlencode
 
@@ -50,6 +56,10 @@ RETRYABLE: frozenset[int] = frozenset({0, 429, 500, 502, 503, 504})  # 0: no res
 RATE_LIMIT_REASONS: frozenset[str] = frozenset({"rateLimitExceeded", "userRateLimitExceeded"})
 PAGE_SIZE: int = 100
 KEPT_HEADERS: tuple[str, ...] = ("From", "To", "Subject", "Date")
+# The discovery sweep's words (tech-design §5.3, verbatim): financial language from any sender.
+DISCOVERY_TERMS: str = '(debited OR credited OR "transaction alert" OR UPI OR "statement of account")'
+SNIPPET_CHARS: int = 160  # a candidate keeps a short preview only, never a body (§5.3)
+MAX_QUERY_CHARS: int = 1500  # a sweep query's length; its exclusions beyond this are dropped (the sweep filters too)
 
 # How this module reaches Gmail: (method, url, body, headers) -> (status, body). Opaque to callers,
 # who only pass it through; tests pass a fake Gmail. An IMAP mailbox would define its own.
@@ -82,6 +92,16 @@ class AttachmentMeta:
     filename: str
     size: int  # bytes
     mime_type: str
+
+
+@dataclass(frozen=True)
+class Peek:
+    """What the sweep may know about a message: who sent it, its subject, Gmail's short preview, when."""
+    message_id: str
+    sender: str  # bare address, lower-cased
+    subject: str
+    snippet: str  # at most SNIPPET_CHARS
+    received_at: datetime
 
 
 @dataclass(frozen=True)
@@ -172,7 +192,7 @@ class Mailbox:
         token: dict[str, Any] = _token(http, sleep, client, {"grant_type": "refresh_token", "refresh_token": credential})
         return cls(client, credential, token["access_token"], http, sleep)
 
-    def _get(self, path: str, params: dict[str, str] | None = None) -> dict[str, Any]:
+    def _get(self, path: str, params: dict[str, str] | list[tuple[str, str]] | None = None) -> dict[str, Any]:
         url: str = f"{API}/{path}" + (f"?{urlencode(params)}" if params else "")
         for refreshed in (False, True):
             status, answer = _call(self._http, self._sleep, "GET", url, None,
@@ -210,6 +230,36 @@ class Mailbox:
             if not answer.get("nextPageToken"):
                 return
             params = {**params, "pageToken": answer["nextPageToken"]}
+
+    def discover(self, terms: str, exclude: Sequence[str], since: datetime,
+                 page_token: str | None = None) -> tuple[list[str], str | None]:
+        """One page of message ids (newest first) matching `terms`, from anyone but `exclude` and the user, and
+        the token of the next page of the same search (None on the last). Pass the same arguments with it.
+        Exclusions only save reading: those past MAX_QUERY_CHARS are left out, from the end of `exclude`, so the
+        caller lists the ones that matter most first and filters what comes back itself."""
+        tail: str = f"-from:me after:{int(since.timestamp())}"
+        parts: list[str] = [terms]
+        room: int = MAX_QUERY_CHARS - len(terms) - len(tail) - 1
+        for sender in dict.fromkeys(exclude):
+            term: str = f"-from:{sender}"
+            if len(term) + 1 > room:
+                break
+            parts.append(term)
+            room -= len(term) + 1
+        query: str = " ".join([*parts, tail])
+        params: dict[str, str] = {"q": query, "maxResults": str(PAGE_SIZE)}
+        answer: dict[str, Any] = self._get("messages", {**params, "pageToken": page_token} if page_token else params)
+        return [m["id"] for m in answer.get("messages", [])], answer.get("nextPageToken")
+
+    def peek(self, message_id: str) -> Peek:
+        """Headers and Gmail's preview only (format=metadata): the body is never requested."""
+        answer: dict[str, Any] = self._get(f"messages/{quote(message_id, safe='')}",
+                                           [("format", "metadata"), ("metadataHeaders", "From"),
+                                            ("metadataHeaders", "Subject")])
+        headers: dict[str, str] = {h["name"].lower(): h["value"] for h in answer.get("payload", {}).get("headers", [])}
+        snippet: str = " ".join(html.unescape(answer.get("snippet", "")).split())  # Gmail escapes it as HTML
+        return Peek(message_id, parseaddr(headers.get("from", ""))[1].strip().lower(), headers.get("subject", ""),
+                    snippet[:SNIPPET_CHARS], datetime.fromtimestamp(int(answer["internalDate"]) / 1000, UTC))
 
     def fetch(self, message_id: str) -> Message:
         answer: dict[str, Any] = self._get(f"messages/{quote(message_id, safe='')}", {"format": "full"})

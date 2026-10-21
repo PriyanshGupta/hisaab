@@ -17,6 +17,12 @@
    succeeded. A message that failed to fetch is counted and the sync goes on,
    but the clock stays, so the next run's window covers it again.
 
+A sender backfill (job kind sender_backfill, params {"senders": [...]}, slice 23)
+is the same job limited to those senders, from where the first backfill starts
+(local midnight on backfill_start, or the earliest opening balance if older)
+whatever the clock says, and it never moves the clock: an approved sender's
+history arrives without changing what the regular sync covers next.
+
 A dead grant (revoked, expired, or undecryptable with the current key) moves
 the connection to needs_reauth and fails the job; the clock is untouched.
 """
@@ -80,13 +86,15 @@ def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transpo
         senders: list[str] = list(s.scalars(select(Sender.email_address).where(Sender.status == "active")
                                             .order_by(Sender.email_address)))
         mailbox: str = row.email_address
-        if last is None:  # the backfill: from its start, or the earliest opening balance if that is older
-            anchors: list[str] = [d for d in s.scalars(select(Account.opening_balance_date).where(
-                Account.user_id == user_id, Account.archived_at.is_(None))) if d is not None]
-            first_day: date = min([backfill_start(s, user_id, started), *map(date.fromisoformat, anchors)])
-            since = datetime.combine(first_day, day_time(), LOCAL_TZ)
+        if last is None:  # the backfill
+            since = _backfill_from(s, user_id, started)
     if last is not None:
         since = min(since, datetime.fromisoformat(last) - OVERLAP)
+    only: list[str] | None = ctx.params.get("senders")  # an approved sender's backfill (slice 23)
+    if only:
+        with ctx.read() as s:
+            since = _backfill_from(s, user_id, started)
+        senders = sorted(only)
     reparse: bool = bool(ctx.params.get("reparse"))
     counts: dict[str, int] = {"stored": 0, "already_had": 0, "reparsed": 0, "failed": 0, "with_attachments": 0}
     try:
@@ -100,7 +108,7 @@ def _sync(ctx: JobContext, settings: Settings, transport: Transport, llm_transpo
             connection.mark_needs_reauth(s, user_id)
         raise SyncError(REAUTH) from exc
     pipeline: dict[str, int] = process_pending(ctx, user_id, settings, llm_transport, sleep)
-    if counts["failed"] == 0:  # pending_llm does not hold the clock: those Sources are stored, retried next sync
+    if counts["failed"] == 0 and not only:  # pending_llm does not hold the clock; a sender backfill never moves it
         with ctx.write() as s:
             now_row: GmailConnection = s.get_one(GmailConnection, user_id)
             if now_row.email_address == mailbox:  # a reconnect to another mailbox reset the clock for its backfill
@@ -157,6 +165,15 @@ def _store(session: Session, user_id: str, message: Message) -> None:
         attachments=json.dumps([asdict(a) for a in message.attachments]) if message.attachments else None,
     ))
     session.flush()  # so the next message's ingest_seq sees this one
+
+
+def _backfill_from(session: Session, user_id: str, now: datetime) -> datetime:
+    """Where a backfill starts: local midnight on backfill_start, or on the earliest opening balance if that is
+    older, so history from each anchor on arrives (reconciliation needs it)."""
+    anchors: list[str] = [d for d in session.scalars(select(Account.opening_balance_date).where(
+        Account.user_id == user_id, Account.archived_at.is_(None))) if d is not None]
+    first_day: date = min([backfill_start(session, user_id, now), *map(date.fromisoformat, anchors)])
+    return datetime.combine(first_day, day_time(), LOCAL_TZ)
 
 
 def backfill_start(session: Session, user_id: str, now: datetime | None = None) -> date:

@@ -18,3 +18,11 @@
   border-left: 3px solid var(--accent);
   border-radius: 0 var(--r-control) var(--r-control) 0;
 }
+
+/* admin queues, at the heading's right (phones have no sidebar) */
+.settings-admin-links {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2) var(--s4);
+  justify-content: flex-end;
+}

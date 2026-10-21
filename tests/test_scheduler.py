@@ -88,3 +88,20 @@ def test_a_connected_user_whose_backfill_never_finished_gets_a_backfill_at_start
             assert list(s.scalars(select(Job.user_id).where(Job.kind.in_(("sync", "backfill"))))) == [interrupted]
     finally:
         scheduler.shutdown(wait=False)
+
+
+def test_a_due_sweep_is_enqueued_at_start_and_checked_every_6_hours(
+    db: Database, settings: Settings, conn: Connection,
+) -> None:
+    connected: str = f.gmail_connection(conn, last_successful_sync_at="2026-10-11T00:00:00.000Z")["user_id"]
+    conn.commit()
+    queue: JobQueue = JobQueue(db, job_kinds(settings))
+    assert queue.kinds["sweep"].joins  # one sweep per inbox at a time
+    scheduler: BackgroundScheduler = start_scheduler(queue)
+    try:
+        wait_until(lambda: jobs_of_kind(db, "sweep"))  # never swept: due at once
+        assert scheduler.get_job("sweep").trigger.interval == timedelta(hours=6)
+        with db.read_session() as s:
+            assert list(s.scalars(select(Job.user_id).where(Job.kind == "sweep"))) == [connected]
+    finally:
+        scheduler.shutdown(wait=False)

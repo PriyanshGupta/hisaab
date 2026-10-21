@@ -10,6 +10,7 @@ import { LoginPage } from "./pages/LoginPage";
 import { NotFoundPage } from "./pages/NotFoundPage";
 import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
+import { SendersPage } from "./pages/SendersPage";
 import { SetupPage } from "./pages/SetupPage";
 import { StatementsPage } from "./pages/StatementsPage";
 import { TemplatesPage } from "./pages/TemplatesPage";
@@ -35,6 +36,7 @@ export const routes: RouteObject[] = [
       { path: "setup", element: <SetupPage /> },
       { path: "review", element: <ReviewPage /> },
       { path: "templates", element: <TemplatesPage /> },
+      { path: "senders", element: <SendersPage /> },
       { path: "categorize", element: <Navigate to="/review?lane=categories" replace /> }, // slice 16's landing
       { path: "*", element: <NotFoundPage /> },
     ],

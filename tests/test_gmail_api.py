@@ -1,5 +1,6 @@
 """/api/gmail, /oauth/callback and /api/jobs (tech-design §5.5, §6.7), against a fake Google."""
 
+import json
 import threading
 import time
 from collections.abc import Iterator
@@ -19,7 +20,7 @@ from hisaab.config import Settings
 from hisaab.ingest.sync import backfill_start, make_sync
 from hisaab.jobs.queue import JobContext, JobKind
 from hisaab.main import create_app
-from hisaab.models import GmailConnection, Job
+from hisaab.models import GmailConnection, Job, Sender
 from tests import factories as f
 from tests.conftest import login, make_user
 from tests.gmail_fake import FakeGmail
@@ -39,7 +40,7 @@ def gmail_app(settings: Settings, migrated_engine: Any, fake: FakeGmail) -> Fast
         "encryption_key": SecretStr(KEY)})
     app: FastAPI = create_app(configured)
     app.state.mail_transport = fake
-    for kind in ("sync", "backfill"):
+    for kind in ("sync", "backfill", "sender_backfill"):
         app.state.jobs.kinds[kind] = JobKind(run=make_sync(configured, transport=fake, sleep=lambda s: None),
                                              timeout=60, joins=True)
     return app
@@ -165,3 +166,19 @@ def test_a_job_is_visible_only_to_its_owner(asha: TestClient, gmail_app: FastAPI
     assert asha.get("/api/jobs/theirs").status_code == 404
     asha.cookies.clear()
     assert asha.get("/api/jobs/theirs").status_code == 401
+
+
+def test_reconnecting_backfills_senders_approved_while_the_grant_was_dead(asha: TestClient, gmail_app: FastAPI) -> None:
+    """Slice 23 review: an approval queues backfills only for connected inboxes. One that needed reconnecting
+    then would never get that sender's history: its regular sync starts from its last sync."""
+    connect(asha)
+    login(asha, "asha", "asha password 1")
+    with gmail_app.state.db.write_session() as s:
+        row: GmailConnection = s.scalars(select(GmailConnection)).one()
+        row.status, row.last_successful_sync_at = "needs_reauth", "2026-10-10T00:00:00.000Z"
+        s.add(Sender(email_address="alerts@harbour-bank.example", status="active", reviewed_at="2026-10-21T00:00:00.000Z"))
+        s.add(Sender(email_address="alerts@older-bank.example", status="active", reviewed_at="2026-10-01T00:00:00.000Z"))
+    connect(asha)
+    with gmail_app.state.db.read_session() as s:
+        params: list[str | None] = list(s.scalars(select(Job.params).where(Job.kind == "sender_backfill")))
+    assert [json.loads(p or "{}") for p in params] == [{"senders": ["alerts@harbour-bank.example"]}]
