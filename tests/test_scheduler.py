@@ -105,3 +105,14 @@ def test_a_due_sweep_is_enqueued_at_start_and_checked_every_6_hours(
             assert list(s.scalars(select(Job.user_id).where(Job.kind == "sweep"))) == [connected]
     finally:
         scheduler.shutdown(wait=False)
+
+
+def test_a_daily_backup_is_checked_at_start_and_every_6_hours(db: Database, settings: Settings) -> None:
+    queue: JobQueue = JobQueue(db, job_kinds(settings))
+    scheduler: BackgroundScheduler = start_scheduler(queue, settings.backup_dir)
+    try:
+        wait_until(lambda: jobs_of_kind(db, "backup"))  # no backup yet: due at once
+        assert scheduler.get_job("backup").trigger.interval == timedelta(hours=6)
+        assert queue.kinds["backup"].joins
+    finally:
+        scheduler.shutdown(wait=False)

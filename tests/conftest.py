@@ -20,6 +20,7 @@ def settings(tmp_path: Path) -> Settings:
         _env_file=None,
         database_path=tmp_path / "test.db",
         fixtures_dir=tmp_path / "fixtures",  # promotion exports land here, never in the real fixtures/
+        backup_dir=tmp_path / "backups",  # backups land here, never in the real data/backups
         session_secret="test-session-secret-0123456789abcdef",
     )
 

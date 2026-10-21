@@ -1,7 +1,8 @@
 """/api/admin/resync: re-sync a date range, and the parser-change notices that suggest one (tech-design §5.2).
 
 GET /preview names what a re-sync of that range would touch (transactions and inboxes), so the confirmation can
-say it before anything runs. POST queues one resync job per connected inbox (or the one asked for); a re-sync of
+say it before anything runs. POST takes a backup first (§9.2; no backup, no re-sync), then queues one resync
+job per connected inbox (or the one asked for); a re-sync of
 every inbox resolves the notices whose range it covers (one inbox's doesn't: templates are global). GET /notices lists the open parser-change notices for the admin banner,
 newest first; POST /notices/{id}/dismiss closes one without re-syncing. Admin only (require_admin).
 """
@@ -13,9 +14,11 @@ from pydantic import BaseModel
 from sqlalchemy import select
 
 from hisaab.api.deps import get_db, require_admin
+from hisaab.config import Settings
 from hisaab.db import Database
 from hisaab.ingest.resync import affected, enqueue_resync, inboxes, resolve_notices
 from hisaab.models import ResyncNotice, utc_now
+from hisaab.ops.backup import BackupFailed, backup
 
 router: APIRouter = APIRouter(prefix="/api/admin/resync", tags=["admin"], dependencies=[Depends(require_admin)])
 
@@ -64,6 +67,15 @@ def preview(start: str = "", end: str = "", user_id: str | None = None,
 @router.post("", status_code=status.HTTP_202_ACCEPTED)
 def resync(body: ResyncIn, request: Request, db: Database = Depends(get_db)) -> ResyncQueued:
     _range(body.start, body.end)
+    with db.read_session() as s:
+        targets: list[str] = inboxes(s, body.user_id)
+    if targets:  # tech-design §9.2: a backup before every re-sync; without one, nothing is re-synced
+        settings: Settings = request.app.state.settings
+        try:
+            backup(settings.database_path, settings.backup_dir, "pre-resync")
+        except BackupFailed as e:
+            raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                                f"Couldn't take the backup first, so nothing was re-synced: {e}.") from None
     jobs: list[str] = enqueue_resync(request.app.state.jobs, body.start, body.end, body.user_id)
     if jobs and body.user_id is None:  # templates are global: one inbox's re-sync doesn't cover a notice
         with db.write_session(timeout=request.app.state.writer_timeout) as s:

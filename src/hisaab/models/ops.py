@@ -10,8 +10,9 @@ from hisaab.models.base import Base, created_column, id_column, one_of
 # cleanup: ruling 2026-10-11 (migration 0004); §6.7 runs it through the queue like every job.
 # backfill: slice 16 (migration 0007); §6.7 gives it a 30-minute timeout of its own.
 # sender_backfill: slice 23 (migration 0011); an approved sender's mail, which a queued sync must not swallow.
+# backup: slice 25 (migration 0013); the daily backup, through the queue like every job (§6.7).
 JOB_KINDS: tuple[str, ...] = ("sync", "resync", "sweep", "statement_merge", "reprocess_normalization", "cleanup",
-                              "backfill", "sender_backfill")
+                              "backfill", "sender_backfill", "backup")
 JOB_STATES: tuple[str, ...] = ("queued", "running", "succeeded", "failed", "cancelled")
 
 

@@ -166,6 +166,7 @@ test("re-sync previews the count and only the confirmation's button starts it", 
   const dialog = await screen.findByRole("dialog");
   expect(within(dialog).getByRole("heading")).toHaveTextContent("Re-sync 5 Oct 2026 to 7 Oct 2026 for all inboxes?");
   expect(within(dialog).getByText("37 transactions may change.")).toBeInTheDocument();
+  expect(within(dialog).getByText(/A backup is taken first\./)).toBeInTheDocument();
   expect(api.bodiesFor("POST /api/admin/resync")).toHaveLength(0);
   await user.click(within(dialog).getByRole("button", { name: "Re-sync" }));
   expect(api.bodiesFor("POST /api/admin/resync")).toEqual([{ start: "2026-10-05", end: "2026-10-07", user_id: null }]);

@@ -10,6 +10,7 @@ from hisaab.ingest.sweep import make_sweep
 from hisaab.ingest.sync import make_sync
 from hisaab.jobs import cleanup
 from hisaab.jobs.queue import JobKind
+from hisaab.ops.backup import make_backup
 from hisaab.statements import merge
 
 
@@ -23,6 +24,7 @@ def job_kinds(settings: Settings) -> dict[str, JobKind]:
         # an admin's re-sync of a date range for one inbox (params {"from", "to"}), tech-design §5.2. Never joins:
         # joining ignores params, so a second range would be swallowed; the queue runs one job at a time anyway
         "resync": JobKind(run=make_sync(settings), timeout=30 * 60),
+        "backup": JobKind(run=make_backup(settings), timeout=5 * 60, joins=True),  # daily (tech-design §9.2)
         "statement_merge": JobKind(run=merge.run, timeout=5 * 60),  # one write transaction (§7 step 6)
         "sweep": JobKind(run=make_sweep(settings), timeout=10 * 60, joins=True),  # one per inbox (§5.3)
     }

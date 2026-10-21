@@ -1,0 +1,22 @@
+# Hisaab as a systemd *user* service inside WSL (tech-design §9.4), so it survives a reboot and the phone finds it.
+# Installed by scripts/install-service.sh, which fills in @ROOT@ with this checkout's path.
+# run.sh builds the frontend if needed, backs up before a pending migration, migrates, loads the seeds, then
+# execs the server. Settings and secrets come from <root>/.env, read by the app itself: nothing is exported here.
+
+[Unit]
+Description=Hisaab personal finance tracker
+Documentation=file://@ROOT@/OPERATIONS.md
+# A start that keeps failing (a broken migration, a database ahead of this checkout) gives up after 3 tries in
+# 10 minutes instead of retrying forever: tech-design §9.3, a failed migration stops the app from starting.
+StartLimitIntervalSec=600
+StartLimitBurst=3
+
+[Service]
+Type=simple
+WorkingDirectory=@ROOT@
+ExecStart=@ROOT@/scripts/run.sh
+Restart=on-failure
+RestartSec=10
+
+[Install]
+WantedBy=default.target

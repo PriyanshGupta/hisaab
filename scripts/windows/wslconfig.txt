@@ -1,0 +1,12 @@
+# C:\Users\<you>\.wslconfig for Hisaab (OPERATIONS.md, "Phone access" and "Running as a service").
+# After changing it, run `wsl --shutdown` in PowerShell and open WSL again.
+
+[wsl2]
+# WSL shares Windows' network addresses, so a phone on the LAN reaches the app at the PC's address (Windows 11).
+networkingMode=mirrored
+# Keep the WSL VM running when no terminal is open, so the service keeps serving.
+vmIdleTimeout=-1
+
+[general]
+# Keep the distro running when no terminal is open.
+instanceIdleTimeout=-1

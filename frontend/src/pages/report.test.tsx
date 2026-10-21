@@ -136,3 +136,11 @@ test("cash out says how much has no account yet, and where to assign it", async 
   expect(screen.getByText(/₹600\.00 has no account yet, so it isn’t in cash out/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Assign accounts" })).toHaveAttribute("href", "/review?lane=accounts");
 });
+
+
+test("Download CSV exports the period on screen", async () => {
+  open();
+  const link = await screen.findByRole("link", { name: "Download CSV for October 2026" });
+  expect(link).toHaveAttribute("href", "/api/export/transactions.csv?start=2026-10-01&end=2026-10-31");
+  expect(link).toHaveAttribute("download");
+});

@@ -7,6 +7,13 @@
 
 `tech-design.md` §10 lists amendments to the PRD. Where the two disagree, the tech design wins.
 
+## Build status
+
+Every slice in `build-plan.md` (0–25) has been built; each has its plan in `docs/superpowers/plans/`.
+**Read `docs/superpowers/BUILD_LOG.md` first:** it has the status of every slice, the verifications still open,
+and what changed from each plan. Running the app day to day (backups, restore, CSV export, the systemd service,
+phone access) is in `OPERATIONS.md`. `docs/` is local only, so those files exist only on the build machine.
+
 ## Fixtures
 
 `./fixtures/` holds real bank artifacts for seeding parsers:

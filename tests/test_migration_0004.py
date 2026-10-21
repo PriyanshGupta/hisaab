@@ -21,7 +21,7 @@ def test_cleanup_is_a_job_kind(conn: Connection) -> None:
 
 def test_unknown_kinds_are_still_rejected(conn: Connection) -> None:
     with pytest.raises(IntegrityError, match="ck_jobs_kind"):
-        conn.execute(text(INSERT_JOB), {"id": "j1", "kind": "backup", "at": utc_now()})
+        conn.execute(text(INSERT_JOB), {"id": "j1", "kind": "restore", "at": utc_now()})
 
 
 def test_existing_jobs_survive(settings: Settings) -> None:

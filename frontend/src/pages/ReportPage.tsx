@@ -77,6 +77,9 @@ export function ReportPage() {
               <CustomRange key={`${period.start}/${period.end}`} period={period} today={today}
                 onRange={(p) => go(p, cash, true)} />
             )}
+            {/* the period on screen as a spreadsheet: your own transactions, as the app shows them now (§9.7) */}
+            <a className="report__export" download aria-label={`Download CSV for ${periodTitle(period)}`}
+              href={`/api/export/transactions.csv?start=${period.start}&end=${period.end}`}>Download CSV</a>
           </div>
         </div>
         {left > 0 && (

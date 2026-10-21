@@ -10,11 +10,13 @@ of skipping it.
 The sync's startup run is the catch-up sync §6.7 asks for: its window reaches
 back to each user's last successful sync. The discovery sweep is checked at
 startup and every 6 hours, and runs for inboxes not swept within
-discovery_sweep_interval_days, so "weekly" survives sleep and restarts. A later
-slice adds the daily backup.
+discovery_sweep_interval_days, so "weekly" survives sleep and restarts. The daily
+backup works the same way: checked at startup and every 6 hours, queued when the
+newest backup is a day old (tech-design §9.2).
 """
 
 from datetime import datetime
+from pathlib import Path
 
 from apscheduler.schedulers.background import BackgroundScheduler
 from sqlalchemy import select
@@ -23,10 +25,12 @@ from hisaab.ingest.sweep import enqueue_due_sweeps
 from hisaab.ingest.sync import enqueue_sync
 from hisaab.jobs.queue import JobQueue
 from hisaab.models import GmailConnection
+from hisaab.ops.backup import enqueue_due_backup
 from hisaab.tunables import tunable
 
 CLEANUP_EVERY_HOURS: int = 24
 SWEEP_CHECK_HOURS: int = 6
+BACKUP_CHECK_HOURS: int = 6
 
 
 def enqueue_syncs(queue: JobQueue) -> None:
@@ -37,7 +41,7 @@ def enqueue_syncs(queue: JobQueue) -> None:
         enqueue_sync(queue, user_id)  # a backfill for anyone whose first sync never finished
 
 
-def start_scheduler(queue: JobQueue) -> BackgroundScheduler:
+def start_scheduler(queue: JobQueue, backup_dir: Path | None = None) -> BackgroundScheduler:
     with queue.db.read_session() as s:
         sync_hours: int = tunable(s, "sync_interval_hours")
     now: datetime = datetime.now().astimezone()
@@ -49,5 +53,8 @@ def start_scheduler(queue: JobQueue) -> BackgroundScheduler:
     # weekly in effect: each check sweeps only inboxes not swept within discovery_sweep_interval_days
     scheduler.add_job(enqueue_due_sweeps, "interval", args=[queue], id="sweep", hours=SWEEP_CHECK_HOURS,
                       next_run_time=now)
+    if backup_dir is not None:  # daily in effect: each check backs up only when the newest backup is a day old
+        scheduler.add_job(enqueue_due_backup, "interval", args=[queue, backup_dir], id="backup",
+                          hours=BACKUP_CHECK_HOURS, next_run_time=now)
     scheduler.start()
     return scheduler

@@ -16,9 +16,12 @@ cp .env.example .env        # then fill in secrets
 ## Run
 
 ```bash
-scripts/run.sh              # build frontend if present → alembic upgrade head → serve on :8765
+scripts/run.sh              # build frontend if present → back up if migrating → alembic upgrade head → serve on :8765
 curl http://localhost:8765/health
 ```
+
+Day to day it runs as a systemd user service (`scripts/install-service.sh`). Backups, restore, CSV export, the
+service and phone access are in [OPERATIONS.md](OPERATIONS.md).
 
 ## Test
 

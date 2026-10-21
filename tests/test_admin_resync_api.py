@@ -1,6 +1,7 @@
 """/api/admin/resync: preview the count, start a re-sync, and the parser-change notices (tech-design §5.2)."""
 
 import json
+from pathlib import Path
 
 import pytest
 from fastapi import FastAPI
@@ -96,4 +97,30 @@ def test_a_resync_of_one_inbox_leaves_the_global_notices_open(app: FastAPI, as_a
     conn.commit()
     as_admin.post("/api/admin/resync", json={"start": "2026-10-05", "end": "2026-10-07", "user_id": asha})
     with app.state.db.read_session() as s:
+        assert s.get_one(ResyncNotice, notice).resolved_at is None
+
+
+# --- a backup before every re-sync (slice 25, tech-design §9.2) -------------------------------------------------
+
+def test_a_resync_takes_one_backup_first(app: FastAPI, as_admin: TestClient, conn: Connection) -> None:
+    inbox(conn, "Asha")
+    inbox(conn, "Ravi")
+    resp: Response = as_admin.post("/api/admin/resync", json={"start": "2026-10-05", "end": "2026-10-07"})
+    assert resp.status_code == 202 and len(resp.json()["jobs"]) == 2
+    made: list[str] = [p.name for p in app.state.settings.backup_dir.iterdir() if p.name.endswith("-pre-resync.db")]
+    assert len(made) == 1  # one per request, however many inboxes (the scheduler may add its own daily one)
+
+
+def test_no_backup_means_no_resync(app: FastAPI, as_admin: TestClient, conn: Connection, tmp_path: Path) -> None:
+    inbox(conn, "Asha")
+    notice: str = f.resync_notice(conn, range_from="2026-10-05", range_to="2026-10-06")["id"]
+    conn.commit()
+    blocker: Path = tmp_path / "not-a-folder"
+    blocker.write_text("x")
+    app.state.settings = app.state.settings.model_copy(update={"backup_dir": blocker / "backups"})
+    resp: Response = as_admin.post("/api/admin/resync", json={"start": "2026-10-05", "end": "2026-10-07"})
+    assert resp.status_code == 500
+    assert resp.json()["detail"].startswith("Couldn't take the backup first, so nothing was re-synced:")
+    with app.state.db.read_session() as s:
+        assert s.scalars(select(Job).where(Job.kind == "resync")).all() == []
         assert s.get_one(ResyncNotice, notice).resolved_at is None

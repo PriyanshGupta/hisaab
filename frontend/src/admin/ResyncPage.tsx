@@ -79,8 +79,8 @@ function ResyncForm() {
             {asked.inboxes === 0 ? "No connected inbox is in this choice."
               : `${plural(asked.transactions, "transaction", "transactions")} may change.`}
           </p>
-          <p>Fields someone edited and values from a statement stay as they are. This rewrites data; restoring a backup
-            is the only undo.</p>
+          <p>Fields someone edited and values from a statement stay as they are. A backup is taken first. This rewrites
+            data; restoring that backup is the only undo.</p>
           {run.isError && <p className="form-error" role="alert">{describeError(run.error)}</p>}
           <div className="actions">
             <button className="button button--quiet" type="button" onClick={() => setAsked(null)}>Cancel</button>

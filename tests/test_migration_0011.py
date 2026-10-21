@@ -24,7 +24,7 @@ def test_sender_backfill_is_a_job_kind(conn: Connection) -> None:
 
 def test_unknown_kinds_are_still_rejected(conn: Connection) -> None:
     with pytest.raises(IntegrityError, match="ck_jobs_kind"):
-        conn.execute(text(INSERT_JOB), {"id": "j1", "kind": "backup", "at": utc_now()})
+        conn.execute(text(INSERT_JOB), {"id": "j1", "kind": "restore", "at": utc_now()})
 
 
 def test_existing_jobs_and_the_index_survive_and_downgrade_removes_the_kind(settings: Settings) -> None:

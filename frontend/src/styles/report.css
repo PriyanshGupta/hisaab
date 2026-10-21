@@ -344,3 +344,14 @@
   .report .txn__where { grid-column: 1 / -1; grid-row: 2; }
   .report .moved { padding-right: var(--s4); }
 }
+
+/* the export: a quiet link at the end of the period controls, not a button competing with them */
+.report .report__export {
+  min-height: var(--touch);
+  display: inline-flex;
+  align-items: center;
+  font-weight: var(--w-strong);
+  color: var(--accent);
+  text-underline-offset: 0.18em;
+  white-space: nowrap;
+}

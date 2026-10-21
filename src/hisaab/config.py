@@ -41,6 +41,9 @@ class Settings(BaseSettings):
     frontend_dist: Path = Path("frontend/dist")
     # Where a promoted template's three examples are exported, redacted (promotion loop, tech-design §4.10).
     fixtures_dir: Path = Path("fixtures/emails")
+    # Backups (tech-design §9.2): a separate folder, ideally synced or external storage. Unlike the live database,
+    # a finished backup may live on the Windows mount (e.g. a OneDrive folder under /mnt/c).
+    backup_dir: Path = Path("data/backups")
 
     # Optional until the slice that needs each one makes it required.
     anthropic_api_key: SecretStr | None = None
@@ -58,7 +61,7 @@ class Settings(BaseSettings):
     # The promotion loop (§4.10). Off: a candidate that passes replay waits for an admin's approval.
     auto_promote_templates: bool = False
 
-    @field_validator("database_path", "frontend_dist", "fixtures_dir")
+    @field_validator("database_path", "frontend_dist", "fixtures_dir", "backup_dir")
     @classmethod
     def _anchor_to_project_root(cls, value: Path) -> Path:
         value = value.expanduser()

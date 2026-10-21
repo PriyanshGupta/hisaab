@@ -5,6 +5,9 @@ try-template runs a template spec over fixture emails: the authoring loop
 patterns (seeds.py); scripts/run.sh runs it after migrating. measure-fixtures
 prints the PRD §9 parse rate over the local fixture corpus (parsing/measure.py).
 
+backup / backups take a backup now (run.sh runs `backup --before-migrating` before every
+migration) and list them, newest first; restoring is manual (OPERATIONS.md).
+
 create-admin bootstraps the first admin, since there is no self-signup
 (PRD §6.9). It is also the recovery path if every admin is locked out.
 The password is read by a hidden prompt (or from stdin with --password-stdin,
@@ -107,6 +110,25 @@ def _measure_fixtures(args: argparse.Namespace) -> int:
     return 0 if summary.transactions and summary.rate >= 0.95 else 1
 
 
+def _backup(args: argparse.Namespace, settings: Settings) -> int:
+    from hisaab.ops.backup import BackupFailed, backup, backups, migrations_pending, pre_migration_reason
+
+    reason: str = "manual"
+    if args.before_migrating:
+        if not migrations_pending(settings.database_path):
+            return 0
+        reason = pre_migration_reason(settings.database_path)
+        if any(p.name.endswith(f"-{reason}.db") for p in backups(settings.backup_dir)):
+            return 0  # this state is already saved: a failing start retried by systemd adds nothing
+    try:
+        made: Path = backup(settings.database_path, settings.backup_dir, reason)
+    except BackupFailed as e:
+        print(f"Backup failed: {e}", file=sys.stderr)
+        return 1
+    print(made)
+    return 0
+
+
 def main(argv: list[str], settings: Settings | None = None) -> int:
     parser: argparse.ArgumentParser = argparse.ArgumentParser(
         prog="python -m hisaab", description="Hisaab administration.")
@@ -135,7 +157,20 @@ def main(argv: list[str], settings: Settings | None = None) -> int:
         "compare-tiers", help="read one of your own statements by its template and by Claude, and diff them")
     compare.add_argument("pdf", help="a statement PDF you downloaded (never a fixture)")
     compare.add_argument("--password-env", metavar="VAR", help="read the PDF's password from this env var")
+    back: argparse.ArgumentParser = commands.add_parser(
+        "backup", help="back up the database now (VACUUM INTO a timestamped file in the backup folder)")
+    back.add_argument("--before-migrating", action="store_true",
+                      help="only if the database is behind the newest migration (scripts/run.sh runs this)")
+    commands.add_parser("backups", help="list the backups, newest first (restore: see OPERATIONS.md)")
     args: argparse.Namespace = parser.parse_args(argv)
+    if args.command == "backup":
+        return _backup(args, settings or Settings())
+    if args.command == "backups":
+        from hisaab.ops.backup import backups
+
+        for path in backups((settings or Settings()).backup_dir):
+            print(path)
+        return 0
     if args.command == "create-admin":
         return _create_admin(args, settings or Settings())
     if args.command == "export-openapi":

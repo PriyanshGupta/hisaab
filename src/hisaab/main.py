@@ -30,6 +30,7 @@ from hisaab.api import (
     auth,
     balances,
     categories,
+    export,
     gmail,
     jobs,
     reports,
@@ -91,6 +92,7 @@ def register_routes(app: FastAPI) -> None:
     app.include_router(setup.router)
     app.include_router(review.router)
     app.include_router(reports.router)
+    app.include_router(export.router)
     app.include_router(statements.router)
     app.include_router(balances.router)
     app.add_api_route("/health", health, methods=["GET"], include_in_schema=False)
@@ -171,7 +173,7 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         jobs: JobQueue = app.state.jobs
         jobs.recover()  # before anything new is queued: fail what a killed process left running
         jobs.start()
-        scheduler: BackgroundScheduler = start_scheduler(jobs)
+        scheduler: BackgroundScheduler = start_scheduler(jobs, settings.backup_dir)
         try:
             yield
         finally:
