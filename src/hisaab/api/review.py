@@ -189,7 +189,8 @@ def queue(user: CurrentUser = Depends(current_user), db: Database = Depends(get_
     with db.read_session() as s:
         names: dict[str, str] = dict(s.execute(select(Account.id, Account.display_name).where(
             Account.user_id == user.id)).tuples().all())
-        rows: list[Any] = list(s.execute(select(q).order_by(q.c.transaction_date.desc(), q.c.id)))
+        rows: list[Any] = list(s.execute(select(q).join(Source, Source.id == q.c.primary_source_id)
+                                         .order_by(*txns.newest_first(q.c), q.c.id)))
         emails: dict[str, EmailOut] = email_details(s, user.id, [t.primary_source_id for t in rows])
         rules: list[tuple[str, str, str | None]] = list(s.execute(select(
             PayeeCategory.payee_id, PayeeCategory.category_id, PayeeCategory.origin).where(

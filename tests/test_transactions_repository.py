@@ -262,6 +262,37 @@ def test_list_shows_effective_values_newest_first_with_provenance_and_edits(
         assert [(e.field, e.prior_value, e.new_value) for e in rows[1].edits] == [("amount", "40000", "12300")]
 
 
+def test_list_orders_a_day_by_time_newest_first_with_no_time_last(db: Database, asha: str, wallet: str) -> None:
+    """User, 2026-10-21: within a day the list followed the order rows were recorded, not when they happened."""
+    morning: str = enter(db, asha, from_account_id=wallet, transaction_time="09:15:00")
+    untimed: str = enter(db, asha, from_account_id=wallet)  # a statement line or alert without a time
+    evening: str = enter(db, asha, from_account_id=wallet, transaction_time="21:40:00")
+    next_day: str = enter(db, asha, from_account_id=wallet, transaction_date="2026-10-06", transaction_time="08:00:00")
+    with db.read_session() as s:
+        assert [r.transaction.id for r in txns.list_transactions(s, asha)] == [next_day, evening, morning, untimed]
+
+
+def test_a_row_with_no_time_sorts_by_when_its_email_arrived_that_day(db: Database, conn: Connection, asha: str) -> None:
+    """User, 2026-10-21: HDFC's UPI alerts never state a time; the alert lands within a minute or two of the
+    payment, so its arrival orders it among the day's timed rows. Only an email's arrival, and only on the same
+    India date: a statement's upload time, or an alert arriving after midnight, says nothing about the hour."""
+    def row(time: str | None, kind: str, received_utc: str, created: str) -> str:
+        src: str = f.source(conn, asha, kind=kind, received_at=received_utc)["id"]
+        txn: str = f.transaction(conn, asha, src, transaction_date="2026-10-05", transaction_time=time,
+                                 created_at=created)["id"]
+        f.transaction_source(conn, txn, src)
+        return txn
+    after_midnight: str = row(None, "email", "2026-10-05T18:31:00.000Z", "2026-10-21T10:00:00.001Z")  # 00:01 next day
+    morning: str = row(None, "email", "2026-10-05T03:00:00.000Z", "2026-10-21T10:00:00.002Z")  # 08:30 IST
+    statement: str = row(None, "statement", "2026-10-05T16:00:00.000Z", "2026-10-21T10:00:00.003Z")
+    timed: str = row("10:00", "email", "2026-10-05T01:00:00.000Z", "2026-10-21T10:00:00.004Z")  # its own time wins
+    evening: str = row(None, "email", "2026-10-05T14:00:00.000Z", "2026-10-21T10:00:00.005Z")  # 19:30 IST
+    conn.commit()
+    with db.read_session() as s:
+        assert [r.transaction.id for r in txns.list_transactions(s, asha)] == [
+            evening, timed, morning, statement, after_midnight]
+
+
 # --- delete ----------------------------------------------------------------------
 
 def count(db: Database, model: type[Base]) -> int:

@@ -44,8 +44,8 @@ def _iso(moment: datetime) -> str:
 
 
 def seed_defaults(session: Session, user_id: str) -> None:
-    # One millisecond apart, ending now, so listing by created_at keeps the PRD's
-    # order and anything the user creates afterwards lists after them.
+    # One millisecond apart, ending now, so created_at keeps the PRD's order
+    # (listing is alphabetical; see list_categories).
     end: datetime = datetime.now(UTC)
     last: int = len(DEFAULT_CATEGORIES) - 1
     for i, name in enumerate(DEFAULT_CATEGORIES):
@@ -54,10 +54,10 @@ def seed_defaults(session: Session, user_id: str) -> None:
 
 
 def list_categories(session: Session, user_id: str) -> list[Category]:
-    """All the user's categories, archived included (callers filter for pickers)."""
-    return list(session.scalars(
-        select(Category).where(Category.user_id == user_id).order_by(Category.created_at, Category.id)
-    ))
+    """All the user's categories, archived included (callers filter for pickers). Alphabetical, ignoring case,
+    with Other last (user, 2026-10-21): every category picker shows them in this order."""
+    rows: list[Category] = list(session.scalars(select(Category).where(Category.user_id == user_id)))
+    return sorted(rows, key=lambda c: (c.name.casefold() == "other", c.name.casefold(), c.id))
 
 
 def get_category(session: Session, user_id: str, category_id: str) -> Category:

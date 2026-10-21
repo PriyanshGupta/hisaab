@@ -393,6 +393,28 @@ def test_assigning_the_card_pairs_a_bill_paid_through_an_app_with_its_bank_debit
     assert [t["kind"] for t in report["transfers"]] == ["card_bill"]
 
 
+def test_marking_the_bill_a_transfer_from_the_card_before_assigning_it_still_pairs_once(
+        app: FastAPI, admin: TestClient) -> None:
+    """User, 2026-10-21: "Mark as transfer" on the card's credit, picking the card itself as the other account (its
+    name wasn't assigned yet, so the credit's own side was still unknown), then assigning the card's name. The
+    assignment puts the card on the credit's own side; the earlier pick, naming the same card on the other side,
+    is stale and must not leave a transfer from the card to itself."""
+    me: str = uid(admin)
+    accounts: dict[str, str] = make_accounts(db_of(app), me)
+    bill_paid_through_an_app(app, me, 1200000)
+    credit: Transaction = next(t for t in user_rows(app, me) if t.kind == "income")
+    marked: Response = admin.patch(f"/api/transactions/{credit.id}",
+                                   json={"kind": "transfer", "from_account_id": accounts["card"]})
+    assert marked.status_code == 200
+    admin.post("/api/review/identifier", json={"identifier": CARD_NAME, "account_id": accounts["card"]})
+    [bill] = admin.get("/api/transactions", params={"start": "2026-09-01", "end": "2026-09-30"}).json()
+    assert (bill["kind"], bill["from_account_id"], bill["to_account_id"]) == (
+        "transfer", accounts["bank"], accounts["card"])
+    report: dict[str, Any] = admin.get("/api/report", params={"start": "2026-09-01", "end": "2026-09-30"}).json()
+    assert (report["spending_paise"], report["money_in_paise"], report["cash_out_paise"]) == (0, 0, 1200000)
+    assert [t["kind"] for t in report["transfers"]] == ["card_bill"]
+
+
 def test_a_card_payment_matching_two_debits_is_not_guessed(app: FastAPI, admin: TestClient) -> None:
     me: str = uid(admin)
     accounts: dict[str, str] = make_accounts(db_of(app), me)
@@ -403,3 +425,15 @@ def test_a_card_payment_matching_two_debits_is_not_guessed(app: FastAPI, admin: 
     card_side: Transaction = next(t for t in rows if t.kind == "transfer")
     assert card_side.status == "needs_review"  # the user answers which account paid; the app never picks
     assert card_side.review_reason == "card payment received: which of your accounts paid it?"
+
+
+def test_the_queue_lists_a_day_newest_first_by_time(app: FastAPI, admin: TestClient) -> None:
+    """User, 2026-10-21: a group's transactions, like every list of them, run by time within a day."""
+    me: str = uid(admin)
+    bank: str = make_accounts(db_of(app), me)["bank"]
+    entered: list[str | None] = ["11:00", None, "08:30", "21:40", "13:05", "09:15", "18:20"]  # recorded out of order
+    ids: dict[str | None, str] = {t: admin.post("/api/transactions", json={
+        "kind": "expense", "amount_paise": 5000, "transaction_date": "2026-10-05", "from_account_id": bank,
+        **({"transaction_time": t} if t else {})}).json()["id"] for t in entered}
+    listed: list[str] = [i["id"] for i in admin.get("/api/review").json()["items"]]
+    assert listed == [ids[t] for t in ("21:40", "18:20", "13:05", "11:00", "09:15", "08:30", None)]

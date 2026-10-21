@@ -11,7 +11,8 @@
 //               each with its email: when, from whom, a Gmail link, the text
 // A transaction sits in every lane whose question it raises. Answered groups
 // move to a Sorted list below, built from saved data, so they are there after a
-// reload and stay changeable. Keyboard first: ↑/↓ (or j/k) move, Enter answers, Space shows
+// reload and stay changeable. Groups come biggest total first; "Sort by" also offers most transactions or
+// A to Z (user, 2026-10-21), kept in the address so it survives a reload and a lane switch. Keyboard first: ↑/↓ (or j/k) move, Enter answers, Space shows
 // the group's transactions, 1–4 switch lanes. After an answer the cursor stays
 // put, so the next group slides under it.
 import { useEffect, useRef, useState } from "react";
@@ -45,7 +46,21 @@ type Group = {
   answer?: string; auto?: boolean; payeeId?: string; // once sorted: what it was answered with
 };
 
+type SortKey = "amount" | "count" | "name";
+const SORTS: { key: SortKey; label: string }[] = [
+  { key: "amount", label: "Amount" }, { key: "count", label: "Transactions" }, { key: "name", label: "Name" }];
+
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+const totalOf = (g: Group) => g.items.reduce((sum, i) => sum + i.amount_paise, 0);
+const byName = (a: Group, b: Group) => a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true });
+
+/** Biggest total first, most transactions first, or A to Z; ties fall back to the other measure, then the name. */
+function ordered(groups: Group[], sort: SortKey): Group[] {
+  const rank = sort === "amount" ? (a: Group, b: Group) => totalOf(b) - totalOf(a) || b.items.length - a.items.length
+    : sort === "count" ? (a: Group, b: Group) => b.items.length - a.items.length || totalOf(b) - totalOf(a)
+    : () => 0;
+  return [...groups].sort((a, b) => rank(a, b) || byName(a, b));
+}
 const capital = (s: string) => s.charAt(0).toUpperCase() + s.slice(1);
 
 function groupsFor(lane: LaneId, items: ReviewItem[]): Group[] {
@@ -67,7 +82,7 @@ function groupsFor(lane: LaneId, items: ReviewItem[]): Group[] {
     g.items.push(i);
     by.set(key, g);
   }
-  return [...by.values()].sort((a, b) => b.items.length - a.items.length || a.label.localeCompare(b.label));
+  return [...by.values()];
 }
 
 export function ReviewPage() {
@@ -76,13 +91,15 @@ export function ReviewPage() {
   const categories = useCategories();
   const [params, setParams] = useSearchParams();
   const lane: LaneId = (LANES.find((l) => l.id === params.get("lane"))?.id) ?? "accounts";
+  const sort: SortKey = SORTS.find((o) => o.key === params.get("sort"))?.key ?? "amount";
   const [status, setStatus] = useState<string | null>(null);
 
   const items = review.data?.items ?? [];
   const left = countLeft(items);
   const active: Account[] = (accounts.data ?? []).filter((a) => a.archived_at === null);
   const cats: Category[] = (categories.data ?? []).filter((c) => c.archived_at === null);
-  const choose = (id: LaneId) => { setParams({ lane: id }, { replace: true }); setStatus(null); };
+  const go = (id: LaneId, by: SortKey) => setParams({ lane: id, ...(by !== "amount" && { sort: by }) }, { replace: true });
+  const choose = (id: LaneId) => { go(id, sort); setStatus(null); };
 
   return (
     <div className="review">
@@ -108,7 +125,8 @@ export function ReviewPage() {
         {review.isError && <p className="form-error" role="alert">{describeError(review.error)}</p>}
         {lane === "categories" && review.data && <AutoCategorize />}
         {review.data && (() => {
-          const groups: Group[] = groupsFor(lane, items);
+          const grouped: Group[] = groupsFor(lane, items);
+          const groups: Group[] = lane === "checks" ? grouped : ordered(grouped, sort); // checks: one at a time, as listed
           const r = review.data;
           const sorted: Group[] = lane === "categories"
             ? r.categorized.map((c) => ({ key: c.payee_id, label: c.payee_name, name: c.payee_name, items: c.items,
@@ -120,9 +138,24 @@ export function ReviewPage() {
             ? r.sorted_payees.map((p) => ({ key: p.key, label: p.label, name: p.label, items: p.items, answerable: false,
                 answer: p.payee_name, payeeId: p.payee_id }))
             : [];
-          return <Lane key={lane} lane={lane} groups={groups} sorted={sorted} accounts={active} categories={cats}
-            onDone={setStatus}
-            onLane={(n) => LANES[n] && choose(LANES[n].id)} />;
+          return (
+            <>
+              {lane !== "checks" && groups.length + sorted.length > 1 && (
+                <div className="review__sort">
+                  <span className="review__sort-label" id="review-sort">Sort by</span>
+                  <div className="seg" role="group" aria-labelledby="review-sort">
+                    {SORTS.map((o) => (
+                      <button key={o.key} type="button" aria-pressed={sort === o.key} onClick={() => go(lane, o.key)}>
+                        {o.label}
+                      </button>
+                    ))}
+                  </div>
+                </div>
+              )}
+              <Lane key={lane} lane={lane} order={sort} groups={groups} sorted={ordered(sorted, sort)} accounts={active}
+                categories={cats} onDone={setStatus} onLane={(n) => LANES[n] && choose(LANES[n].id)} />
+            </>
+          );
         })()}
       </div>
       <p className="review__keys">
@@ -133,8 +166,8 @@ export function ReviewPage() {
   );
 }
 
-function Lane({ lane, groups, sorted, accounts, categories, onDone, onLane }: {
-  lane: LaneId; groups: Group[]; sorted: Group[]; accounts: Account[]; categories: Category[];
+function Lane({ lane, order, groups, sorted, accounts, categories, onDone, onLane }: {
+  lane: LaneId; order: SortKey; groups: Group[]; sorted: Group[]; accounts: Account[]; categories: Category[];
   onDone: (message: string) => void; onLane: (index: number) => void;
 }) {
   const [cursor, setCursor] = useState(0);
@@ -146,6 +179,7 @@ function Lane({ lane, groups, sorted, accounts, categories, onDone, onLane }: {
 
   const moved = useRef(false); // the cursor has moved since arriving: only then follow it with the scroll
   useEffect(() => { if (cursor !== at) setCursor(at); }, [cursor, at]);
+  useEffect(() => { setCursor(0); }, [order]); // a new order: the cursor starts again at the top
   // arriving, or switching lanes (the lane remounts): keys work at once, and the page stays where it is
   useEffect(() => { list.current?.focus({ preventScroll: true }); }, []);
   useEffect(() => {
@@ -280,7 +314,7 @@ function GroupRow({ ref, lane, group, current, answering, expanded, accounts, ca
   categories: Category[]; onFocusRow: () => void; onAnswer: () => void; onToggle: () => void; onCancel: () => void;
   onDone: (message: string) => void;
 }) {
-  const total = group.items.reduce((sum, i) => sum + i.amount_paise, 0);
+  const total = totalOf(group);
   const ask = lane === "accounts" ? "Which account?" : lane === "payees" ? "Name it" : "Choose a category";
   return (
     <li ref={ref} className={`group${current ? " group--current" : ""}`} aria-current={current ? "true" : undefined}

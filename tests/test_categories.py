@@ -42,7 +42,16 @@ def cat_id(db: Database, user_id: str, name: str) -> str:
 # --- defaults --------------------------------------------------------------------
 
 def test_a_new_user_starts_with_the_ten_defaults(db: Database, asha: str) -> None:
-    assert names(db, asha) == DEFAULTS
+    assert sorted(names(db, asha)) == sorted(DEFAULTS)
+
+
+def test_categories_list_alphabetically_with_other_last(db: Database, asha: str) -> None:
+    """User, 2026-10-21: every picker reads this list, and finding one in creation order meant scanning it."""
+    with db.write_session() as s:
+        cats.create_category(s, asha, "appliances")  # lower case: the order ignores case
+        cats.create_category(s, asha, "Zoo")
+    assert names(db, asha) == ["appliances", "Bills & Utilities", "Entertainment", "Food & Dining", "Groceries",
+                               "Health", "Lending", "Rent", "Shopping", "Transport", "Zoo", "Other"]
 
 
 def test_each_user_gets_their_own_copies(db: Database, asha: str) -> None:
@@ -80,7 +89,7 @@ def test_create_and_rename(db: Database, asha: str) -> None:
         gifts: str = cats.create_category(s, asha, "  Gifts ").id
     with db.write_session() as s:
         cats.rename_category(s, asha, gifts, "Gifts & Festivals")
-    assert names(db, asha)[-1] == "Gifts & Festivals"
+    assert "Gifts & Festivals" in names(db, asha) and "Gifts" not in names(db, asha)
 
 
 @pytest.mark.parametrize("name", ["", "   ", "x" * 41])
@@ -111,7 +120,7 @@ def test_archive_and_restore_only_flip_archived_at(db: Database, asha: str) -> N
     assert "Rent" not in names(db, asha) and "Rent" in names(db, asha, include_archived=True)
     with db.write_session() as s:
         cats.restore_category(s, asha, rent)
-    assert names(db, asha) == DEFAULTS
+    assert sorted(names(db, asha)) == sorted(DEFAULTS)
     assert cat_id(db, asha, "Rent") == rent  # the same row came back
 
 

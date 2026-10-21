@@ -306,3 +306,12 @@ def test_another_users_charges_never_show(app: FastAPI, asha: TestClient, client
     make_user(app, "ravi", "ravi password 1")
     login(client, "ravi", "ravi password 1")
     assert client.get("/api/recurring").json() == [] and client.get("/api/trends").json()["categories"] == []
+
+
+def test_a_payees_transactions_in_the_report_run_newest_first_by_time(asha: TestClient, accts: dict[str, str]) -> None:
+    """User, 2026-10-21: within a day, by time of day (a row with no time last), not by when it was recorded."""
+    morning: str = enter(asha, from_account_id=accts["bank"], payee="Tea stall", transaction_time="09:15")
+    untimed: str = enter(asha, from_account_id=accts["bank"], payee="Tea stall")
+    evening: str = enter(asha, from_account_id=accts["bank"], payee="Tea stall", transaction_time="21:40")
+    [payee] = line(get(asha), "Not categorized yet")["payees"]
+    assert [t["id"] for t in payee["transactions"]] == [evening, morning, untimed]

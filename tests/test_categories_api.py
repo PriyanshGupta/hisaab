@@ -42,7 +42,9 @@ def test_requires_login(client: TestClient) -> None:
 
 def test_new_users_have_the_defaults(asha: TestClient) -> None:
     cats: Any = asha.get("/api/categories").json()
-    assert [c["name"] for c in cats][:3] == ["Food & Dining", "Groceries", "Transport"]
+    listed: list[str] = [c["name"] for c in cats]
+    assert listed[:3] == ["Bills & Utilities", "Entertainment", "Food & Dining"]  # alphabetical
+    assert listed[-1] == "Other"
     assert len(cats) == 10 and all(c["archived_at"] is None for c in cats)
 
 

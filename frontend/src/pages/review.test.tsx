@@ -101,6 +101,17 @@ test("categorizing a payee is one rule, and the confirmation counts the override
   expect(await screen.findByRole("status")).toHaveTextContent("23 transactions updated, 1 override kept.");
 });
 
+test("Cancel closes the category box without answering, and the row is as it was", async () => {
+  const { api, user } = setup([uncategorized("p-swiggy", "Swiggy")]);
+  await user.click(await screen.findByRole("tab", { name: /Categories 1/ }));
+  await user.click(screen.getByRole("button", { name: "Choose a category" }));
+  expect(screen.getByRole("combobox", { name: "Category for Swiggy" })).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Cancel" }));
+  expect(screen.queryByRole("combobox", { name: "Category for Swiggy" })).not.toBeInTheDocument();
+  expect(screen.getByRole("button", { name: "Choose a category" })).toBeInTheDocument();
+  expect(api.calls.filter((c) => c.startsWith("POST"))).toEqual([]);
+});
+
 test("the keyboard alone clears a lane: arrows move, Enter answers, typing filters, Esc closes", async () => {
   const { api, user } = setup([unassigned("4821"), unassigned("3321")], {
     "POST /api/review/identifier": { status: 200, body: { resolved: 1 } } });
@@ -345,4 +356,37 @@ test("a category that doesn't exist yet can be created right where it's needed",
   await waitFor(() => expect(api.bodiesFor("POST /api/review/payee-category")).toHaveLength(1));
   expect(api.bodiesFor("POST /api/categories")).toEqual([{ name: "Pets" }]);
   expect(api.bodiesFor("POST /api/review/payee-category")).toEqual([{ payee_id: "p-tail", category_id: "c-pets" }]);
+});
+
+// ---- sorting the groups (user, 2026-10-21): by amount unless asked otherwise ----
+
+const labels = () => rows().map((r) => r.querySelector(".group__label")?.textContent);
+const mixed = () => [
+  uncategorized("p-a", "Amazon", { amount_paise: 300000 }),  // 1 transaction, the most money
+  uncategorized("p-c", "Chai Point", { amount_paise: 4000 }), uncategorized("p-c", "Chai Point", { amount_paise: 4000 }),
+  uncategorized("p-c", "Chai Point", { amount_paise: 4000 }),  // 3 transactions, little money
+  uncategorized("p-b", "BigBasket", { amount_paise: 90000 }), uncategorized("p-b", "BigBasket", { amount_paise: 90000 }),
+];
+
+test("groups come biggest total first, unless another order is picked", async () => {
+  const { user } = setup(mixed(), {}, "/review?lane=categories");
+  const sort = await screen.findByRole("group", { name: "Sort by" });
+  expect(within(sort).getByRole("button", { name: "Amount" })).toHaveAttribute("aria-pressed", "true");
+  expect(labels()).toEqual(["Amazon", "BigBasket", "Chai Point"]);
+  await user.click(within(sort).getByRole("button", { name: "Transactions" }));
+  expect(labels()).toEqual(["Chai Point", "BigBasket", "Amazon"]);
+  await user.click(within(sort).getByRole("button", { name: "Name" }));
+  expect(labels()).toEqual(["Amazon", "BigBasket", "Chai Point"]);
+  expect(within(sort).getByRole("button", { name: "Name" })).toHaveAttribute("aria-pressed", "true");
+});
+
+test("the order picked stays when switching lanes, and Checks has nothing to sort", async () => {
+  const { user, router } = setup([...mixed(), unnamed("UPI-RAVI"), unnamed("UPI-MEERA")], {}, "/review?lane=categories");
+  await user.click(within(await screen.findByRole("group", { name: "Sort by" })).getByRole("button", { name: "Transactions" }));
+  await user.click(screen.getByRole("tab", { name: /Payees/ }));
+  expect(within(screen.getByRole("group", { name: "Sort by" })).getByRole("button", { name: "Transactions" }))
+    .toHaveAttribute("aria-pressed", "true");
+  expect(router.state.location.search).toContain("sort=count");
+  await user.click(screen.getByRole("tab", { name: /Checks/ }));
+  expect(screen.queryByRole("group", { name: "Sort by" })).not.toBeInTheDocument();
 });

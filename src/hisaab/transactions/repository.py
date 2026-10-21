@@ -20,12 +20,12 @@ leave invalid legs is refused.
 import hashlib
 import json
 import re
-from collections.abc import Sequence
+from collections.abc import Iterable, Sequence
 from dataclasses import dataclass
 from datetime import date
 from typing import Any, TypeAlias
 
-from sqlalchemy import Row, Select, delete, func, select, update
+from sqlalchemy import ColumnElement, Row, Select, and_, case, delete, func, select, update
 from sqlalchemy.orm import Session
 
 from hisaab.accounts import repository as accounts
@@ -199,6 +199,27 @@ def with_provenance(user_id: str) -> _ListQuery:
             .join(Source, Source.id == TransactionEffective.primary_source_id))
 
 
+# India has no daylight saving: clock.LOCAL_TZ as SQLite date modifiers (one unit per modifier).
+INDIA_OFFSET: tuple[str, str] = ("+5 hours", "+30 minutes")
+
+
+def newest_first(t: Any) -> tuple[ColumnElement[Any], ...]:
+    """The order every list of transactions shows (user, 2026-10-21; it was the order rows were recorded, which
+    a backfill or statement upload scrambles): by day, then by time of day, then latest recorded. A row with no
+    time of its own (HDFC's UPI alerts never state one) takes the time its email arrived, which is within a
+    minute or two of the payment, but only an email's, and only on the transaction's own India date: a
+    statement's upload, or an alert arriving after midnight, says nothing about the hour. Anything still
+    without a time comes after that day's timed rows (the CSV export, oldest first, mirrors it).
+
+    `t` is TransactionEffective or a subquery's columns of it; the query must join Source on its
+    primary_source_id."""
+    arrived: ColumnElement[Any] = case(
+        (and_(Source.kind == "email", func.date(Source.received_at, *INDIA_OFFSET) == t.transaction_date),
+         func.time(Source.received_at, *INDIA_OFFSET)), else_=None)
+    return (t.transaction_date.desc(), func.coalesce(t.transaction_time, arrived).desc().nulls_last(),
+            t.created_at.desc())
+
+
 def list_transactions(session: Session, user_id: str, limit: int = 200, start: str | None = None,
                       end: str | None = None) -> list[ListedTransaction]:
     """The user's transactions, newest first, with provenance, category and corrections attached; optionally
@@ -208,8 +229,7 @@ def list_transactions(session: Session, user_id: str, limit: int = 200, start: s
         query = query.where(TransactionEffective.transaction_date >= start)
     if end is not None:
         query = query.where(TransactionEffective.transaction_date <= end)
-    return _listed(session, user_id, query.order_by(
-        TransactionEffective.transaction_date.desc(), TransactionEffective.created_at.desc()).limit(limit))
+    return _listed(session, user_id, query.order_by(*newest_first(TransactionEffective)).limit(limit))
 
 
 def list_by_ids(session: Session, user_id: str, txn_ids: list[str]) -> dict[str, ListedTransaction]:
@@ -371,6 +391,25 @@ def apply_edits(session: Session, user_id: str, txn_id: str, changes: dict[str, 
                                         prior_value=source_value, new_value=new_value))
     session.flush()
     review.refresh(session, user_id, [txn.id])  # a correction may answer (or raise) a review question
+
+
+def drop_stale_leg_edits(session: Session, user_id: str, txn_ids: Iterable[str]) -> None:
+    """After the pipeline fills in a leg the source didn't know (an identifier assigned from review), a correction
+    on kind or an account can go stale (user, 2026-10-21): one now equal to what the source says is no
+    correction any more, and one naming, on the other leg, the account just filled in would make a transfer from
+    an account to itself, which validate_legs never allows. Both are removed, so the source's answer shows and
+    transfer pairing (which won't absorb an edited row) can join the two halves."""
+    other: dict[str, str] = {"from_account_id": "to_account_id", "to_account_id": "from_account_id"}
+    for txn_id, rows in _edits(session, user_id, list(txn_ids)).items():
+        txn: Transaction = _own_transaction(session, user_id, txn_id)
+        for edit in rows:
+            if edit.field not in ("kind", *other):
+                continue
+            opposite: str | None = other.get(edit.field)
+            if edit.new_value == _source_value(txn, edit.field) or (
+                    opposite is not None and edit.new_value is not None and edit.new_value == getattr(txn, opposite)):
+                session.delete(edit)
+    session.flush()
 
 
 def acknowledge(session: Session, user_id: str, txn_id: str) -> None:

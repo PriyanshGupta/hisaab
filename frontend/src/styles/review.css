@@ -27,6 +27,20 @@
   color: var(--on-ink);
 }
 
+/* how the groups are ordered: a quiet switch above the sheet, the same control as the report's */
+.review__sort {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  margin-bottom: var(--s3);
+}
+.review__sort-label {
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+}
+
 .review__status {
   margin: 0 0 var(--s3);
 }
@@ -163,6 +177,16 @@
   display: grid;
   gap: var(--s2);
   max-width: 28rem;
+}
+.answer__bar {
+  display: flex;
+  gap: var(--s2);
+}
+.answer__bar .answer__input {
+  flex: 1 1 auto;
+}
+.answer__bar .button {
+  flex: none;
 }
 .answer__note {
   color: var(--ink-soft);

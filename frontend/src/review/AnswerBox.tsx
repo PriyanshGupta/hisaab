@@ -44,11 +44,15 @@ export function AnswerBox({ label, options, onPick, onClose, create, suggested, 
 
   return (
     <div className="answer">
-      <input className="field__input answer__input" role="combobox" aria-label={label} aria-expanded="true"
-        aria-controls={`${id}-list`} aria-autocomplete="list"
-        aria-activedescendant={all[current] ? `${id}-${current}` : undefined} autoFocus autoComplete="off"
-        spellCheck={false} value={text} placeholder="Type to search"
-        onChange={(e) => { setText(e.target.value); setActive(0); }} onKeyDown={onKeyDown} />
+      {/* Cancel beside the search: leaving without an answer must not need the Escape key (no keyboard on a phone) */}
+      <div className="answer__bar">
+        <input className="field__input answer__input" role="combobox" aria-label={label} aria-expanded="true"
+          aria-controls={`${id}-list`} aria-autocomplete="list"
+          aria-activedescendant={all[current] ? `${id}-${current}` : undefined} autoFocus autoComplete="off"
+          spellCheck={false} value={text} placeholder="Type to search"
+          onChange={(e) => { setText(e.target.value); setActive(0); }} onKeyDown={onKeyDown} />
+        <button className="button button--secondary" type="button" onClick={onClose}>Cancel</button>
+      </div>
       {note && <p className="answer__note">{note}</p>}
       <ul className="answer__list" role="listbox" id={`${id}-list`} aria-label={label}>
         {all.map((o, i) => (

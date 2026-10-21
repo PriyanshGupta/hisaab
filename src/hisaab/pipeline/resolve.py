@@ -14,8 +14,9 @@
 - A promoted pattern (reapply_pattern, slice 24): every row its text matches
   is resolved again with all patterns, so it can replace a weaker answer.
 
-All refresh status, since the answer may take the row out of review. Neither
-touches the overlay: an edit on the same field still wins in the effective view.
+All refresh status, since the answer may take the row out of review. An edit on
+the same field still wins in the effective view; the one exception is an assigned
+identifier making a correction stale (drop_stale_leg_edits).
 """
 
 from collections import defaultdict
@@ -28,7 +29,7 @@ from hisaab.accounts.repository import AccountError
 from hisaab.models import Account, NormalizationPattern, Source, Transaction, TransactionEffective
 from hisaab.payees.normalization import PatternRule, load_rules, match_payee
 from hisaab.pipeline.derive import LEGS, kind_from_legs, pair_resolved
-from hisaab.transactions.repository import apply_edits
+from hisaab.transactions.repository import apply_edits, drop_stale_leg_edits
 from hisaab.transactions.review import refresh
 
 
@@ -49,6 +50,7 @@ def resolve_identifier_everywhere(session: Session, user_id: str, account: Accou
         if txn.id in touched:
             txn.kind = kind_from_legs(session, txn, txn.kind)
     session.flush()
+    drop_stale_leg_edits(session, user_id, touched)  # e.g. "transfer from the card" made before the card was known
     merged: dict[str, str] = pair_resolved(session, user_id, touched)  # a resolved leg may complete a transfer
     touched = list(dict.fromkeys(merged.get(t, t) for t in touched))
     refresh(session, user_id, touched)

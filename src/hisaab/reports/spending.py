@@ -25,7 +25,7 @@ from sqlalchemy.orm import Session
 from hisaab.accounts.identifiers import normalize_for_lookup
 from hisaab.models import Account, Category, ExternalIdentifier
 from hisaab.models import TransactionEffective as T
-from hisaab.transactions.repository import with_provenance
+from hisaab.transactions.repository import newest_first, with_provenance
 
 Provenance: TypeAlias = Literal["email", "statement", "manual"]
 TransferKind: TypeAlias = Literal["card_bill", "cash_withdrawal", "between_accounts"]
@@ -143,7 +143,7 @@ def _transfer_kind(t: T, accounts: dict[str, Account]) -> TransferKind:
 
 def report(session: Session, user_id: str, start: str, end: str) -> ReportOut:
     rows: list[Any] = list(session.execute(with_provenance(user_id).where(
-        T.transaction_date >= start, T.transaction_date <= end).order_by(T.transaction_date.desc(), T.id)))
+        T.transaction_date >= start, T.transaction_date <= end).order_by(*newest_first(T), T.id)))
     accounts: dict[str, Account] = {a.id: a for a in session.scalars(select(Account).where(Account.user_id == user_id))}
     names: dict[str, str] = dict(session.execute(select(Category.id, Category.name).where(
         Category.user_id == user_id)).tuples().all())
