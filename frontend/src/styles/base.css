@@ -1,4 +1,12 @@
-/* Element defaults and the shared vocabulary every screen uses. */
+/*
+ * Element defaults and the shared vocabulary every screen uses. A screen's own stylesheet arranges these;
+ * it never restyles a button, field, chip, callout or table. One component per job:
+ *   .button (--primary | --secondary | --quiet | --danger, --small)   .icon-button
+ *   .field / .field__input / .field__label / .field__help / .field__error   .choice
+ *   .seg (one of a few, pressed)   .chips > .chip (filters)   .tabs > .tab (sections)   .badge (a count)
+ *   .callout (--error via .form-error, --ok via .settings-note, --warn via .confirm)
+ *   .page-head   .section-head   .sheet   .ledger   .empty   .muted   .visually-hidden
+ */
 *,
 *::before,
 *::after {
@@ -8,6 +16,7 @@
 html {
   -webkit-text-size-adjust: 100%;
   text-size-adjust: 100%;
+  scrollbar-color: var(--rule-strong) transparent;
 }
 
 body {
@@ -15,12 +24,19 @@ body {
   min-height: 100dvh;
   background: var(--paper);
   color: var(--ink);
+  caret-color: var(--accent);
   font-family: var(--font);
   font-size: var(--t-body);
   font-weight: var(--w-body);
   font-variation-settings: "wdth" var(--wdth-body);
   line-height: var(--lh-body);
   -webkit-font-smoothing: antialiased;
+  -webkit-tap-highlight-color: transparent;
+}
+
+::selection {
+  background: var(--accent-wash);
+  color: var(--ink);
 }
 
 h1,
@@ -29,16 +45,34 @@ h3,
 p {
   margin: 0;
 }
+h1,
+h2,
+h3 {
+  text-wrap: balance;
+}
+p {
+  text-wrap: pretty;
+}
 
 a {
   color: var(--accent);
-  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
+}
+a:hover {
+  color: var(--accent-strong);
 }
 
+strong,
+b,
+th {
+  font-weight: var(--w-strong);
+}
+
+/* One focus ring everywhere: an outline, so no component's own shadow can hide it. */
 :focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
-  border-radius: var(--r-control);
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
 
 .skip-link {
@@ -48,10 +82,26 @@ a {
   padding: var(--s2) var(--s3);
   background: var(--paper-raised);
   color: var(--ink);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-float);
   z-index: 10;
 }
 .skip-link:focus-visible {
   top: var(--s4);
+}
+
+.visually-hidden {
+  position: absolute;
+  width: 1px;
+  height: 1px;
+  overflow: hidden;
+  clip-path: inset(50%);
+  white-space: nowrap;
+}
+
+.icon {
+  flex: none;
+  display: block;
 }
 
 /* Wordmark: the app name at full expanded width. */
@@ -60,146 +110,573 @@ a {
   font-weight: var(--w-wordmark);
   font-variation-settings: "wdth" var(--wdth-wordmark);
   letter-spacing: -0.01em;
-  color: var(--ink);
+  color: inherit;
   line-height: 1;
 }
 
-/* Page heading. */
+.muted {
+  color: var(--ink-muted);
+}
+
+.num,
+.amount {
+  font-variant-numeric: tabular-nums;
+}
+
+/* ---------- page and section headings ---------- */
+
+/* Every page opens the same way: its title, an optional line under it, its actions at the right. */
 .page-head {
   display: flex;
-  align-items: baseline;
+  align-items: center;
   justify-content: space-between;
-  gap: var(--s4);
-  padding-bottom: var(--s3);
+  flex-wrap: wrap;
+  gap: var(--s3) var(--s4);
+  min-height: var(--control-h);
   margin-bottom: var(--s5);
-  border-bottom: 1px solid var(--rule);
+}
+.page-head > :first-child {
+  min-width: 0;
 }
 .page-title {
   font-size: var(--t-display);
   font-weight: var(--w-title);
   font-variation-settings: "wdth" var(--wdth-title);
   line-height: var(--lh-tight);
+  letter-spacing: -0.005em;
 }
-
+.page-head__actions {
+  display: flex;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
 /* A page's secondary destination, at the heading's right (e.g. Transactions -> Upload a statement). */
 .page-head__link {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--control-h);
   font-weight: var(--w-strong);
   color: var(--accent);
-  text-underline-offset: 0.18em;
+  text-decoration: none;
   white-space: nowrap;
 }
+.page-head__link:hover {
+  text-decoration: underline;
+}
+/* The sentence under a page title that says what the page is for. */
+.page-lead {
+  max-width: 42rem;
+  margin: calc(-1 * var(--s3)) 0 var(--s5);
+  color: var(--ink-soft);
+}
 
-/* Empty states: say what will appear and what makes it appear. */
-.empty {
-  max-width: 34rem;
-  padding: var(--s5) 0;
+.section-head {
+  display: flex;
+  align-items: baseline;
+  justify-content: space-between;
+  flex-wrap: wrap;
+  gap: var(--s1) var(--s4);
+  margin-bottom: var(--s3);
 }
-.empty__lead {
+.section-head h2,
+.section-title {
   font-size: var(--t-lead);
-  font-weight: var(--w-strong);
-  margin-bottom: var(--s2);
+  font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+  line-height: var(--lh-tight);
 }
-.empty__body {
+.section-head p {
+  font-size: var(--t-small);
   color: var(--ink-muted);
 }
 
-/* Form fields. */
+/* ---------- sheets ---------- */
+
+/* A white sheet on the paper: one level of container, never nested. */
+.sheet {
+  position: relative;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sheet);
+  box-shadow: var(--shadow-sheet);
+}
+.sheet--pad {
+  padding: var(--s5);
+}
+
+/* ---------- buttons ---------- */
+
+.button {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: var(--s2);
+  min-height: var(--control-h);
+  padding: 0 var(--s4);
+  font: inherit;
+  font-weight: var(--w-strong);
+  line-height: 1.15;
+  text-align: center;
+  text-decoration: none;
+  white-space: nowrap;
+  color: var(--ink);
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  cursor: pointer;
+  transition: background-color 120ms ease-out, border-color 120ms ease-out, color 120ms ease-out;
+}
+.button:disabled,
+.button[aria-disabled="true"] {
+  opacity: 0.5;
+  cursor: not-allowed;
+}
+.button[aria-busy="true"] {
+  cursor: progress;
+}
+
+.button--primary {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+.button--primary:hover:not(:disabled) {
+  background: var(--spine-hover);
+  border-color: var(--spine-hover);
+  color: var(--on-ink);
+}
+.button--primary:active:not(:disabled) {
+  background: #0d231e;
+}
+
+.button--secondary {
+  background: var(--paper-raised);
+  border-color: var(--field-border);
+  color: var(--ink);
+}
+.button--secondary:hover:not(:disabled) {
+  border-color: var(--ink);
+  background: var(--paper-raised);
+}
+.button--secondary:active:not(:disabled) {
+  background: var(--paper-sunk);
+}
+
+/* A quiet action: green text, no box until hovered. Reads as something to press, not a label. */
+.button--quiet {
+  padding: 0 var(--s2);
+  color: var(--accent);
+}
+.button--quiet:hover:not(:disabled) {
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+
+/* Destructive: only where something is removed or written that can't be undone from here. */
+.button--danger {
+  background: var(--paper-raised);
+  border-color: var(--margin-edge);
+  color: var(--margin-ink);
+}
+.button--danger:hover:not(:disabled) {
+  background: var(--margin-wash);
+  border-color: var(--margin);
+}
+
+.button--small {
+  min-height: var(--control-h-sm);
+  padding-inline: var(--s3);
+  font-size: var(--t-small);
+}
+.button--quiet.button--small {
+  padding-inline: var(--s2);
+}
+
+/* A square button holding one icon; its name lives in aria-label. */
+.icon-button {
+  display: inline-grid;
+  place-items: center;
+  flex: none;
+  width: var(--control-h);
+  height: var(--control-h);
+  padding: 0;
+  border: 1px solid transparent;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink-soft);
+  cursor: pointer;
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.icon-button:hover:not(:disabled) {
+  background: var(--paper-sunk);
+  color: var(--ink);
+}
+.icon-button:disabled {
+  color: var(--rule-strong);
+  cursor: not-allowed;
+}
+
+/* A row of actions. A leading quiet button lines its text up with the text above it. */
+.actions {
+  display: flex;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  align-items: center;
+}
+.actions > .button--quiet:first-child {
+  margin-left: calc(-1 * var(--s2));
+}
+
+/* ---------- choosing: segmented control, filter chips, section tabs, counts ---------- */
+
+/* One of a few, side by side (period length, what a total counts). Buttons with aria-pressed. */
+.seg {
+  display: inline-flex;
+  flex: none;
+  padding: 3px;
+  gap: 2px;
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-radius: calc(var(--r-control) + 3px);
+}
+.seg button {
+  min-height: calc(var(--control-h) - 8px);
+  padding: 0 var(--s3);
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  white-space: nowrap;
+  cursor: pointer;
+}
+.seg button:hover {
+  color: var(--ink);
+}
+.seg button[aria-pressed="true"] {
+  background: var(--paper-raised);
+  color: var(--ink);
+  box-shadow: 0 1px 2px rgb(20 48 42 / 0.12), 0 0 0 1px var(--rule);
+}
+
+/* Filters: a row of pills. On a phone the row scrolls sideways instead of wrapping into a wall. */
+.chips {
+  display: flex;
+  flex-wrap: wrap;
+  gap: var(--s2);
+}
+.chip {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--control-h-sm);
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule-strong);
+  border-radius: var(--r-pill);
+  background: var(--paper-raised);
+  color: var(--ink-soft);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: var(--w-medium);
+  white-space: nowrap;
+  text-decoration: none;
+  cursor: pointer;
+}
+.chip:hover {
+  border-color: var(--ink-soft);
+  color: var(--ink);
+}
+.chip[aria-pressed="true"] {
+  background: var(--ink);
+  border-color: var(--ink);
+  color: var(--on-ink);
+}
+@media (max-width: 640px) {
+  .chips {
+    flex-wrap: nowrap;
+    overflow-x: auto;
+    margin-inline: calc(-1 * var(--s4));
+    padding: 2px var(--s4);
+    scrollbar-width: none;
+  }
+  .chips::-webkit-scrollbar {
+    display: none;
+  }
+}
+
+/* Section tabs: a row of links or tab buttons over a hairline, the current one underlined in ink. */
+.tabs {
+  display: flex;
+  gap: var(--s5);
+  border-bottom: 1px solid var(--rule);
+  overflow-x: auto;
+  scrollbar-width: none;
+}
+.tabs::-webkit-scrollbar {
+  display: none;
+}
+.tab {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  flex: none;
+  min-height: var(--touch);
+  margin-bottom: -1px;
+  padding: 0;
+  border: 0;
+  border-bottom: 2px solid transparent;
+  background: none;
+  color: var(--ink-soft);
+  font: inherit;
+  font-weight: var(--w-strong);
+  text-decoration: none;
+  white-space: nowrap;
+  cursor: pointer;
+}
+.tab:hover {
+  color: var(--ink);
+}
+.tab[aria-selected="true"],
+.tab.active {
+  color: var(--ink);
+  border-bottom-color: var(--ink);
+}
+
+/* A count: neutral by default; --attention marks work waiting. */
+.badge {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  min-width: 1.6rem;
+  height: 1.35rem;
+  padding: 0 0.45rem;
+  border-radius: var(--r-pill);
+  background: var(--paper-sunk);
+  color: var(--ink-soft);
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  font-variant-numeric: tabular-nums;
+  line-height: 1;
+}
+.badge--attention {
+  background: var(--margin-wash);
+  color: var(--margin-ink);
+}
+
+/* ---------- callouts: what happened, what needs doing ---------- */
+
+/* Something went wrong, or needs attention: ink text on a red wash. */
+.form-error,
+.callout--error {
+  padding: var(--s2) var(--s3);
+  background: var(--margin-wash);
+  border: 1px solid var(--margin-edge);
+  border-radius: var(--r-control);
+  color: var(--ink);
+  font-weight: var(--w-medium);
+}
+/* It worked, or here's how things stand: ink on a green wash. */
+.settings-note,
+.callout--ok {
+  padding: var(--s2) var(--s3);
+  background: var(--accent-wash);
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--r-control);
+  color: var(--ink);
+}
+/* Are you sure? A sheet with a red edge, the question, and the two answers. */
+.confirm {
+  display: grid;
+  gap: var(--s3);
+  max-width: 40rem;
+  padding: var(--s3) var(--s4);
+  background: var(--paper-raised);
+  border: 1px solid var(--margin-edge);
+  border-radius: var(--r-control);
+  box-shadow: var(--shadow-sheet);
+}
+.confirm > p {
+  font-weight: var(--w-medium);
+}
+
+/* ---------- forms ---------- */
+
 .field {
   display: grid;
-  gap: var(--s1);
+  gap: 6px;
+  align-content: start;
+  min-width: 0;
 }
 .field__label {
   font-size: var(--t-small);
   font-weight: var(--w-strong);
-  color: var(--ink-muted);
+  color: var(--ink-soft);
 }
 .field__input {
-  min-height: var(--touch);
-  padding: var(--s2) var(--s3);
+  width: 100%;
+  min-width: 0;
+  min-height: var(--control-h);
+  padding: 0 var(--s3);
   font: inherit;
   font-size: max(16px, var(--t-body));
   color: var(--ink);
   background: var(--paper-raised);
   border: 1px solid var(--field-border);
   border-radius: var(--r-control);
+  transition: border-color 120ms ease-out, box-shadow 120ms ease-out;
+}
+.field__input:hover {
+  border-color: var(--ink-soft);
 }
 .field__input:focus-visible {
+  outline: none;
   border-color: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash), 0 0 0 1px var(--accent);
+}
+textarea.field__input {
+  padding-block: var(--s2);
+  line-height: var(--lh-data);
+}
+select.field__input {
+  appearance: none;
+  padding-right: 2.25rem;
+  background-image: url("data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 24 24' fill='none' stroke='%234a5e57' stroke-width='2' stroke-linecap='round' stroke-linejoin='round'%3E%3Cpath d='M6 9l6 6 6-6'/%3E%3C/svg%3E");
+  background-repeat: no-repeat;
+  background-position: right 0.7rem center;
+  background-size: 1rem;
+  cursor: pointer;
+}
+input[type="date"].field__input {
+  padding-right: var(--s2);
+}
+input[type="date"]::-webkit-calendar-picker-indicator {
+  opacity: 0.6;
+  cursor: pointer;
+}
+input[type="file"].field__input {
+  padding: 5px;
+  font-size: var(--t-body);
+}
+input[type="file"].field__input::file-selector-button {
+  margin-right: var(--s3);
+  min-height: calc(var(--control-h) - 12px);
+  padding: 0 var(--s3);
+  font: inherit;
+  font-weight: var(--w-strong);
+  color: var(--ink);
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule-strong);
+  border-radius: calc(var(--r-control) - 2px);
+  cursor: pointer;
 }
 .field__input::placeholder {
   color: var(--ink-muted);
-  opacity: 0.7; /* an example, not a value */
+  opacity: 0.8; /* an example, not a value */
 }
-
-/* Something needs attention: ink text on a red wash, red rule on the left. */
-.form-error {
-  padding: var(--s2) var(--s3);
-  background: var(--margin-wash);
-  border-left: 3px solid var(--margin);
-  border-radius: 0 var(--r-control) var(--r-control) 0;
-  color: var(--ink);
+.field__input[aria-invalid="true"] {
+  border-color: var(--margin);
+}
+.field__help {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
+}
+.field__error {
+  font-size: var(--t-small);
   font-weight: var(--w-strong);
+  color: var(--margin-ink);
 }
-
-/*
- * The red double margin rule of ruled account paper: the app's one chrome
- * motif. Add .sheet--ruled to a sheet to get it down the left side, with the
- * content starting to its right.
- */
-.sheet {
+.amount-input {
+  font-variant-numeric: tabular-nums;
+}
+/* A rupee amount: the ₹ sits inside the field, so the figure typed is plainly money. */
+.money-input {
   position: relative;
-  background: var(--paper-raised);
-  border: 1px solid var(--rule);
-  border-radius: 8px;
+  display: block;
 }
-.sheet--ruled {
-  padding-left: calc(var(--s7) + var(--s2));
-}
-.sheet--ruled::before {
-  content: "";
+.money-input__sign {
   position: absolute;
-  inset: 0 auto 0 var(--s5);
-  width: calc(var(--margin-rule-gap) + 2px);
-  border-inline: 1px solid var(--margin);
-  opacity: var(--margin-rule-opacity);
+  left: var(--s3);
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-muted);
+  font-weight: var(--w-medium);
   pointer-events: none;
 }
+.money-input .field__input {
+  padding-left: 1.85rem;
+}
 
-/* Buttons: primary is ink; red is reserved for the margin rule and attention. */
-.button {
-  min-height: var(--touch);
-  padding: var(--s2) var(--s4);
-  font: inherit;
-  font-weight: var(--w-strong);
+.form-grid {
+  display: grid;
+  gap: var(--s4);
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+}
+/* a row of choices inside a grid of fields takes the whole row, so its tiles sit side by side */
+.form-grid > .choice {
+  grid-column: 1 / -1;
+}
+
+/* Radio choices as a row of equal tiles; a phone gets two to a row. */
+.choice {
+  border: 0;
+  margin: 0;
+  padding: 0;
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(8.5rem, 1fr));
+  gap: var(--s2);
+  min-width: 0;
+}
+.choice legend {
+  margin-bottom: 6px;
+  padding: 0;
+}
+.choice > .field__help {
+  grid-column: 1 / -1;
+}
+.choice__option {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  min-height: var(--control-h);
+  padding: 0 var(--s3);
+  border: 1px solid var(--rule-strong);
   border-radius: var(--r-control);
-  border: 1px solid transparent;
+  background: var(--paper-raised);
+  font-weight: var(--w-medium);
   cursor: pointer;
+  transition: border-color 120ms ease-out, background-color 120ms ease-out;
 }
-.button:disabled {
-  opacity: 0.6;
-  cursor: progress;
+.choice__option:hover {
+  border-color: var(--ink-soft);
 }
-.button--primary {
-  background: var(--ink);
-  color: var(--on-ink);
+.choice__option:has(input:checked) {
+  border-color: var(--ink);
+  background: var(--paper-raised);
+  box-shadow: inset 0 0 0 1px var(--ink);
+  font-weight: var(--w-strong);
 }
-.button--primary:hover:not(:disabled) {
-  background: color-mix(in oklab, var(--ink) 85%, var(--paper));
+.choice__option:has(input:focus-visible) {
+  outline: var(--focus-ring);
+  outline-offset: 2px;
 }
-.button--quiet {
-  background: transparent;
-  color: var(--ink-soft);
-  padding-inline: var(--s2);
+.choice__option input {
+  margin: 0;
+  accent-color: var(--ink);
 }
-.button--quiet:hover {
-  color: var(--ink);
-  text-decoration: underline;
-  text-underline-offset: 0.18em;
+@media (max-width: 640px) {
+  .choice {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
 }
+
+/* ---------- ledger tables ---------- */
 
 /*
- * Ledger tables, the vocabulary for every data screen to come:
- * feint horizontal ruling, tabular amounts, a double rule above the total.
+ * The vocabulary for every data screen: feint horizontal ruling, tabular amounts, a double rule above the total.
  *   <table class="ledger"> … <td class="amount">1,23,456.00<span class="cr">Cr</span></td>
  *   <tr class="ledger__total"> … </tr>
  */
@@ -216,11 +693,12 @@ a {
   color: var(--ink-muted);
   padding: var(--s2) var(--s3);
   border-bottom: 1px solid var(--rule-strong);
+  white-space: nowrap;
 }
 .ledger td {
-  padding: var(--s2) var(--s3);
+  padding: var(--s3);
   border-bottom: 1px solid var(--rule);
-  min-height: var(--touch);
+  vertical-align: middle;
 }
 .ledger .amount,
 .ledger th.amount {
@@ -228,15 +706,39 @@ a {
   font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
-.ledger .cr {
+.ledger td.amount {
+  font-weight: var(--w-strong);
+}
+.cr {
   margin-left: 0.3em;
   font-size: var(--t-small);
+  font-weight: var(--w-medium);
   color: var(--ink-muted);
 }
 .ledger__total td {
   font-weight: var(--w-strong);
   border-top: 3px double var(--ink);
   border-bottom: none;
+}
+
+/* ---------- empty states: say what will appear and what makes it appear ---------- */
+
+.empty {
+  max-width: 34rem;
+  padding: var(--s6) 0;
+}
+.empty__lead {
+  font-size: var(--t-lead);
+  font-weight: var(--w-title);
+  margin-bottom: var(--s1);
+}
+.empty__body {
+  color: var(--ink-soft);
+}
+
+/* "Show archived" sections (accounts, categories). */
+.archived {
+  margin-top: var(--s5);
 }
 
 .boot {
@@ -246,7 +748,13 @@ a {
   padding: var(--s5);
 }
 .boot--error {
-  color: var(--margin);
+  color: var(--margin-ink);
+}
+
+/* Loading: a quiet line that says so, never a spinner in the middle of content. */
+.loading {
+  color: var(--ink-muted);
+  padding: var(--s4) 0;
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -256,89 +764,4 @@ a {
     transition-duration: 0.01ms !important;
     animation-duration: 0.01ms !important;
   }
-}
-
-/* Shared form vocabulary: grids of fields, help and error text, choice chips, action rows. */
-.actions {
-  display: flex;
-  gap: var(--s2);
-  flex-wrap: wrap;
-  align-items: center;
-}
-/* A quiet (text) button leading a row lines up with the text above it. */
-.actions > .button--quiet:first-child {
-  padding-left: 0;
-}
-
-.form-grid {
-  display: grid;
-  gap: var(--s4);
-  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-}
-
-.field__help {
-  font-size: var(--t-small);
-  color: var(--ink-muted);
-}
-
-.field__error {
-  font-size: var(--t-small);
-  font-weight: var(--w-strong);
-  color: var(--margin);
-}
-
-.field__input[aria-invalid="true"] {
-  border-color: var(--margin);
-}
-
-.amount-input {
-  font-variant-numeric: tabular-nums;
-}
-
-.choice {
-  border: 0;
-  margin: 0;
-  padding: 0;
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
-}
-
-.choice legend {
-  width: 100%;
-  margin-bottom: var(--s2);
-}
-
-.choice__option {
-  display: inline-flex;
-  align-items: center;
-  gap: var(--s2);
-  min-height: var(--touch);
-  padding: 0 var(--s4) 0 var(--s3);
-  border: 1px solid var(--field-border);
-  border-radius: var(--r-control);
-  background: var(--paper-raised);
-  cursor: pointer;
-  font-weight: 520;
-}
-
-.choice__option:has(input:checked) {
-  border-color: var(--ink);
-  box-shadow: inset 0 0 0 1px var(--ink);
-}
-
-.choice__option input {
-  accent-color: var(--ink);
-}
-
-.muted {
-  color: var(--ink-muted);
-}
-
-/* "Show archived" sections (accounts, categories). */
-.archived {
-  margin-top: var(--s5);
-}
-.archived > .button--quiet {
-  padding-left: 0;
 }

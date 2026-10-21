@@ -1,61 +1,97 @@
-/* Accounts screen: a ruled list of accounts, each a row of name / opening anchor,
-   with its UPI IDs and actions beneath. Same markup on phone and desktop. */
+/* Accounts: one sheet, a ruled row per account (type icon, name and number, opening anchor at the right), with the
+   numbers and names bank alerts use for it and its actions beneath. Same markup on phone and desktop. */
 .account-list {
-  border-top: 1px solid var(--rule);
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sheet);
+  box-shadow: var(--shadow-sheet);
+}
+.account-list:empty {
+  display: none;
 }
 .account {
-  padding: var(--s4) 0;
-  border-bottom: 1px solid var(--rule);
   display: grid;
-  gap: var(--s3);
+  gap: var(--s2);
+  padding: var(--s4) var(--s5);
+  border-top: 1px solid var(--rule);
+}
+.account:first-child {
+  border-top: 0;
 }
 .account__main {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: start;
   gap: var(--s4);
-  flex-wrap: wrap;
+}
+.account__icon {
+  display: grid;
+  place-items: center;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--r-control);
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+}
+.account--archived .account__icon {
+  background: var(--paper-sunk);
+  color: var(--ink-muted);
+}
+.account__who {
+  min-width: 0;
 }
 .account__name {
   font-size: var(--t-lead);
-  font-weight: var(--w-strong);
+  font-weight: var(--w-title);
   line-height: var(--lh-tight);
+  overflow-wrap: anywhere;
 }
 .account__meta {
-  color: var(--ink-soft);
-  font-size: var(--t-small);
   display: flex;
-  gap: var(--s3);
   flex-wrap: wrap;
-  margin-top: var(--s1);
+  gap: 0 var(--s3);
+  margin-top: 2px;
+  font-size: var(--t-small);
+  color: var(--ink-soft);
 }
 .account__institution {
   color: var(--ink-muted);
 }
 .account__opening {
-  text-align: right;
   display: grid;
   justify-items: end;
+  text-align: right;
 }
 .account__opening .amount {
   font-size: var(--t-lead);
-  font-weight: var(--w-strong);
+  font-weight: var(--w-title);
   font-variant-numeric: tabular-nums;
-  font-variation-settings: "wdth" var(--wdth-data);
+  white-space: nowrap;
 }
 .account__as-of {
   font-size: var(--t-small);
   color: var(--ink-muted);
+  white-space: nowrap;
 }
 .account__archived {
   font-size: var(--t-small);
   color: var(--ink-muted);
 }
-.account-list--archived .account__name,
-.account-list--archived .amount {
+/* everything under the name lines up with the name, past the icon */
+.account > :not(.account__main) {
+  margin-left: calc(2.5rem + var(--s4));
+}
+.account__archive {
+  margin-left: auto;
   color: var(--ink-soft);
 }
-
+.account--archived .account__name,
+.account--archived .amount {
+  color: var(--ink-soft);
+}
+.account-list--archived {
+  margin-top: var(--s3);
+}
 
 /* What else bank alerts call this account: a sentence that says so, then the numbers and names as pills. */
 .matches {
@@ -77,40 +113,36 @@
 .matches__item {
   display: inline-flex;
   align-items: center;
-  gap: var(--s1);
+  gap: 2px;
   max-width: 100%;
-  padding: 2px var(--s1) 2px var(--s3);
-  background: var(--paper-raised);
-  border: 1px solid var(--rule-strong);
-  border-radius: 999px;
+  padding: 0 2px 0 var(--s3);
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-pill);
   font-size: var(--t-small);
+  font-weight: var(--w-medium);
   overflow-wrap: anywhere;
 }
 .matches__remove {
+  display: grid;
+  place-items: center;
   flex: none;
+  width: 30px;
+  height: 30px;
   border: 0;
+  border-radius: 50%;
   background: none;
   color: var(--ink-muted);
-  font: inherit;
-  font-size: var(--t-lead);
-  line-height: 1;
-  width: 32px;
-  height: 32px;
-  border-radius: 50%;
   cursor: pointer;
 }
 .matches__remove:hover {
-  color: var(--margin);
+  color: var(--margin-ink);
   background: var(--margin-wash);
-}
-.matches__remove:focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
 }
 .matches__add {
   display: grid;
   gap: var(--s1);
-  max-width: 30rem;
+  max-width: 32rem;
 }
 .matches__row {
   display: flex;
@@ -123,38 +155,48 @@
   min-width: 0;
 }
 .matches__saved {
-  color: var(--accent);
+  color: var(--accent-strong);
   font-weight: var(--w-strong);
 }
 
-.confirm {
-  display: grid;
-  gap: var(--s3);
-  padding: var(--s3) var(--s4);
-  background: var(--margin-wash);
-  border-left: 3px solid var(--margin);
-  border-radius: 0 var(--r-control) var(--r-control) 0;
-  max-width: 40rem;
-}
-
+/* The add and edit forms. */
 .account-form {
   display: grid;
   gap: var(--s4);
-  padding-top: var(--s5);
-  padding-bottom: var(--s5);
-  padding-right: var(--s5);
+  max-width: 48rem;
   margin-bottom: var(--s5);
-  max-width: 46rem;
+  padding: var(--s5);
+}
+.account-form .actions {
+  padding-top: var(--s4);
+  border-top: 1px solid var(--rule);
 }
 .account-form--inline {
-  padding: 0;
-  margin: 0;
+  max-width: none;
+  margin: var(--s2) 0 0;
+  padding: var(--s4);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
 }
 
-
 @media (max-width: 640px) {
+  .account {
+    padding: var(--s4);
+  }
+  .account__main {
+    grid-template-columns: auto minmax(0, 1fr);
+    gap: var(--s1) var(--s3);
+  }
   .account__opening {
-    text-align: left;
+    grid-column: 2;
     justify-items: start;
+    text-align: left;
+  }
+  .account > :not(.account__main) {
+    margin-left: 0;
+  }
+  .account-form {
+    padding: var(--s4);
   }
 }

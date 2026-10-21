@@ -22,3 +22,8 @@ frontend/dist/
 frontend/openapi.json
 frontend/src/api/schema.d.ts
 *.tsbuildinfo
+# Impeccable design notes (local only, like docs/)
+PRODUCT.md
+DESIGN.md
+DESIGN.*.json
+.impeccable/

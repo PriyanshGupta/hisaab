@@ -18,6 +18,7 @@ import {
   useSenderQueue,
 } from "../api/senders";
 import { formatInstantDate } from "../dates";
+import { Icon } from "../ui/Icon";
 import "../styles/senders.css";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -37,18 +38,20 @@ export function SendersPage() {
     <div className="senders">
       <header className="page-head">
         <h1 className="page-title">Senders</h1>
-        <button className="button button--quiet" type="button" onClick={runSweep} disabled={sweep.isPending}>
+        <button className="button button--secondary" type="button" onClick={runSweep} disabled={sweep.isPending}
+          aria-busy={sweep.isPending}>
+          <Icon name="search" size={16} />
           Run sweep now
         </button>
       </header>
-      <p className="senders__lead">
+      <p className="page-lead">
         Once a week Hisaab looks for bank-like emails from senders it doesn't read yet. Approving a sender reads
         its mail for everyone from now on, and fetches its last three months.
         {queue.data && (queue.data.last_sweep_at
           ? ` Last sweep ${formatInstantDate(queue.data.last_sweep_at)}.`
           : " Not swept yet.")}
       </p>
-      {done && <p className="senders__done" role="status">{done}</p>}
+      {done && <p className="settings-note senders__done" role="status">{done}</p>}
       {sweep.isError && <p className="form-error" role="alert">{describeError(sweep.error)}</p>}
       {queue.isError && <p className="form-error" role="alert">{describeError(queue.error)}</p>}
       {queue.data && (queue.data.candidates.length === 0
@@ -81,7 +84,7 @@ function SenderSheet({ c, onApproved }: { c: CandidateSender; onApproved: (sente
   const headId = `sender-${c.id}`;
   const busy = approve.isPending || ignore.isPending;
   return (
-    <section className="sheet sheet--ruled sender" aria-labelledby={headId}>
+    <section className="sheet sender" aria-labelledby={headId}>
       <h2 id={headId} className="sender__address">{c.address}</h2>
       {c.found_in.map((f) => <Inbox key={f.user} f={f} />)}
       <div className="actions sender__actions">

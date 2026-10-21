@@ -13,6 +13,7 @@ import { type AccountBalance, type BalanceGap, useBalances, useCheckpoint, useRe
 import { describeError } from "../api/client";
 import { formatDate } from "../dates";
 import { formatPaise, parseRupees } from "../money";
+import { Icon } from "../ui/Icon";
 import { indiaToday } from "./period";
 import "../styles/balances.css";
 
@@ -60,43 +61,49 @@ function Banner({ b, g }: { b: AccountBalance; g: BalanceGap }) {
   if (g.state === "fixed") {
     return (
       <section className="check check--fixed" role="status" aria-label={label} id={`check-${g.observation_id}`}>
-        <p className="check__title">{b.name}: the gap since {short(g.since)} is gone.</p>
-        <p className="check__body">Whatever caused it has been fixed. Close it as investigated: nothing is written.</p>
-        <div className="actions">
-          <button className="button button--quiet" type="button" disabled={close.isPending}
+        <Icon name="check" size={20} className="check__icon" />
+        <div className="check__text">
+          <p className="check__title">{b.name}: the gap since {short(g.since)} is gone.</p>
+          <p className="check__body">Whatever caused it has been fixed. Close it as investigated: nothing is written.</p>
+        </div>
+        <div className="actions check__actions">
+          <button className="button button--secondary button--small" type="button" disabled={close.isPending}
             onClick={() => close.mutate(g.observation_id)}>Close as investigated</button>
         </div>
-        {failed && <p className="form-error" role="alert">{describeError(failed)}</p>}
+        {failed && <p className="form-error check__error" role="alert">{describeError(failed)}</p>}
       </section>
     );
   }
   return (
     <section className="check" role="status" aria-label={label} id={`check-${g.observation_id}`}>
-      <p className="check__title">
-        {label}: {formatPaise(Math.abs(g.gap_paise))} unexplained since {short(g.since)}
-      </p>
-      <p className="check__body">{direction(b, g)}</p>
+      <Icon name="alert" size={20} className="check__icon" />
+      <div className="check__text">
+        <p className="check__title">
+          {label}: {formatPaise(Math.abs(g.gap_paise))} unexplained since {short(g.since)}
+        </p>
+        <p className="check__body">{direction(b, g)}</p>
+      </div>
       {confirming ? (
         <div className="check__confirm">
           <p>
-            This writes a {formatPaise(Math.abs(g.gap_paise))} adjustment dated {short(g.observed_on)}. It counts in no
-            total: not spending, not cash out, not money in.
+            This writes a {formatPaise(Math.abs(g.gap_paise))} adjustment to {b.name}, dated {short(g.observed_on)}. It
+            counts in no total: not spending, not cash out, not money in.
           </p>
           <div className="actions">
-            <button className="button button--primary" type="button" disabled={accept.isPending}
+            <button className="button button--primary button--small" type="button" disabled={accept.isPending}
               onClick={() => accept.mutate(g.observation_id)}>Write the adjustment</button>
-            <button className="button button--quiet" type="button" onClick={() => setConfirming(false)}>Cancel</button>
+            <button className="button button--secondary button--small" type="button" onClick={() => setConfirming(false)}>Cancel</button>
           </div>
         </div>
       ) : (
-        <div className="actions">
-          <button className="button button--quiet" type="button" onClick={() => setConfirming(true)}>
+        <div className="actions check__actions">
+          <button className="button button--secondary button--small" type="button" onClick={() => setConfirming(true)}>
             Accept as an adjustment
           </button>
-          <Link className="check__link" to={`/transactions?from=${g.since}&to=${g.observed_on}`}>See transactions</Link>
+          <Link className="button button--quiet button--small" to={`/transactions?from=${g.since}&to=${g.observed_on}`}>See transactions</Link>
         </div>
       )}
-      {failed && <p className="form-error" role="alert">{describeError(failed)}</p>}
+      {failed && <p className="form-error check__error" role="alert">{describeError(failed)}</p>}
     </section>
   );
 }
@@ -105,12 +112,14 @@ export function BalancesPanel() {
   const balances = useBalances();
   if (!balances.data?.length) return null;
   return (
-    <section className="sheet sheet--ruled balances" aria-labelledby="balances-h">
-      <div className="moved__head">
+    <section className="sheet sheet--pad balances" aria-labelledby="balances-h">
+      <div className="section-head">
         <h2 id="balances-h">Balances</h2>
-        <p className="muted">What each bank last said, plus Hisaab's own arithmetic since</p>
+        <p>What each bank last said, plus the transactions Hisaab has counted since</p>
       </div>
-      {balances.data.map((b) => <BalanceRow key={b.account_id} b={b} />)}
+      <div className="balances__grid">
+        {balances.data.map((b) => <BalanceRow key={b.account_id} b={b} />)}
+      </div>
     </section>
   );
 }
@@ -121,30 +130,29 @@ function BalanceRow({ b }: { b: AccountBalance }) {
   const verified = b.verified;
   return (
     <div className="balance" role="group" aria-label={b.name}>
-      <div className="balance__line">
-        <span className="balance__name">{b.name}</span>
-        {verified && b.balance_paise !== null
-          ? <span className="balance__figure">{owed(b, b.balance_paise)}</span>
-          : <span className="balance__none">No starting balance yet</span>}
-      </div>
-      <div className="balance__line balance__line--sub">
-        <span className="balance__how">
-          {verified === null ? "Enter one to start checking this account."
-            : verified.source === "opening"
-              ? `from your opening balance on ${short(verified.on)}, ${since(b.transactions_since)}`
-              : `as of ${short(verified.on)} ${VERIFIED_BY[verified.source]}, ${since(b.transactions_since)}`}
-          {open.map((g) => (
-            <a key={g.observation_id} className="balance__gap" href={`#check-${g.observation_id}`}>
-              {formatPaise(Math.abs(g.gap_paise))} unexplained
-            </a>
-          ))}
-        </span>
-        {!entering && (
-          <button className="button button--quiet balance__enter" type="button" onClick={() => setEntering(true)}>
+      <span className="balance__name">{b.name}</span>
+      {verified && b.balance_paise !== null
+        ? <span className="balance__figure">{owed(b, b.balance_paise)}</span>
+        : <span className="balance__none">No starting balance yet</span>}
+      <span className="balance__how">
+        {verified === null ? "Enter one to start checking this account."
+          : verified.source === "opening"
+            ? `from your opening balance on ${short(verified.on)}, ${since(b.transactions_since)}`
+            : `as of ${short(verified.on)} ${VERIFIED_BY[verified.source]}, ${since(b.transactions_since)}`}
+      </span>
+      {open.map((g) => (
+        <a key={g.observation_id} className="balance__gap" href={`#check-${g.observation_id}`}>
+          <Icon name="alert" size={14} />
+          {formatPaise(Math.abs(g.gap_paise))} unexplained
+        </a>
+      ))}
+      {!entering && (
+        <div className="actions">
+          <button className="button button--quiet button--small balance__enter" type="button" onClick={() => setEntering(true)}>
             Enter today's balance
           </button>
-        )}
-      </div>
+        </div>
+      )}
       {entering && <Checkpoint b={b} onDone={() => setEntering(false)} />}
     </div>
   );
@@ -182,7 +190,7 @@ function Checkpoint({ b, onDone }: { b: AccountBalance; onDone: () => void }) {
         </label>
         <div className="actions">
           <button className="button button--primary" type="submit" disabled={save.isPending}>Save balance</button>
-          <button className="button button--quiet" type="button" onClick={onDone}>Cancel</button>
+          <button className="button button--secondary" type="button" onClick={onDone}>Cancel</button>
         </div>
       </div>
       {(problem || save.error) && (

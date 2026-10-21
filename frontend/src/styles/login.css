@@ -1,7 +1,7 @@
 /*
- * Sign-in: the one bold moment. The ledger's green cloth cover carries the
- * wordmark at cover size; the form is a ruled sheet (red double margin rule)
- * on the paper beside it (desktop) or below it (phone).
+ * Sign-in: the one bold moment. The ledger's green cloth cover carries the wordmark at cover size, with the red
+ * double margin rule down its inner edge where the paper begins; the form is a white sheet on that paper, beside
+ * the cover (desktop) or below it (phone).
  */
 .login {
   min-height: 100dvh;
@@ -15,9 +15,18 @@
   flex-direction: column;
   justify-content: flex-end;
   gap: var(--s2);
-  padding: var(--s6) var(--s5) var(--s5);
+  padding: var(--s7) var(--s5) var(--s5);
   background: var(--cover);
   color: var(--on-cover);
+}
+/* the paper's red margin rule, along the cover's edge */
+.login__cover::after {
+  content: "";
+  position: absolute;
+  inset: 100% 0 auto 0;
+  height: calc(var(--margin-rule-gap) + 2px);
+  border-block: 1px solid var(--margin);
+  opacity: var(--margin-rule-opacity);
 }
 .login__wordmark {
   font-size: var(--t-cover);
@@ -29,43 +38,60 @@
 .login__tagline {
   font-size: var(--t-lead);
   font-variation-settings: "wdth" var(--wdth-title);
-  opacity: 0.85;
+  color: var(--on-spine-muted);
 }
 
 .login__page {
   display: grid;
   align-content: start;
-  justify-items: start;
-  padding: var(--s5) var(--s4);
+  justify-items: center;
+  padding: var(--s6) var(--s4);
 }
 .login__form {
   display: grid;
   gap: var(--s4);
   width: 100%;
-  max-width: 26rem;
-  padding: var(--s5) var(--s5) var(--s5) calc(var(--s7) + var(--s2));
+  max-width: 24rem;
+  padding: var(--s6) var(--s5);
+}
+.login__head {
+  display: grid;
+  gap: 2px;
+  margin-bottom: var(--s1);
 }
 .login__title {
   font-size: var(--t-display);
   font-weight: var(--w-title);
   font-variation-settings: "wdth" var(--wdth-title);
-  margin-bottom: var(--s2);
+}
+.login__sub {
+  color: var(--ink-muted);
 }
 .login__form .button--primary {
-  margin-top: var(--s2);
+  width: 100%;
+  margin-top: var(--s1);
 }
 .login__help {
   font-size: var(--t-small);
   color: var(--ink-muted);
+  text-align: center;
 }
 
 @media (min-width: 960px) {
   .login {
     grid-template-rows: none;
-    grid-template-columns: minmax(20rem, 2fr) 3fr;
+    grid-template-columns: minmax(22rem, 2fr) 3fr;
   }
   .login__cover {
     padding: var(--s7);
+  }
+  .login__cover::after {
+    inset: 0 auto 0 100%;
+    width: calc(var(--margin-rule-gap) + 2px);
+    height: auto;
+    margin-left: var(--s4);
+    border-block: 0;
+    border-inline: 1px solid var(--margin);
   }
   .login__wordmark {
     font-size: calc(var(--t-cover) * 1.6);
@@ -73,8 +99,5 @@
   .login__page {
     align-content: center;
     padding: var(--s7);
-  }
-  .login__form {
-    padding: var(--s6) var(--s6) var(--s6) calc(var(--s7) + var(--s4));
   }
 }

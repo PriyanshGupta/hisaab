@@ -10,6 +10,7 @@ import { type GmailStatus, type Job, useConnectGmail, useGmailStatus, useJob, us
 import { useMe } from "../api/session";
 import { formatInstantDate } from "../dates";
 import { goTo } from "../navigate";
+import { Icon } from "../ui/Icon";
 import "../styles/settings.css";
 
 const RETURN_MESSAGES: Record<string, string> = {
@@ -29,12 +30,18 @@ export function SettingsPage() {
       <header className="page-head">
         <h1 className="page-title">Settings</h1>
         {/* also in the sidebar; linked here too, beside the settings it extends */}
-        {me.data?.role === "admin" && <Link className="page-head__link" to="/admin">Admin</Link>}
+        {me.data?.role === "admin" && <Link className="button button--secondary" to="/admin">Admin</Link>}
       </header>
-      <section className="settings-section" aria-labelledby="gmail-heading">
-        <h2 id="gmail-heading" className="settings-section__title">Gmail</h2>
+      <section className="sheet settings-section" aria-labelledby="gmail-heading">
+        <div className="settings-section__head">
+          <span className="settings-section__icon" aria-hidden="true"><Icon name="mail" size={20} /></span>
+          <div>
+            <h2 id="gmail-heading" className="settings-section__title">Gmail</h2>
+            <p className="settings-section__what">Bank alerts arrive from your inbox on their own. Access is read-only.</p>
+          </div>
+        </div>
         {returned && <p className="settings-note">{returned}</p>}
-        {status.isPending && <p className="muted">Loading…</p>}
+        {status.isPending && <p className="loading">Loading…</p>}
         {status.isError && <p className="form-error" role="alert">{describeError(status.error)}</p>}
         {status.data && <GmailConnection status={status.data} />}
       </section>
@@ -65,7 +72,7 @@ function GmailConnection({ status }: { status: GmailStatus }) {
   }
   return (
     <>
-      <p className="muted">Connect your Gmail so bank alerts arrive here on their own. Access is read-only.</p>
+      <p className="muted">Not connected yet. Connect your Gmail so bank alerts arrive here on their own.</p>
       <ConnectButton label="Connect Gmail" />
     </>
   );
@@ -92,19 +99,25 @@ function Connected({ status }: { status: GmailStatus }) {
 
   return (
     <>
-      <p>
-        Connected as <strong>{status.email_address}</strong>.{" "}
-        <span className="muted">
-          {status.last_successful_sync_at
-            ? `Last synced ${formatInstantDate(status.last_successful_sync_at)}.`
-            : "Not synced yet."}
-        </span>
-      </p>
-      <button className="button button--primary" type="button" disabled={running}
-        onClick={() => sync.mutate(undefined, { onSuccess: setJobId })}>
-        Sync now
-      </button>
-      {running && jobId !== null && <p className="muted">Syncing…</p>}
+      <div className="settings-status">
+        <span className="settings-status__dot" aria-hidden="true" />
+        <p>
+          Connected as <strong>{status.email_address}</strong>.{" "}
+          <span className="muted">
+            {status.last_successful_sync_at
+              ? `Last synced ${formatInstantDate(status.last_successful_sync_at)}.`
+              : "Not synced yet."}
+          </span>
+        </p>
+      </div>
+      <div className="actions">
+        <button className="button button--secondary" type="button" disabled={running} aria-busy={running}
+          onClick={() => sync.mutate(undefined, { onSuccess: setJobId })}>
+          <Icon name="refresh" size={16} />
+          Sync now
+        </button>
+        {running && jobId !== null && <p className="muted" role="status">Syncing…</p>}
+      </div>
       {sync.isError && <p className="form-error" role="alert">{describeError(sync.error)}</p>}
       {job.isError && <p className="form-error" role="alert">{describeError(job.error)}</p>}
       {job.data && isDone(job.data) && <SyncOutcome job={job.data} />}

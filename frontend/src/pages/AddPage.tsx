@@ -11,6 +11,7 @@ import { type NewTransaction, useCreateTransaction } from "../api/transactions";
 import { todayIso } from "../dates";
 import { Field } from "../forms/Field";
 import { formatPaise, parseRupees } from "../money";
+import { Icon } from "../ui/Icon";
 
 type Kind = NewTransaction["kind"];
 type LegSpec = { label: string; types: AccountType[]; missing: string };
@@ -93,7 +94,7 @@ export function AddPage() {
   };
 
   // No empty pickers, even briefly. (Payee suggestions are optional; they may arrive later.)
-  if (accounts.isPending || categories.isPending) return <p className="muted">Loading…</p>;
+  if (accounts.isPending || categories.isPending) return <p className="loading">Loading…</p>;
   if (accounts.isError) return <p className="form-error" role="alert">{describeError(accounts.error)}</p>;
   if (active.length === 0) {
     return (
@@ -110,7 +111,7 @@ export function AddPage() {
   return (
     <>
       <header className="page-head"><h1 className="page-title">Add</h1></header>
-      <form className="sheet sheet--ruled entry-form" aria-label="Add a transaction" onSubmit={submit} noValidate>
+      <form className="sheet entry-form" aria-label="Add a transaction" onSubmit={submit} noValidate>
         <fieldset className="choice">
           <legend className="field__label">Kind</legend>
           {(Object.keys(KINDS) as Kind[]).map((k) => (
@@ -122,12 +123,22 @@ export function AddPage() {
         </fieldset>
 
         <div className="form-grid">
+          <div className="field entry-form__amount">
+            <label className="field__label" htmlFor="entry-amount">Amount</label>
+            <span className="money-input">
+              <span className="money-input__sign" aria-hidden="true">₹</span>
+              <input id="entry-amount" className="field__input amount-input" inputMode="decimal" placeholder="0.00"
+                value={amount} onChange={(e) => setAmount(e.target.value)} aria-invalid={errors.amount ? true : undefined}
+                aria-describedby={errors.amount ? "entry-amount-error" : undefined} />
+            </span>
+            {errors.amount && <span className="field__error" id="entry-amount-error">{errors.amount}</span>}
+          </div>
+          <Field label="Date" type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)}
+            error={errors.date} />
           {spec.from && <AccountSelect spec={spec.from} accounts={active} value={fromId} onChange={setFromId}
             error={errors.from} />}
           {spec.to && <AccountSelect spec={spec.to} accounts={active} value={toId} onChange={setToId}
             error={errors.to} />}
-          <Field label="Amount" inputMode="decimal" placeholder="0.00" value={amount}
-            onChange={(e) => setAmount(e.target.value)} error={errors.amount} />
           {spec.payee && (
             <>
               <Field label={spec.payee} value={payee} onChange={(e) => setPayee(e.target.value)}
@@ -145,15 +156,13 @@ export function AddPage() {
               </div>
             </>
           )}
-          <Field label="Date" type="date" value={date} max={todayIso()} onChange={(e) => setDate(e.target.value)}
-            error={errors.date} />
         </div>
 
         {create.isError && <p className="form-error" role="alert">{describeError(create.error)}</p>}
-        {saved && <p className="saved" role="status">{saved}</p>}
 
-        <div className="actions">
+        <div className="entry-form__actions">
           <button className="button button--primary" type="submit" disabled={create.isPending}>Save</button>
+          {saved && <p className="saved" role="status"><Icon name="check" size={18} />{saved}</p>}
         </div>
       </form>
     </>

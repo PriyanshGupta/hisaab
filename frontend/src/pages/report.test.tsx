@@ -144,3 +144,23 @@ test("Download CSV exports the period on screen", async () => {
   expect(link).toHaveAttribute("href", "/api/export/transactions.csv?start=2026-10-01&end=2026-10-31");
   expect(link).toHaveAttribute("download");
 });
+
+test("each category says how it moved against last month, in whole rupees", async () => {
+  mockApi({ "GET /api/auth/me": ME, "GET /api/setup": SETUP_DONE, "GET /api/report": { status: 200, body: REPORT },
+    "GET /api/review": NO_REVIEW, "GET /api/balances": { status: 200, body: [] },
+    "GET /api/trends": { status: 200, body: { months: [], history_from: null, partial: [], categories: [] } },
+    "GET /api/recurring": { status: 200, body: [] } });
+  const september: Report = { ...REPORT, start: "2026-09-01", end: "2026-09-30", categories: [
+    { category_id: "c-food", name: "Food", amount_paise: 20_000_00, count: 2, payees: [] },
+    { category_id: null, name: "Not categorized yet", amount_paise: 3_000_00, count: 1, payees: [] }] };
+  const mocked = globalThis.fetch;
+  vi.stubGlobal("fetch", async (input: Request) => (input.url.includes("start=2026-09-01")
+    ? new Response(JSON.stringify(september), { status: 200, headers: { "content-type": "application/json" } })
+    : mocked(input)));
+  renderApp("/");
+  const list = await screen.findByRole("list", { name: "Spending by category" });
+  const row = (name: string) => within(list).getByText(name).closest("li")!;
+  expect(await within(row("Food")).findByText("₹4,500 more than Sep")).toBeInTheDocument();
+  expect(within(row("Home")).getByText("none in Sep")).toBeInTheDocument();
+  expect(within(row("Not categorized yet")).getByText("the same as Sep")).toBeInTheDocument();
+});

@@ -18,7 +18,10 @@ import { describeError } from "../api/client";
 import { formatDate, formatInstantDate, threeMonthsAgoIso } from "../dates";
 import { Field } from "../forms/Field";
 import { formatPaise, paiseToInput, parseRupees } from "../money";
+import { Icon, type IconName } from "../ui/Icon";
 import "../styles/accounts.css";
+
+const TYPE_ICON: Record<AccountType, IconName> = { bank: "accounts", credit_card: "card", cash: "wallet" };
 
 export function AccountsPage() {
   const accounts = useAccounts();
@@ -35,6 +38,7 @@ export function AccountsPage() {
         <h1 className="page-title">Accounts</h1>
         {!adding && (
           <button className="button button--primary" type="button" onClick={() => setAdding(true)}>
+            <Icon name="add" size={16} />
             Add account
           </button>
         )}
@@ -42,7 +46,7 @@ export function AccountsPage() {
 
       {adding && <AddAccountForm onDone={() => setAdding(false)} />}
 
-      {accounts.isPending && <p className="muted">Loading accounts…</p>}
+      {accounts.isPending && <p className="loading">Loading accounts…</p>}
       {accounts.isError && <p className="form-error" role="alert">{describeError(accounts.error)}</p>}
 
       {accounts.isSuccess && active.length === 0 && !adding && (
@@ -63,8 +67,9 @@ export function AccountsPage() {
 
       {archived.length > 0 && (
         <section className="archived">
-          <button className="button button--quiet" type="button" aria-expanded={showArchived}
+          <button className="button button--quiet button--small" type="button" aria-expanded={showArchived}
             onClick={() => setShowArchived((v) => !v)}>
+            <Icon name={showArchived ? "chevron-down" : "chevron-right"} size={16} />
             {showArchived ? "Hide archived" : `Show archived (${archived.length})`}
           </button>
           {showArchived && (
@@ -89,8 +94,9 @@ function AccountItem({ account }: { account: Account }) {
   const matches = account.identifiers.filter((i) => i.removable); // all but the last 4 it was created with
 
   return (
-    <article className="account" aria-label={account.display_name}>
+    <article className={isArchived ? "account account--archived" : "account"} aria-label={account.display_name}>
       <div className="account__main">
+        <span className="account__icon" aria-hidden="true"><Icon name={TYPE_ICON[account.type]} size={20} /></span>
         <div className="account__who">
           <h2 className="account__name">{account.display_name}</h2>
           <p className="account__meta">
@@ -127,11 +133,11 @@ function AccountItem({ account }: { account: Account }) {
           </p>
           {archive.isError && <p className="form-error" role="alert">{describeError(archive.error)}</p>}
           <div className="actions">
-            <button className="button button--primary" type="button" disabled={archive.isPending}
+            <button className="button button--danger" type="button" disabled={archive.isPending}
               onClick={() => archive.mutate(account.id)}>
               Archive account
             </button>
-            <button className="button button--quiet" type="button" onClick={() => setMode("view")}>
+            <button className="button button--secondary" type="button" onClick={() => setMode("view")}>
               Keep it
             </button>
           </div>
@@ -142,14 +148,15 @@ function AccountItem({ account }: { account: Account }) {
             <Matches account={account} matches={matches} adding={mode === "add-match"} onDoneAdding={() => setMode("view")} />
           )}
           {mode === "view" && (
-            <div className="actions">
+            <div className="actions account__actions">
+              <button className="button button--quiet button--small" type="button" onClick={() => setMode("edit")}>Edit</button>
               {account.type !== "cash" && (
-                <button className="button button--quiet" type="button" onClick={() => setMode("add-match")}>
+                <button className="button button--quiet button--small" type="button" onClick={() => setMode("add-match")}>
                   Add a number or name
                 </button>
               )}
-              <button className="button button--quiet" type="button" onClick={() => setMode("edit")}>Edit</button>
-              <button className="button button--quiet" type="button" onClick={() => setMode("confirm-archive")}>
+              <button className="button button--quiet button--small account__archive" type="button"
+                onClick={() => setMode("confirm-archive")}>
                 Archive
               </button>
             </div>
@@ -203,7 +210,7 @@ function Matches({ account, matches, adding, onDoneAdding }: {
                 <span>{matchText(i)}</span>
                 <button className="matches__remove" type="button" aria-label={`Stop matching ${matchText(i)}`}
                   onClick={() => { setSaved(null); remove.mutate({ id: account.id, identifierId: i.id }); }}>
-                  ×
+                  <Icon name="close" size={14} />
                 </button>
               </li>
             ))}
@@ -218,7 +225,7 @@ function Matches({ account, matches, adding, onDoneAdding }: {
               autoCapitalize="none" spellCheck={false} autoFocus value={value}
               onChange={(e) => { setValue(e.target.value); setSaved(null); }} />
             <button className="button button--primary" type="submit" disabled={add.isPending}>Add</button>
-            <button className="button button--quiet" type="button" onClick={onDoneAdding}>Cancel</button>
+            <button className="button button--secondary" type="button" onClick={onDoneAdding}>Cancel</button>
           </div>
           <p className="field__help" id={`matches-help-${account.id}`}>
             As the bank's alerts print it. Earlier alerts that mention it move to this account too.
@@ -302,7 +309,8 @@ export function AddAccountForm({ onDone, defaultDate, defaultLast4 }: {
   };
 
   return (
-    <form className="sheet sheet--ruled account-form" aria-label="Add account" onSubmit={submit} noValidate>
+    <form className="sheet account-form" aria-label="Add account" onSubmit={submit} noValidate>
+      <h2 className="section-title">New account</h2>
       <fieldset className="choice">
         <legend className="field__label">Type</legend>
         {(Object.keys(TYPE_LABELS) as AccountType[]).map((t) => (
@@ -337,7 +345,7 @@ export function AddAccountForm({ onDone, defaultDate, defaultLast4 }: {
 
       <div className="actions">
         <button className="button button--primary" type="submit" disabled={create.isPending}>Add account</button>
-        <button className="button button--quiet" type="button" onClick={onDone}>Cancel</button>
+        <button className="button button--secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
   );
@@ -407,7 +415,7 @@ function EditAccountForm({ account, onDone }: { account: Account; onDone: () => 
       {update.isError && <p className="form-error" role="alert">{describeError(update.error)}</p>}
       <div className="actions">
         <button className="button button--primary" type="submit" disabled={update.isPending}>Save changes</button>
-        <button className="button button--quiet" type="button" onClick={onDone}>Cancel</button>
+        <button className="button button--secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
   );

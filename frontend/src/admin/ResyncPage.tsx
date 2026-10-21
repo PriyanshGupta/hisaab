@@ -49,11 +49,11 @@ function ResyncForm() {
   return (
     <div className="admin-resync">
       <header className="page-head"><h1 className="page-title">Re-sync</h1></header>
-      <p className="admin__lead">
+      <p className="page-lead">
         Fetches a range of emails from Gmail again and reads them with today's templates. Fields someone edited and
         values from a statement stay as they are; everything else takes the new reading.
       </p>
-      <form className="admin-resync__form" onSubmit={ask}>
+      <form className="sheet admin-resync__form" onSubmit={ask}>
         <label className="field"><span className="field__label">From</span>
           <input className="field__input" type="date" value={start} max={end} required
             onChange={(e) => { setStart(e.target.value); setAsked(null); }} /></label>
@@ -69,9 +69,9 @@ function ResyncForm() {
           Re-sync…</button></div>
       </form>
       {preview.isError && <p className="form-error" role="alert">{describeError(preview.error)}</p>}
-      {done && <p className="admin__done" role="status">{done}</p>}
+      {done && <p className="settings-note admin__done" role="status">{done}</p>}
       {asked && (
-        <div className="admin-resync__confirm sheet sheet--ruled" role="dialog" aria-modal="true" aria-labelledby="resync-confirm-h">
+        <div className="admin-resync__confirm sheet" role="dialog" aria-modal="true" aria-labelledby="resync-confirm-h">
           <h2 id="resync-confirm-h">
             Re-sync {formatDate(start)} to {formatDate(end)} for {scope}?
           </h2>
@@ -83,9 +83,9 @@ function ResyncForm() {
             data; restoring that backup is the only undo.</p>
           {run.isError && <p className="form-error" role="alert">{describeError(run.error)}</p>}
           <div className="actions">
-            <button className="button button--quiet" type="button" onClick={() => setAsked(null)}>Cancel</button>
-            <button className="button button--primary" type="button" disabled={run.isPending || asked.inboxes === 0}
+            <button className="button button--danger" type="button" disabled={run.isPending || asked.inboxes === 0}
               onClick={confirm}>Re-sync</button>
+            <button className="button button--secondary" type="button" onClick={() => setAsked(null)}>Cancel</button>
           </div>
         </div>
       )}

@@ -32,9 +32,18 @@ const PAIRS: [string, string, number][] = [
   ["ink-muted", "paper-raised", 4.5],
   ["accent", "paper", 4.5], // links
   ["margin", "paper", 4.5], // error text
-  ["ink", "margin-wash", 4.5], // attention banners: ink text, red left rule (red text there is 4.39:1)
+  ["accent", "paper-raised", 4.5], // quiet actions on sheets
+  ["accent", "accent-wash", 4.5], // confirmations
+  ["ink-muted", "paper-sunk", 4.5], // notes on sunk panels
+  ["ink-muted", "accent-wash", 4.5], // counts on the current review group
+  ["ink", "margin-wash", 4.5], // attention callouts
+  ["margin-ink", "margin-wash", 4.5], // counts and labels that need attention, on their wash
+  ["margin-ink", "paper-raised", 4.5],
   ["on-ink", "ink", 4.5], // primary button label
   ["on-cover", "cover", 4.5], // login cover wordmark
+  ["on-spine", "spine", 4.5], // sidebar text
+  ["on-spine-muted", "spine", 4.5], // sidebar secondary text
+  ["on-spine-muted", "spine-hover", 4.5],
   ["field-border", "paper-raised", 3], // input edges
   ["accent", "paper", 3], // focus ring
 ];

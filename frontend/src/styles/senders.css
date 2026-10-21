@@ -8,25 +8,16 @@
   max-width: 52rem;
 }
 
-.senders__lead {
-  max-width: 38rem;
-  margin-bottom: var(--s5);
-  color: var(--ink-soft);
-}
-
 .senders__done {
   max-width: 44rem;
-  margin-bottom: var(--s5);
-  padding: var(--s3) var(--s4);
-  background: var(--accent-wash);
-  border-radius: var(--r-control);
+  margin-bottom: var(--s4);
 }
 
 .senders .sender {
   display: grid;
   gap: var(--s4);
-  margin-bottom: var(--s6);
-  padding: var(--s5) var(--s5) var(--s5) calc(var(--s7) + var(--s2));
+  margin-bottom: var(--s4);
+  padding: var(--s5);
 }
 
 .senders .sender__address {
@@ -34,7 +25,7 @@
   font-weight: var(--w-title);
   font-variation-settings: "wdth" var(--wdth-title);
   line-height: var(--lh-tight);
-  overflow-wrap: anywhere;
+  overflow-wrap: anywhere; /* a long address must never widen the sheet */
 }
 
 .senders .sender__where {
@@ -45,16 +36,21 @@
 /* the inbox excerpt */
 .senders .sender__mail {
   list-style: none;
-  padding: 0;
-  border-top: 1px solid var(--rule-strong);
+  margin: 0;
+  padding: 0 var(--s4);
+  background: var(--paper-sunk);
+  border-radius: var(--r-control);
 }
 .senders .sender__mail li {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   column-gap: var(--s4);
   row-gap: var(--s1);
-  padding: var(--s2) 0;
-  border-bottom: 1px solid var(--rule);
+  padding: var(--s3) 0;
+  border-top: 1px solid var(--rule);
+}
+.senders .sender__mail li:first-child {
+  border-top: 0;
 }
 .senders .sender__subject {
   font-weight: var(--w-strong);
@@ -69,7 +65,12 @@
 .senders .sender__preview {
   grid-column: 1 / -1;
   color: var(--ink-muted);
+  font-size: var(--t-small);
   overflow-wrap: anywhere;
+}
+/* Gmail's preview stops mid-sentence: say so */
+.senders .sender__preview::after {
+  content: "…";
 }
 
 .senders .sender__actions {
@@ -100,8 +101,11 @@
 }
 
 @media (max-width: 44rem) {
+  .senders .sender__address {
+    font-size: var(--t-lead);
+  }
   .senders .sender {
-    padding: var(--s4) var(--s4) var(--s4) calc(var(--s6) + var(--s3));
+    padding: var(--s4);
   }
   .senders .sender__mail li {
     grid-template-columns: minmax(0, 1fr);

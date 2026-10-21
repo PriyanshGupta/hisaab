@@ -16,10 +16,10 @@ function rhythm(days: number): string {
   return RHYTHMS.find(([lo, hi]) => lo <= days && days <= hi)?.[2] ?? `Every ${days} days`;
 }
 
-/** "5 Oct" this year, "5 Oct 2025" otherwise. */
+/** "5 Oct" this year, "5 Oct 2025" otherwise; never broken across a line. */
 function short(iso: string): string {
   const full = formatDate(iso);
-  return iso.slice(0, 4) === indiaToday().slice(0, 4) ? full.slice(0, -5) : full;
+  return (iso.slice(0, 4) === indiaToday().slice(0, 4) ? full.slice(0, -5) : full).replaceAll(" ", "\u00a0");
 }
 
 /** About a year's cost, in whole rupees: an estimate, so no paise. */
@@ -29,10 +29,10 @@ export function Recurring() {
   const recurring = useRecurring();
   if (!recurring.data) return null;
   return (
-    <section className="sheet sheet--ruled moved recurring" aria-labelledby="recurring-h">
-      <div className="moved__head">
+    <section className="sheet sheet--pad recurring" aria-labelledby="recurring-h">
+      <div className="section-head">
         <h2 id="recurring-h">Recurring charges</h2>
-        <p className="muted">Charges that come back at a steady rhythm</p>
+        <p>Charges that come back at a steady rhythm</p>
       </div>
       {recurring.data.length === 0
         ? <p className="muted">No recurring charges yet. They show up after three charges at a steady rhythm.</p>

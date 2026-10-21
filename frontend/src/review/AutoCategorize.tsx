@@ -21,7 +21,7 @@ export function AutoCategorize() {
   return (
     <section className="auto" aria-label="Auto-categorize">
       <div className="auto__head">
-        <button className="button button--quiet" type="button" disabled={run.isPending}
+        <button className="button button--secondary" type="button" disabled={run.isPending} aria-busy={run.isPending}
           onClick={() => run.mutate(undefined, { onSuccess: setResult })}>
           {run.isPending ? "Categorizing… this can take a minute or two" : "Auto-categorize"}
         </button>
@@ -47,7 +47,7 @@ function Outcome({ result, fresh, onUndo, undoing }: {
         {`Categorized ${payeesWord(result.applied.length)} covering ${result.transactions} transactions.`}{left}
       </p>
       {result.applied.length > 0 && (
-        <button className="button button--quiet" type="button" disabled={undoing} onClick={onUndo}>
+        <button className="button button--quiet button--small" type="button" disabled={undoing} onClick={onUndo}>
           Undo auto-categorize
         </button>
       )}

@@ -70,11 +70,11 @@ export function TemplatesPage() {
       <header className="page-head">
         <h1 className="page-title">Templates</h1>
       </header>
-      <p className="templates__lead">
+      <p className="page-lead">
         When Haiku has read three emails of a format no template knows, Sonnet proposes one. Check each value
         against the email itself before approving: a template that copies a misreading still passes.
       </p>
-      {done && <p className="templates__done" role="status">{done}</p>}
+      {done && <p className="settings-note templates__done" role="status">{done}</p>}
       {queue.isError && <p className="form-error" role="alert">{describeError(queue.error)}</p>}
       {queue.data && (queue.data.candidates.length === 0
         ? <div className="empty">
@@ -110,9 +110,12 @@ function InUse() {
   if (!inUse.data || inUse.data.length === 0) return null;
   return (
     <section className="templates__in-use" aria-labelledby="in-use-h">
-      <h2 id="in-use-h">Templates in use</h2>
-      <p className="muted">Editing one raises a notice above to re-sync the emails it read.</p>
-      <ul>{inUse.data.map((t) => <InUseRow key={t.id} t={t} />)}</ul>
+      <div className="section-head">
+        <h2 id="in-use-h">Templates in use</h2>
+        <p>Editing a learned one raises a notice above to re-sync the emails it read. The ones that ship with the app
+          are read-only here: each is a file in the repository, picked up on the next start.</p>
+      </div>
+      <ul className="templates__use-list">{inUse.data.map((t) => <InUseRow key={t.id} t={t} />)}</ul>
     </section>
   );
 }
@@ -141,18 +144,19 @@ function InUseRow({ t }: { t: TemplateInUse }) {
         <span className="muted">{where}, read {plural(t.emails_read, "email", "emails")}</span>
       </span>
       {t.editable ? (text === null
-        ? <button className="button button--quiet" type="button" onClick={() => { setText(JSON.stringify(t.spec, null, 2)); setSaved(false); }}>Edit</button>
+        ? <button className="button button--quiet button--small templates__use-action" type="button" onClick={() => { setText(JSON.stringify(t.spec, null, 2)); setSaved(false); }}>Edit</button>
         : <div className="templates__use-edit">
             <label className="field"><span className="field__label">Spec for {t.name}</span>
               <textarea className="field__input templates__spec-box" rows={14} value={text} spellCheck={false}
                 onChange={(e) => setText(e.target.value)} /></label>
             <div className="actions">
-              <button className="button button--quiet" type="button" onClick={() => { setText(null); setNotJson(false); }}>Cancel</button>
               <button className="button button--primary" type="button" disabled={edit.isPending} onClick={save}>Save</button>
+              <button className="button button--secondary" type="button" onClick={() => { setText(null); setNotJson(false); }}>Cancel</button>
             </div>
           </div>)
-        : <p className="muted templates__use-note">Ships with the app: its file is in the repository, and the next
-            start picks up a change to it.</p>}
+        : <span className="badge templates__use-action" title="Its file is in the repository; the next start picks up a change to it.">
+            Read-only<span className="visually-hidden">: its file is in the repository, and the next start picks up a change to it</span>
+          </span>}
       {saved && <p className="templates__use-saved" role="status">Saved.</p>}
       {(notJson || edit.isError) && (
         <p className="form-error" role="alert">{notJson ? "That spec isn't valid JSON." : describeError(edit.error)}</p>
@@ -195,7 +199,7 @@ function CandidateSheet({ c, onApproved }: { c: Candidate; onApproved: (sentence
   const count = c.examples.length === 3 ? "all three" : `all ${c.examples.length}`;
 
   return (
-    <section className="sheet sheet--ruled cand" aria-labelledby={headId}>
+    <section className="sheet cand" aria-labelledby={headId}>
       <h2 id={headId} className="cand__head">
         <span className="cand__subject">{c.subject_masked}</span>
         <span className="cand__sender">{c.sender}</span>

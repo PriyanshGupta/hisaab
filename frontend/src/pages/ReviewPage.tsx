@@ -36,7 +36,7 @@ import { formatPaise } from "../money";
 import { AddAccountForm } from "./AccountsPage";
 import { AnswerBox, type Option } from "../review/AnswerBox";
 import { AutoCategorize } from "../review/AutoCategorize";
-import { ALL_ACTIONS, createCategory, EmailLine, TransactionActions, useCategoryId } from "../review/TransactionTools";
+import { ALL_ACTIONS, createCategory, EmailLine, readable, TransactionActions, useCategoryId } from "../review/TransactionTools";
 import { countLeft, inLane, LANES, type LaneId, OPTIONAL } from "../review/lanes";
 import "../styles/review.css";
 
@@ -90,21 +90,21 @@ export function ReviewPage() {
         <h1 className="page-title">Review</h1>
         {review.data && <p className="review__tally"><span className="review__tally-n">{left}</span> left</p>}
       </header>
-      <div className="lanes" role="tablist" aria-label="What needs an answer">
+      <div className="tabs lanes" role="tablist" aria-label="What needs an answer">
         {LANES.map((l, n) => {
           const count = items.filter((i) => inLane(l.id, i)).length;
           return (
             <button key={l.id} type="button" role="tab" id={`lane-${l.id}`} aria-selected={lane === l.id}
-              aria-controls="lane-panel" className={`lane${count > 0 && l.id !== OPTIONAL ? " lane--open" : ""}`}
+              aria-controls="lane-panel" className={`tab lane${count > 0 && l.id !== OPTIONAL ? " lane--open" : ""}`}
               aria-keyshortcuts={String(n + 1)} onClick={() => choose(l.id)}>
-              <span className="lane__name">{l.name}</span> <span className="lane__count">{count}</span>
+              <span className="lane__name">{l.name}</span> <span className="badge lane__count">{count}</span>
             </button>
           );
         })}
       </div>
       <div id="lane-panel" role="tabpanel" aria-labelledby={`lane-${lane}`}>
         {status && <p className="settings-note review__status" role="status">{status}</p>}
-        {review.isPending && <p className="muted">Loading…</p>}
+        {review.isPending && <p className="loading">Loading…</p>}
         {review.isError && <p className="form-error" role="alert">{describeError(review.error)}</p>}
         {lane === "categories" && review.data && <AutoCategorize />}
         {review.data && (() => {
@@ -125,8 +125,9 @@ export function ReviewPage() {
             onLane={(n) => LANES[n] && choose(LANES[n].id)} />;
         })()}
       </div>
-      <p className="review__keys muted">
-        Keys: ↑ and ↓ move, Enter answers, Space shows the transactions, 1 to 4 switch lanes.
+      <p className="review__keys">
+        Keys: <kbd>↑</kbd> and <kbd>↓</kbd> move, <kbd>Enter</kbd> answers, <kbd>Space</kbd> shows the transactions,{" "}
+        <kbd>1</kbd> to <kbd>4</kbd> switch lanes.
       </p>
     </div>
   );
@@ -143,9 +144,14 @@ function Lane({ lane, groups, sorted, accounts, categories, onDone, onLane }: {
   const rowRefs = useRef<(HTMLLIElement | null)[]>([]);
   const at = Math.min(cursor, Math.max(groups.length - 1, 0));
 
+  const moved = useRef(false); // the cursor has moved since arriving: only then follow it with the scroll
   useEffect(() => { if (cursor !== at) setCursor(at); }, [cursor, at]);
-  useEffect(() => { list.current?.focus(); }, []); // arriving, or switching lanes (the lane remounts): keys work at once
-  useEffect(() => { rowRefs.current[at]?.scrollIntoView?.({ block: "nearest" }); }, [at]);
+  // arriving, or switching lanes (the lane remounts): keys work at once, and the page stays where it is
+  useEffect(() => { list.current?.focus({ preventScroll: true }); }, []);
+  useEffect(() => {
+    if (moved.current) rowRefs.current[at]?.scrollIntoView?.({ block: "nearest" });
+    moved.current = true;
+  }, [at]);
 
   const toggle = (key: string) => setOpen((s) => { const n = new Set(s); n.delete(key) || n.add(key); return n; });
   const finished = (message: string) => { setAnswering(null); onDone(message); list.current?.focus(); };
@@ -208,25 +214,27 @@ function SortedRow({ lane, group, expanded, accounts, categories, onToggle, onDo
   return (
     <li className="group group--sorted">
       <div className="group__line">
-        <span className="group__label">{group.label}</span>
-        <span className="group__count">{plural(group.items.length, "transaction")}</span>
+        <span className="group__who">
+          <span className="group__label">{group.label}</span>
+          <span className="group__meta">
+            <span className="group__sorted-answer">{answer}</span>
+            {group.auto && <span className="group__auto">auto-categorized</span>}
+            <span className="group__count">{plural(group.items.length, "transaction")}</span>
+          </span>
+        </span>
         <span className="amount group__total">{formatPaise(total)}</span>
         <span className="group__actions">
           {canChange && !changing && (
-            <button className="button button--quiet" type="button" onClick={() => setChanging(true)}>
+            <button className="button button--quiet button--small" type="button" onClick={() => setChanging(true)}>
               {lane === "categories" ? "Change category" : "Rename"}
             </button>
           )}
-          <button className="button button--quiet" type="button" aria-expanded={expanded}
+          <button className="button button--quiet button--small" type="button" aria-expanded={expanded}
             aria-label={`${expanded ? "Hide" : "Show"} the transactions in ${group.name}`} onClick={onToggle}>
             {expanded ? "Hide" : "Show"}
           </button>
         </span>
       </div>
-      <p className="group__sorted-answer">
-        <span>{answer}</span>
-        {group.auto && <span className="group__auto">auto-categorized</span>}
-      </p>
       {changing && lane === "categories" && (
         <div className="group__answer">
           <AnswerBox label={`Category for ${group.name}`} onClose={() => setChanging(false)}
@@ -253,7 +261,7 @@ function SortedRow({ lane, group, expanded, accounts, categories, onToggle, onDo
           <input className="field__input" aria-label={`New name for ${group.answer}`} autoFocus value={name}
             onChange={(e) => setName(e.target.value)} onKeyDown={(e) => { if (e.key === "Escape") setChanging(false); }} />
           <button className="button button--primary" type="submit" disabled={rename.isPending}>Save</button>
-          <button className="button button--quiet" type="button" onClick={() => setChanging(false)}>Cancel</button>
+          <button className="button button--secondary" type="button" onClick={() => setChanging(false)}>Cancel</button>
           {rename.isError && <p className="form-error" role="alert">{describeError(rename.error)}</p>}
         </form>
       )}
@@ -278,15 +286,21 @@ function GroupRow({ ref, lane, group, current, answering, expanded, accounts, ca
     <li ref={ref} className={`group${current ? " group--current" : ""}`} aria-current={current ? "true" : undefined}
       onClick={onFocusRow}>
       <div className="group__line">
-        <span className="group__label">{group.label}</span>
-        <span className="group__count">{plural(group.items.length, "transaction")}</span>
+        <span className="group__who">
+          <span className="group__label">{group.label}</span>
+          <span className="group__meta">
+            <span className="group__count">{plural(group.items.length, "transaction")}</span>
+          </span>
+        </span>
         <span className="amount group__total">{formatPaise(total)}</span>
         <span className="group__actions">
           {group.answerable && lane !== "checks" && !answering && (
-            <button className="button button--primary" type="button" onClick={onAnswer}>{ask}</button>
+            // one main button on the screen: the row the cursor is on
+            <button className={`button button--small ${current ? "button--primary" : "button--quiet"}`} type="button"
+              onClick={onAnswer}>{ask}</button>
           )}
           {group.answerable && (
-            <button className="button button--quiet" type="button" aria-expanded={expanded}
+            <button className="button button--quiet button--small" type="button" aria-expanded={expanded}
               aria-label={`${expanded ? "Hide" : "Show"} the transactions in ${group.name}`} onClick={onToggle}>
               {expanded ? "Hide" : "Show"}
             </button>
@@ -297,7 +311,8 @@ function GroupRow({ ref, lane, group, current, answering, expanded, accounts, ca
         onCancel={onCancel} onDone={onDone} />}
       {expanded && (
         <ul className="items" aria-label={`Transactions in ${group.name}`}>
-          {group.items.map((i) => <ItemLine key={i.id} item={i} accounts={accounts} categories={categories} />)}
+          {group.items.map((i) => <ItemLine key={i.id} item={i} accounts={accounts} categories={categories}
+            single={lane === "checks"} />)}
         </ul>
       )}
     </li>
@@ -385,17 +400,28 @@ function GroupAnswer({ lane, group, accounts, categories, onCancel, onDone }: {
   );
 }
 
-function ItemLine({ item, accounts, categories }: { item: ReviewItem; accounts: Account[]; categories: Category[] }) {
+/** One transaction of a group. `single`: the group is this one transaction (a check), whose name and amount the
+ *  group's own line already shows, so only its date and account are said again. */
+function ItemLine({ item, accounts, categories, single = false }: {
+  item: ReviewItem; accounts: Account[]; categories: Category[]; single?: boolean;
+}) {
   const who = item.payee_name ?? item.payee_raw ?? "Unknown payee";
   return (
     <li className="item" aria-label={`${formatDate(item.transaction_date)} ${who} ${formatPaise(item.amount_paise)}`}>
-      <div className="item__line">
-        <span className="item__date">{formatDate(item.transaction_date)}</span>
-        <span className="item__who">{who}</span>
-        <span className="item__account muted">{item.account_label ?? ""}</span>
-        <span className="amount">{formatPaise(item.amount_paise)}</span>
-      </div>
-      {item.reason && <p className="item__reason">{item.reason}</p>}
+      {single ? (
+        <p className="item__line item__line--single">
+          <span className="item__date">{formatDate(item.transaction_date)}</span>
+          <span className="item__account muted">{item.account_label ?? ""}</span>
+        </p>
+      ) : (
+        <div className="item__line">
+          <span className="item__date">{formatDate(item.transaction_date)}</span>
+          <span className="item__who">{who}</span>
+          <span className="item__account muted">{item.account_label ?? ""}</span>
+          <span className="amount">{formatPaise(item.amount_paise)}</span>
+        </div>
+      )}
+      {item.reason && <p className="item__reason">{readable(item.reason)}</p>}
       {item.email && <EmailLine id={item.id} email={item.email} />}
       <TransactionActions subject={{ ...item, who }} accounts={accounts} categories={categories} actions={ALL_ACTIONS} />
     </li>

@@ -33,6 +33,7 @@ import {
   describeCheck,
   readBy,
 } from "../statements/diagnostic";
+import { Icon } from "../ui/Icon";
 import "../styles/statements.css";
 
 const plural = (n: number, one: string, many: string) => `${n} ${n === 1 ? one : many}`;
@@ -64,10 +65,13 @@ function UploadForm({ onRead }: { onRead: (id: string) => void }) {
   };
   const sentence = upload.isError ? describeError(upload.error) : null;
   return (
-    <form className="stmt-upload" onSubmit={submit} aria-label="Upload a statement">
-      <p className="stmt-upload__lead">
-        Upload a bank or card statement. Hisaab reads every row and shows you what it found before anything is saved.
-      </p>
+    <form className="sheet stmt-upload" onSubmit={submit} aria-label="Upload a statement">
+      <div className="stmt-upload__head">
+        <span className="stmt-upload__icon" aria-hidden="true"><Icon name="statements" size={22} /></span>
+        <p className="stmt-upload__lead">
+          Upload a bank or card statement. Hisaab reads every row and shows you what it found before anything is saved.
+        </p>
+      </div>
       <label className="field">
         <span className="field__label">Statement PDF</span>
         <input className="field__input stmt-upload__file" type="file" accept="application/pdf,.pdf"
@@ -80,7 +84,8 @@ function UploadForm({ onRead }: { onRead: (id: string) => void }) {
         <span className="field__help" id="stmt-password-help">Used once to open the file. Never saved.</span>
       </div>
       <div className="actions">
-        <button className="button button--primary" type="submit" disabled={!file || upload.isPending}>
+        <button className="button button--primary" type="submit" disabled={!file || upload.isPending}
+          aria-busy={upload.isPending}>
           {upload.isPending ? "Reading…" : "Read statement"}
         </button>
       </div>
@@ -103,7 +108,7 @@ function OpenPreviews() {
   const staged = useOpenStatements();
   if (!staged.data?.length) return null;
   return (
-    <section className="stmt-open" aria-labelledby="stmt-open-title">
+    <section className="sheet stmt-open" aria-labelledby="stmt-open-title">
       <h2 className="stmt-open__title" id="stmt-open-title">Waiting for you to merge</h2>
       <ul className="stmt-open__list">
         {staged.data.map((s) => (
@@ -119,12 +124,12 @@ function OpenPreviews() {
 
 function Preview({ id, onClose }: { id: string; onClose: () => void }) {
   const statement = useStatement(id);
-  if (statement.isPending) return <p className="muted">Loading…</p>;
+  if (statement.isPending) return <p className="loading">Loading…</p>;
   if (statement.isError) {
     return (
       <div className="stmt-gone">
         <p className="form-error" role="alert">{describeError(statement.error)}</p>
-        <button className="button button--quiet" type="button" onClick={onClose}>Upload a statement</button>
+        <button className="button button--secondary" type="button" onClick={onClose}>Upload a statement</button>
       </div>
     );
   }
@@ -143,7 +148,7 @@ function PreviewBody({ p, onClose }: { p: StatementPreview; onClose: () => void 
         {picking ? <AccountPicker p={p} onDone={() => setChanging(false)} /> : (
           <div className="stmt__title-row">
             <h2 className="stmt__title">{p.account_name}</h2>
-            <button className="button button--quiet" type="button" onClick={() => setChanging(true)}>Change account</button>
+            <button className="button button--quiet button--small" type="button" onClick={() => setChanging(true)}>Change account</button>
           </div>
         )}
         <p className="stmt__meta">
@@ -193,7 +198,7 @@ function AccountPicker({ p, onDone }: { p: StatementPreview; onDone: () => void 
       <div className="actions">
         <button className="button button--primary" type="button" disabled={choice === null || pick.isPending}
           onClick={use}>{pick.isPending ? "Matching…" : "Use this account"}</button>
-        {p.account_id !== null && <button className="button button--quiet" type="button" onClick={onDone}>Cancel</button>}
+        {p.account_id !== null && <button className="button button--secondary" type="button" onClick={onDone}>Cancel</button>}
       </div>
       {pick.isError && <p className="form-error" role="alert">{describeError(pick.error)}</p>}
     </div>
@@ -203,7 +208,11 @@ function AccountPicker({ p, onDone }: { p: StatementPreview; onDone: () => void 
 function Check({ d, kind }: { d: Diagnostic; kind: Kind }) {
   const lines = checkLines(d, kind);
   return (
-    <section className={`stmt-check stmt-check--${d.outcome}`} aria-label="The statement's own check">
+    <section className={`sheet stmt-check stmt-check--${d.outcome}`} aria-label="The statement's own check">
+      <p className="stmt-check__state">
+        <Icon name={d.outcome === "passed" ? "check" : d.outcome === "failed" ? "alert" : "info"} size={16} />
+        {d.outcome === "passed" ? "Adds up" : d.outcome === "failed" ? "Doesn't add up" : "Not checked"}
+      </p>
       {d.tier === 3 && (
         <p className="stmt-check__source">
           Every amount below was found printed in the PDF. Rows Claude read but Hisaab couldn't find there are
@@ -354,8 +363,8 @@ function MergeActions({ p, d, rows, onClose }: { p: StatementPreview; d: Diagnos
           {r ? `${r.new} added, ${r.matched} updated, ${r.needs_review} ${r.needs_review === 1 ? "needs" : "need"} review.` : "Merged."}
         </p>
         <div className="actions">
-          <Link className="button button--quiet" to="/review">Open Review</Link>
-          <button className="button button--quiet" type="button" onClick={onClose}>Upload another statement</button>
+          <Link className="button button--primary" to="/review">Open Review</Link>
+          <button className="button button--secondary" type="button" onClick={onClose}>Upload another statement</button>
         </div>
       </div>
     );
@@ -369,20 +378,20 @@ function MergeActions({ p, d, rows, onClose }: { p: StatementPreview; d: Diagnos
         <div className="stmt-confirm">
           <p>The {gap} gap is kept on record. Merge anyway?</p>
           <div className="actions">
-            <button className="button button--primary" type="button" onClick={() => start(true)}>Yes, merge anyway</button>
-            <button className="button button--quiet" type="button" onClick={() => setConfirming(false)}>Cancel</button>
+            <button className="button button--danger" type="button" onClick={() => start(true)}>Yes, merge anyway</button>
+            <button className="button button--secondary" type="button" onClick={() => setConfirming(false)}>Cancel</button>
           </div>
         </div>
       ) : (
         <div className="actions">
           {p.account_id === null ? <p className="muted">Pick the account to merge.</p> : failed ? (
-            <button className="button stmt__anyway" type="button" onClick={() => setConfirming(true)}>Merge anyway</button>
+            <button className="button button--secondary" type="button" onClick={() => setConfirming(true)}>Merge anyway</button>
           ) : (
             <button className="button button--primary" type="button" disabled={rows === 0} onClick={() => start(false)}>
               {`Merge ${plural(rows, "row", "rows")} into ${p.account_name ?? ""}`}
             </button>
           )}
-          <button className="button button--quiet" type="button" disabled={discard.isPending}
+          <button className="button button--secondary" type="button" disabled={discard.isPending}
             onClick={() => discard.mutate(p.id, { onSuccess: onClose })}>Discard</button>
         </div>
       )}

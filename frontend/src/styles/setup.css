@@ -1,69 +1,100 @@
-/* First-run setup and bulk categorization. */
+/* First-run setup: a numbered stepper (the steps really are a sequence), then the current step on a sheet. */
 .setup-steps {
   display: flex;
   flex-wrap: wrap;
-  gap: var(--s2) var(--s4);
-  margin: 0 0 var(--s4);
+  gap: var(--s2) var(--s5);
+  margin: 0 0 var(--s5);
   padding: 0;
   list-style: none;
-  counter-reset: step;
 }
 .setup-steps__step {
-  counter-increment: step;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
   color: var(--ink-muted);
+  font-weight: var(--w-medium);
 }
-.setup-steps__step::before {
-  content: counter(step) ". ";
+.setup-steps__mark {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-raised);
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  font-variant-numeric: tabular-nums;
+}
+.setup-steps__step--done {
+  color: var(--ink-soft);
+}
+.setup-steps__step--done .setup-steps__mark {
+  border-color: var(--accent);
+  background: var(--accent);
+  color: var(--on-ink);
 }
 .setup-steps__step[aria-current="step"] {
-  color: var(--accent);
-  font-weight: var(--w-title);
+  color: var(--ink);
+  font-weight: var(--w-strong);
+}
+.setup-steps__step[aria-current="step"] .setup-steps__mark {
+  border-color: var(--ink);
+  background: var(--ink);
+  color: var(--on-ink);
 }
 .setup-step {
-  max-width: 40rem;
   display: grid;
-  gap: var(--s3);
+  gap: var(--s4);
+  max-width: 48rem;
+  padding: var(--s5);
 }
 .setup-step__title {
-  margin: 0;
-  font-size: var(--t-lead);
+  font-size: var(--t-title);
   font-weight: var(--w-title);
+  font-variation-settings: "wdth" var(--wdth-title);
+}
+.setup-step .account-form {
+  margin: 0;
+  padding: var(--s4);
+  box-shadow: none;
+  background: var(--paper);
 }
 .setup-list {
   margin: 0;
-  padding-left: var(--s4);
+  padding: 0;
+  list-style: none;
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+}
+.setup-list li {
+  display: flex;
+  justify-content: space-between;
+  gap: var(--s3);
+  padding: var(--s2) var(--s3);
+  border-top: 1px solid var(--rule);
+  font-weight: var(--w-strong);
+}
+.setup-list li:first-child {
+  border-top: 0;
+}
+.setup-list .muted {
+  font-weight: var(--w-body);
 }
 .setup-late {
   display: block;
+  margin-top: var(--s1);
   padding: 0;
   background: none;
   border: 0;
+  color: var(--margin-ink);
+  font-size: var(--t-small);
 }
-.payee-groups {
-  margin: 0;
-  padding: 0;
-  list-style: none;
-  max-width: 48rem;
-}
-.payee-group {
-  display: grid;
-  grid-template-columns: 1fr minmax(10rem, 14rem) auto;
-  gap: var(--s2) var(--s3);
-  align-items: center;
-  padding: var(--s3) 0;
-  border-top: 1px solid var(--rule);
-}
-.payee-group__who {
-  display: grid;
-}
-.payee-group__name {
-  font-weight: var(--w-title);
-}
-.payee-group > .form-error {
-  grid-column: 1 / -1;
-}
-@media (max-width: 40rem) {
-  .payee-group {
-    grid-template-columns: 1fr;
+@media (max-width: 640px) {
+  .setup-steps {
+    gap: var(--s2) var(--s4);
+  }
+  .setup-step {
+    padding: var(--s4);
   }
 }

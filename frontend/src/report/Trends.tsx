@@ -1,11 +1,11 @@
 // Per-category trends for the last 12 months (PRD §7.7; slice 21): small multiples, one per category.
 //
 // Each chart has its own vertical scale, labelled at its top: rent and coffee share no axis worth reading.
-// History is short at first, so the charts are sparse but never broken: months before the history are a
-// quiet band with no marks, one month of data is a point, two or more are a line, and the running month
-// (and a partly covered first month) is a hollow point that says "so far". One hue (the report's accent),
-// 2px line, 8px points with a surface ring, a crosshair that snaps to the nearest month on hover or with
-// the arrow keys, and every value again in a table (dataviz skill).
+// History is short at first, so the charts are sparse but never broken: the axis starts where the history starts
+// (three months at least), one month of data is a point, two or more are a line, and the running month (and a
+// partly covered first month) is a hollow point that says "so far". One hue (the report's accent), 2px line, 8px
+// points with a surface ring, a crosshair that snaps to the nearest month on hover or with the arrow keys, its
+// reading in the chart's header (never over the line), and every value again in a table (dataviz skill).
 import { type KeyboardEvent, type PointerEvent, useState } from "react";
 
 import { type TrendCategory, type Trends as TrendsData, useTrends } from "../api/report";
@@ -24,6 +24,7 @@ const RIGHT = W - 8;
 const TOP = 10;
 const BOTTOM = 82;
 const STEPS = [1, 1.5, 2, 3, 4, 5, 6, 8, 10];
+const MIN_MONTHS = 3; // the narrowest axis: fewer months than this would draw one lonely point mid-chart
 
 /** The smallest "nice" number at or above `v` (in paise): 27,000 → 30,000; 18,240 → 20,000. */
 function nice(v: number): number {
@@ -45,31 +46,37 @@ export function Trends() {
   const trends = useTrends();
   if (!trends.data) return null;
   const t = trends.data;
+  // the first month on the axis: where the history starts, or the first month any category has data
+  const known = t.categories.flatMap((c) => c.months.flatMap((v, i) => (v === null ? [] : [i])));
+  const historyAt = t.history_from ? t.months.indexOf(t.history_from.slice(0, 7)) : -1;
+  const first = historyAt >= 0 ? historyAt : known.length ? Math.min(...known) : 0;
+  const from = Math.max(0, Math.min(first, t.months.length - MIN_MONTHS));
   return (
-    <section className="sheet sheet--ruled trends" aria-labelledby="trends-h">
-      <div className="moved__head">
+    <section className="sheet sheet--pad trends" aria-labelledby="trends-h">
+      <div className="section-head">
         <h2 id="trends-h">Last 12 months, by category</h2>
-        <p className="muted">
+        <p>
           Each chart has its own scale.
           {t.history_from && ` History starts ${monthLong(t.history_from.slice(0, 7))}.`}
         </p>
       </div>
       {t.categories.length === 0
         ? <p className="muted">No spending yet. Each category gets a chart once money goes out.</p>
-        : <div className="trends__grid">{t.categories.map((c) => <Panel key={c.category_id ?? "none"} t={t} c={c} />)}</div>}
+        : <div className="trends__grid">{t.categories.map((c) => <Panel key={c.category_id ?? "none"} t={t} c={c} from={from} />)}</div>}
     </section>
   );
 }
 
-function Panel({ t, c }: { t: TrendsData; c: TrendCategory }) {
+function Panel({ t, c, from }: { t: TrendsData; c: TrendCategory; from: number }) {
   const [active, setActive] = useState<number | null>(null);
   const partial = new Set(t.partial);
-  const known = c.months.flatMap((v, i) => (v === null ? [] : [i]));
+  const known = c.months.flatMap((v, i) => (v === null || i < from ? [] : [i]));
   const values = known.map((i) => c.months[i] as number);
   const top = nice(Math.max(0, ...values));
   const bottom = -nice(-Math.min(0, ...values));
   const span = top - bottom || 1;
-  const x = (i: number) => LEFT + (i * (RIGHT - LEFT)) / (t.months.length - 1);
+  const last = t.months.length - 1;
+  const x = (i: number) => LEFT + ((i - from) * (RIGHT - LEFT)) / Math.max(1, last - from);
   const y = (v: number) => BOTTOM - ((v - bottom) * (BOTTOM - TOP)) / span;
   const firstKnown = known[0];
   const full = [...known].reverse().find((i) => !partial.has(t.months[i] ?? ""));
@@ -79,7 +86,7 @@ function Panel({ t, c }: { t: TrendsData; c: TrendCategory }) {
   const onMove = (e: PointerEvent<SVGSVGElement>) => {
     const box = e.currentTarget.getBoundingClientRect();
     const ux = ((e.clientX - box.left) / box.width) * W;
-    setActive(nearest(Math.round(((ux - LEFT) / (RIGHT - LEFT)) * (t.months.length - 1))));
+    setActive(nearest(from + Math.round(((ux - LEFT) / (RIGHT - LEFT)) * (last - from))));
   };
   const onKey = (e: KeyboardEvent<SVGSVGElement>) => {
     const at = active === null ? known.length - 1 : known.indexOf(active);
@@ -94,8 +101,15 @@ function Panel({ t, c }: { t: TrendsData; c: TrendCategory }) {
   return (
     <figure className="trend" aria-label={c.name}>
       <figcaption className="trend__head">
-        <span className="trend__name">{c.name}</span>
-        {headline !== undefined && (
+        <span className="trend__name" title={c.name}>{c.name}</span>
+        {shown ? (
+          <span className="trend__now trend__tip" role="status">
+            <strong className="trend__value">{formatPaise(shown.v)}</strong>
+            {/* the header's own short form ("Oct, so far"), so hovering changes the figure and not the line's length;
+                a month name is unambiguous on a 12-month axis, and the table below has the years */}
+            <span className="trend__when">{monthShort(shown.ym)}{partial.has(shown.ym) ? ", so far" : ""}</span>
+          </span>
+        ) : headline !== undefined && (
           <span className="trend__now">
             <span className="trend__value">{formatPaise(c.months[headline] as number)}</span>
             <span className="trend__when">
@@ -110,7 +124,7 @@ function Panel({ t, c }: { t: TrendsData; c: TrendCategory }) {
           onPointerMove={onMove} onPointerDown={onMove} onKeyDown={onKey}
           onPointerLeave={(e) => { if (e.pointerType !== "touch") setActive(null); }}  // a tap keeps its reading
           onFocus={() => setActive(known.at(-1) ?? null)} onBlur={() => setActive(null)}>
-          {firstKnown !== undefined && firstKnown > 0 && (
+          {firstKnown !== undefined && firstKnown > from && (
             <rect className="trend__before" x={LEFT} y={TOP} width={x(firstKnown) - LEFT - 6} height={BOTTOM - TOP} />
           )}
           <line className="trend__grid" x1={LEFT} x2={RIGHT} y1={y(top)} y2={y(top)} />
@@ -118,8 +132,9 @@ function Panel({ t, c }: { t: TrendsData; c: TrendCategory }) {
           <text className="trend__tick" x={LEFT - 4} y={y(top) + 3} textAnchor="end">{compact(top)}</text>
           <text className="trend__tick" x={LEFT - 4} y={y(0) + 3} textAnchor="end">0</text>
           {bottom < 0 && <text className="trend__tick" x={LEFT - 4} y={y(bottom) + 3} textAnchor="end">{compact(bottom)}</text>}
-          {[0, 6, t.months.length - 1].map((i) => (
-            <text key={i} className="trend__tick" x={x(i)} y={H - 6} textAnchor={i === 0 ? "start" : i === 6 ? "middle" : "end"}>
+          {[...new Set([from, Math.round((from + last) / 2), last])].map((i) => (
+            <text key={i} className="trend__tick" x={x(i)} y={H - 6}
+              textAnchor={i === from ? "start" : i === last ? "end" : "middle"}>
               {monthShort(t.months[i] ?? "")}
             </text>
           ))}
@@ -131,13 +146,6 @@ function Panel({ t, c }: { t: TrendsData; c: TrendCategory }) {
               data-partial={partial.has(t.months[i] ?? "") ? "true" : "false"} />
           ))}
         </svg>
-        {shown && (
-          <div className="trend__tip" role="status"
-            style={{ left: `${Math.min(80, Math.max(20, (x(active ?? 0) / W) * 100))}%` }}>
-            <strong>{formatPaise(shown.v)}</strong>
-            <span>{monthLong(shown.ym)}{partial.has(shown.ym) ? ", so far" : ""}</span>
-          </div>
-        )}
       </div>
       <table className="visually-hidden">
         <caption>{c.name} by month</caption>

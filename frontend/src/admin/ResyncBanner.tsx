@@ -7,6 +7,7 @@ import { Link } from "react-router";
 import { describeError } from "../api/client";
 import { type ResyncNotice, useDismissNotice, useResyncNotices } from "../api/resync";
 import { formatDate, formatInstantDate } from "../dates";
+import { Icon } from "../ui/Icon";
 
 const VERB: Record<string, string> = { edited: "was edited", approved: "was approved", shipped_updated: "was updated with the app" };
 
@@ -20,15 +21,16 @@ export function ResyncBanner() {
       <ul>
         {notices.data.map((n: ResyncNotice) => (
           <li key={n.id} className="resync-banner__item">
+            <Icon name="refresh" size={18} className="resync-banner__icon" />
             <p>
               {n.template_name} {VERB[n.reason] ?? "changed"} on {formatInstantDate(n.created_at)}. Emails from{" "}
               {formatDate(n.range_from)} to {formatDate(n.range_to)} may now read differently.
             </p>
             <span className="resync-banner__actions">
-              <Link className="button button--primary" to={`/admin/resync?from=${n.range_from}&to=${n.range_to}`}>
+              <Link className="button button--primary button--small" to={`/admin/resync?from=${n.range_from}&to=${n.range_to}`}>
                 Re-sync that range
               </Link>
-              <button className="button button--quiet" type="button" disabled={dismiss.isPending}
+              <button className="button button--secondary button--small" type="button" disabled={dismiss.isPending}
                 onClick={() => dismiss.mutate(n.id)}>Dismiss</button>
             </span>
           </li>

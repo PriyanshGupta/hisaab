@@ -1,9 +1,7 @@
 /*
- * Balances and the balance check (slice 20), inside the report. Quiet by design: the period's spending
- * total stays the page's one hero; a balance is a stat, a size below it, in proportional figures
- * (dataviz: tabular figures only in columns). A gap carries the app's attention motif, the red double
- * margin rule, and always says in words which account and which way, so colour is never the signal.
- * A gap that has been fixed wears the green rule instead. Selectors sit under .report.
+ * Balances and the balance check (slice 20), inside the report. Quiet by design: the period's spending total
+ * stays the page's one hero; a balance is a stat, a size below it. A gap is a callout naming its account and
+ * which way it runs, in words, so colour is never the signal; a gap that has been fixed turns green. Under .report.
  */
 
 /* ---------- banners ---------- */
@@ -12,95 +10,98 @@
   gap: var(--s3);
 }
 .report .check {
-  position: relative;
   display: grid;
-  gap: var(--s1);
-  padding: var(--s3) var(--s4) var(--s3) calc(var(--s5) + var(--s2));
-  background: var(--paper-raised);
-  border: 1px solid var(--rule);
-  border-radius: 8px;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: var(--s2) var(--s3);
+  padding: var(--s3) var(--s4);
+  background: var(--margin-wash);
+  border: 1px solid var(--margin-edge);
+  border-radius: var(--r-sheet);
 }
-.report .check::before {
-  content: "";
-  position: absolute;
-  inset: var(--s2) auto var(--s2) var(--s3);
-  width: calc(var(--margin-rule-gap) + 2px);
-  border-inline: 1px solid var(--margin);
+.report .check--fixed {
+  background: var(--accent-wash);
+  border-color: var(--accent-edge);
 }
-.report .check--fixed::before {
-  width: 0;
-  border-inline: 0;
-  border-left: 2px solid var(--accent);
+.report .check__icon {
+  align-self: start;
+  margin-top: 2px;
+  color: var(--margin);
+}
+.report .check--fixed .check__icon {
+  color: var(--accent);
+}
+.report .check__text {
+  display: grid;
+  gap: 2px;
+  min-width: 0;
 }
 .report .check__title {
   font-weight: var(--w-strong);
-  max-width: 44rem;
 }
 .report .check__body {
   color: var(--ink-soft);
-  max-width: 44rem;
+  font-size: var(--t-small);
 }
-.report .check .actions {
-  margin-top: var(--s1);
+.report .check__actions {
+  justify-content: flex-end;
 }
-.report .check__link {
-  font-weight: var(--w-strong);
-  color: var(--accent);
-  text-underline-offset: 0.18em;
+.report .check__confirm,
+.report .check__error {
+  grid-column: 2 / -1;
 }
 .report .check__confirm {
   display: grid;
   gap: var(--s2);
-  margin-top: var(--s1);
   max-width: 44rem;
+  padding: var(--s3);
+  background: var(--paper-raised);
+  border: 1px solid var(--margin-edge);
+  border-radius: var(--r-control);
 }
 
-/* ---------- the panel ---------- */
-.report .balances {
-  padding-right: var(--s5);
-  padding-bottom: var(--s4);
+/* ---------- the panel: one tile per account ---------- */
+.report .balances__grid {
+  display: grid;
+  grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
+  gap: 0 var(--s5);
 }
 .report .balance {
   display: grid;
-  gap: var(--s1);
+  align-content: start;
+  gap: 2px;
   padding: var(--s3) 0;
-  border-bottom: 1px solid var(--rule);
-}
-.report .balance:last-child {
-  border-bottom: 0;
-}
-.report .balance__line {
-  display: flex;
-  justify-content: space-between;
-  align-items: baseline;
-  gap: var(--s3);
-  flex-wrap: wrap;
+  border-top: 1px solid var(--rule);
 }
 .report .balance__name {
   font-weight: var(--w-strong);
+  color: var(--ink-soft);
 }
 .report .balance__figure {
   font-size: var(--t-title);
   font-weight: var(--w-title);
+  font-variant-numeric: tabular-nums;
   white-space: nowrap;
 }
 .report .balance__none {
+  font-size: var(--t-lead);
   color: var(--ink-muted);
 }
 .report .balance__how {
   font-size: var(--t-small);
   color: var(--ink-muted);
-  min-width: 0;
 }
 .report .balance__gap {
-  margin-left: var(--s2);
-  font-weight: var(--w-strong);
-  color: var(--margin);
-  text-underline-offset: 0.18em;
-}
-.report .balance__enter {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s1);
+  justify-self: start;
   font-size: var(--t-small);
-  padding-right: 0;
+  font-weight: var(--w-strong);
+  color: var(--margin-ink);
+}
+.report .balance .actions {
+  margin-top: var(--s1);
 }
 
 /* ---------- the checkpoint form ---------- */
@@ -112,7 +113,6 @@
 .report .checkpoint__note {
   font-size: var(--t-small);
   color: var(--ink-soft);
-  max-width: 40rem;
 }
 .report .checkpoint__fields {
   display: flex;
@@ -121,14 +121,15 @@
   gap: var(--s3);
 }
 .report .checkpoint__fields .field {
-  width: min(100%, 12rem);
+  flex: 1 1 9rem;
 }
 
 @media (max-width: 640px) {
-  .report .balances {
-    padding-right: var(--s3);
-  }
   .report .check {
-    padding-right: var(--s3);
+    grid-template-columns: auto minmax(0, 1fr);
+  }
+  .report .check__actions {
+    grid-column: 2;
+    justify-content: flex-start;
   }
 }

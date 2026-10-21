@@ -29,8 +29,11 @@ export function LoginPage() {
       </div>
 
       <main className="login__page">
-        <form className="login__form sheet sheet--ruled" onSubmit={submit} noValidate>
-          <h1 className="login__title">Sign in</h1>
+        <form className="login__form sheet" onSubmit={submit} noValidate>
+          <div className="login__head">
+            <h1 className="login__title">Sign in</h1>
+            <p className="login__sub">to your household ledger</p>
+          </div>
 
           <label className="field">
             <span className="field__label">Username</span>

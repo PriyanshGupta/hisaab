@@ -1,14 +1,16 @@
 /*
- * The authenticated frame. One markup, two layouts:
- *  phone (< 960px): slim top bar (menu button, wordmark; the red double rule
- *                   beneath it), page. The sidebar is a drawer from the left.
- *  desktop:         sidebar (its right edge is the red double margin rule), page
- * The page to the right of / below the rule reads as the ledger sheet.
+ * The authenticated frame: a ledger seen open. The sidebar is the green cloth spine (the sign-in cover's cloth);
+ * the page is the paper, and its red double margin rule, the app's one motif, runs once down the paper's left
+ * edge, with everything written to the right of it. One markup, two layouts:
+ *  phone (< 960px): a slim green bar on top (menu button, wordmark, what's waiting in Review), the margin rule
+ *                   under it; the sidebar is a drawer from the left.
+ *  desktop:         spine, rule, page.
  */
 .shell {
   min-height: 100dvh;
 }
 
+/* ---------- the phone bar ---------- */
 .shell__bar {
   position: sticky;
   top: 0;
@@ -16,38 +18,197 @@
   display: flex;
   align-items: center;
   gap: var(--s1);
-  min-height: 52px;
-  padding: 0 var(--s4) 0 var(--s1);
-  background: var(--paper);
+  min-height: 56px;
+  padding: 0 var(--s3) 0 var(--s1);
+  background: var(--spine);
+  color: var(--on-spine);
 }
 /* Red double margin rule, running horizontally under the phone bar. */
 .shell__bar::after {
   content: "";
   position: absolute;
-  inset: auto 0 0 0;
+  inset: 100% 0 auto 0;
   height: calc(var(--margin-rule-gap) + 2px);
   border-block: 1px solid var(--margin);
   opacity: var(--margin-rule-opacity);
   pointer-events: none;
 }
-.shell__menu {
+.shell__menu,
+.shell__close {
   display: grid;
   place-items: center;
+  flex: none;
   width: var(--touch);
   height: var(--touch);
   padding: 0;
   border: 0;
   border-radius: var(--r-control);
   background: none;
-  color: var(--ink);
+  color: var(--on-spine);
   cursor: pointer;
 }
-.shell__menu:hover {
-  background: var(--paper-sunk);
+.shell__menu:hover,
+.shell__close:hover {
+  background: var(--spine-hover);
 }
-.shell__menu:focus-visible {
-  outline: none;
-  box-shadow: var(--focus);
+.shell :is(.shell__menu, .shell__close, .sidenav__link, .shell__signout, .shell__bar-review, .shell__bar-mark):focus-visible {
+  outline-color: var(--on-spine);
+}
+.shell__bar-mark {
+  display: inline-flex;
+  align-items: center;
+  min-height: var(--touch);
+  font-size: 1.3rem;
+  text-decoration: none;
+  color: var(--on-spine);
+  padding: 0 var(--s1);
+  border-radius: var(--r-control);
+}
+.shell__bar-mark:hover {
+  color: var(--on-spine);
+}
+.shell__bar-review {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  min-height: var(--touch);
+  margin-left: auto;
+  padding: 0 var(--s3);
+  border-radius: var(--r-pill);
+  background: var(--spine-hover);
+  color: var(--on-spine);
+  font-weight: var(--w-strong);
+  font-variant-numeric: tabular-nums;
+  text-decoration: none;
+}
+.shell__bar-review:hover {
+  color: var(--on-spine);
+  background: var(--spine-rule);
+}
+
+/* ---------- the spine: a column on desktop, a drawer on phones ---------- */
+.shell__sidebar {
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 4;
+  width: min(18rem, 86vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s5);
+  padding: var(--s4) var(--s3) calc(var(--s3) + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--spine);
+  color: var(--on-spine);
+  scrollbar-color: var(--spine-rule) transparent;
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1), visibility 0s linear 200ms;
+}
+.shell--drawer-open .shell__sidebar {
+  transform: none;
+  visibility: visible;
+  box-shadow: 8px 0 32px -8px rgb(20 48 42 / 0.4);
+  transition: transform 200ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+.shell__brand {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: var(--s2);
+  min-height: var(--touch);
+  padding-left: var(--s3);
+}
+.shell__brand .wordmark {
+  font-size: var(--t-title);
+}
+
+.shell__nav {
+  flex: 1;
+  display: grid;
+  align-content: start;
+  gap: var(--s3);
+}
+.sidenav {
+  list-style: none;
+  margin: 0;
+  padding: 0 0 var(--s3);
+  display: grid;
+  gap: 2px;
+  border-bottom: 1px solid var(--spine-rule);
+}
+.sidenav:last-child {
+  border-bottom: 0;
+  padding-bottom: 0;
+}
+.sidenav__link {
+  display: flex;
+  align-items: center;
+  gap: var(--s3);
+  min-height: var(--touch);
+  padding: 0 var(--s3);
+  color: var(--on-spine-muted);
+  font-weight: var(--w-medium);
+  text-decoration: none;
+  border-radius: var(--r-control);
+  transition: background-color 120ms ease-out, color 120ms ease-out;
+}
+.sidenav__link:hover {
+  color: var(--on-spine);
+  background: var(--spine-hover);
+}
+.sidenav__label {
+  flex: 1;
+  min-width: 0;
+}
+/* Current page: a leaf of paper on the spine. */
+.sidenav__link.active {
+  color: var(--ink);
+  font-weight: var(--w-strong);
+  background: var(--paper-raised);
+}
+.sidenav__link.active .icon {
+  color: var(--accent);
+}
+.sidenav__count {
+  min-width: 1.6rem;
+  padding: 1px 7px;
+  border-radius: var(--r-pill);
+  background: var(--spine-rule);
+  color: var(--on-spine);
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  font-variant-numeric: tabular-nums;
+  text-align: center;
+  line-height: 1.4;
+}
+.sidenav__link.active .sidenav__count {
+  background: var(--margin-wash);
+  color: var(--margin-ink);
+}
+
+/* Who is signed in, and the way out. */
+.shell__user {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: var(--s1) var(--s3);
+  padding: var(--s3) var(--s3) 0;
+  border-top: 1px solid var(--spine-rule);
+}
+.shell__avatar {
+  display: grid;
+  place-items: center;
+  width: 2.1rem;
+  height: 2.1rem;
+  border-radius: 50%;
+  background: var(--paper-raised);
+  color: var(--ink);
+  font-weight: var(--w-title);
+}
+.shell__who {
+  display: grid;
+  min-width: 0;
+  line-height: 1.25;
 }
 .shell__user-name {
   font-weight: var(--w-strong);
@@ -55,72 +216,54 @@
   text-overflow: ellipsis;
   white-space: nowrap;
 }
+.shell__user-role {
+  font-size: var(--t-small);
+  color: var(--on-spine-muted);
+}
+.shell__signout {
+  grid-column: 1 / -1;
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
+  justify-self: start;
+  min-height: 36px;
+  margin-left: calc(-1 * var(--s2));
+  padding: 0 var(--s2);
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--on-spine-muted);
+  font: inherit;
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  cursor: pointer;
+}
+.shell__signout:hover {
+  color: var(--on-spine);
+  background: var(--spine-hover);
+}
 
-/* The sidebar: a column on desktop; on phones, a drawer that slides in from the left over a scrim. */
-.shell__sidebar {
-  position: fixed;
-  inset: 0 auto 0 0;
-  z-index: 4;
-  width: min(17rem, 84vw);
-  display: flex;
-  flex-direction: column;
-  gap: var(--s6);
-  padding: var(--s5) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom));
-  overflow-y: auto;
-  background: var(--paper);
-  transform: translateX(-100%);
-  visibility: hidden;
-  transition: transform 180ms ease-out, visibility 0s linear 180ms;
-}
-.shell--drawer-open .shell__sidebar {
-  transform: none;
-  visibility: visible;
-  transition: transform 180ms ease-out;
-}
-/* Red double margin rule down the sidebar's right edge. */
-.shell__sidebar::after {
-  content: "";
-  position: absolute;
-  inset: 0 0 0 auto;
-  width: calc(var(--margin-rule-gap) + 2px);
-  border-inline: 1px solid var(--margin);
-  opacity: var(--margin-rule-opacity);
-  pointer-events: none;
-}
-.shell__sidebar .wordmark {
-  font-size: var(--t-title);
-  padding-left: var(--s3);
-}
-.shell__sidebar nav {
-  flex: 1;
-}
-.shell__sidebar-user {
-  display: grid;
-  justify-items: start;
-  gap: var(--s1);
-  padding: var(--s3) var(--s3) 0;
-  border-top: 1px solid var(--rule);
-}
-.shell__sidebar-user .button--quiet {
-  padding-inline: 0; /* align with the name above it */
-}
 .shell__scrim {
   position: fixed;
   inset: 0;
   z-index: 3;
   padding: 0;
   border: 0;
-  background: rgb(20 48 42 / 0.28); /* --ink, thinned */
+  background: rgb(20 48 42 / 0.36); /* --ink, thinned */
   cursor: default;
 }
 
+/* ---------- the page ---------- */
 .shell__main {
-  padding: var(--s5) var(--s4) calc(var(--s7) + env(safe-area-inset-bottom));
-  max-width: var(--content-max);
+  position: relative;
   min-width: 0;
+  padding: var(--s5) var(--s4) calc(var(--s7) + env(safe-area-inset-bottom));
 }
 .shell__main:focus {
   outline: none;
+}
+.shell__page {
+  max-width: var(--page-max);
 }
 
 @media (prefers-reduced-motion: reduce) {
@@ -136,7 +279,8 @@
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   }
   .shell__bar,
-  .shell__scrim {
+  .shell__scrim,
+  .shell__close {
     display: none;
   }
   .shell__sidebar {
@@ -145,39 +289,23 @@
     z-index: auto;
     width: auto;
     height: 100dvh;
-    padding: var(--s5) var(--s4) var(--s4);
+    padding: var(--s5) var(--s3) var(--s4);
     transform: none;
     visibility: visible;
     transition: none;
   }
   .shell__main {
-    padding: var(--s6) var(--s6) var(--s7);
+    min-height: 100dvh;
+    padding: var(--s6) var(--s7) var(--s7) calc(var(--s7) + var(--s3));
   }
-}
-
-.sidenav {
-  list-style: none;
-  margin: 0;
-  padding: 0;
-  display: grid;
-  gap: var(--s1);
-}
-.sidenav__link {
-  display: block;
-  padding: var(--s2) var(--s3);
-  color: var(--ink-soft);
-  font-weight: 520;
-  text-decoration: none;
-  border-radius: var(--r-control);
-}
-.sidenav__link:hover {
-  color: var(--ink);
-  background: var(--paper-sunk);
-}
-/* Current page: a white sheet with an ink bar on its left edge. */
-.sidenav__link.active {
-  color: var(--ink);
-  font-weight: 620;
-  background: var(--paper-raised);
-  box-shadow: inset 3px 0 0 var(--ink);
+  /* The red double margin rule, down the paper's left edge beside the spine. */
+  .shell__main::before {
+    content: "";
+    position: absolute;
+    inset: 0 auto 0 var(--s5);
+    width: calc(var(--margin-rule-gap) + 2px);
+    border-inline: 1px solid var(--margin);
+    opacity: var(--margin-rule-opacity);
+    pointer-events: none;
+  }
 }

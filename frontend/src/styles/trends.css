@@ -4,24 +4,11 @@
  * line (single series per chart: no legend, the title names it). Months before the history are a sunk band
  * with no marks; the running month's point is hollow. Text never wears the line colour. Under .report.
  */
-.report .visually-hidden {
-  position: absolute;
-  width: 1px;
-  height: 1px;
-  overflow: hidden;
-  clip-path: inset(50%);
-  white-space: nowrap;
-}
-
 /* ---------- the grid ---------- */
-.report .trends {
-  padding-right: var(--s5);
-  padding-bottom: var(--s4);
-}
 .report .trends__grid {
   display: grid;
   grid-template-columns: repeat(auto-fill, minmax(15rem, 1fr));
-  column-gap: var(--s5);
+  gap: 0 var(--s6);
 }
 .report .trend {
   margin: 0;
@@ -29,18 +16,25 @@
   border-top: 1px solid var(--rule);
   min-width: 0;
 }
+/* One line, always: the name gives way (an ellipsis, the full name in its title) before the reading ever wraps it,
+   so moving across a chart never moves the chart. */
 .report .trend__head {
+  min-height: 1.6rem;
   display: flex;
   justify-content: space-between;
   align-items: baseline;
-  gap: var(--s2);
+  gap: var(--s3);
 }
 .report .trend__name {
-  font-weight: var(--w-strong);
+  flex: 1 1 auto;
   min-width: 0;
-  overflow-wrap: anywhere;
+  font-weight: var(--w-strong);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
 }
 .report .trend__now {
+  flex: none;
   display: flex;
   align-items: baseline;
   gap: var(--s1);
@@ -87,7 +81,7 @@
   stroke-width: 1;
 }
 .report .trend__tick {
-  font-size: 9px;
+  font-size: 10px;
   fill: var(--ink-muted);
   font-variant-numeric: tabular-nums;
 }
@@ -107,22 +101,9 @@
   fill: var(--paper-raised);
   stroke: var(--accent);
 }
-.report .trend__tip {
-  position: absolute;
-  top: -0.25rem;
-  transform: translate(-50%, -100%);
-  display: grid;
-  padding: var(--s1) var(--s2);
-  background: var(--paper-raised);
-  border: 1px solid var(--rule-strong);
-  border-radius: var(--r-control);
-  white-space: nowrap;
-  pointer-events: none;
-  z-index: 1;
-}
-.report .trend__tip span {
-  font-size: var(--t-small);
-  color: var(--ink-soft);
+/* The reading under the crosshair takes the header's place, so it never covers the line. */
+.report .trend__tip .trend__value {
+  color: var(--accent-strong);
 }
 
 /* ---------- recurring charges ---------- */
@@ -131,18 +112,20 @@
   margin: 0;
   list-style: none;
 }
+.report .recurring__row {
+  align-items: start;
+}
 .report .recurring__payee {
   font-weight: var(--w-strong);
+  overflow-wrap: anywhere;
 }
 .report .recurring__money {
   display: flex;
   flex-direction: column;
   align-items: flex-end;
   text-align: right;
+  white-space: nowrap;
 }
-
-@media (max-width: 640px) {
-  .report .trends {
-    padding-right: var(--s3);
-  }
+.report .recurring .frow__sub {
+  text-wrap: pretty;
 }

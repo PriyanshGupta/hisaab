@@ -65,7 +65,7 @@ test("the running month is hollow and says so far; the header shows the latest f
   expect(food.getByText("₹18,240.00", { selector: ".trend__value" })).toBeInTheDocument();
   expect(food.getByText("Sep", { selector: ".trend__when" })).toBeInTheDocument();
   fireEvent.keyDown(food.getByRole("img"), { key: "End" });
-  expect(food.getByRole("status")).toHaveTextContent("₹9,000.00Oct 2026, so far");
+  expect(food.getByRole("status")).toHaveTextContent("₹9,000.00Oct, so far");
 });
 
 test("a refunds-only category scales below zero and keeps the zero line", async () => {

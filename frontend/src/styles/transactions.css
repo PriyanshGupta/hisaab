@@ -1,8 +1,100 @@
-/* Transactions list (a .ledger table) with an inline detail row, and the Add form. */
+/* Transactions: the finder (search, two filters, dates), what it found, and the list as a ledger on a sheet, each
+   row opening in place. Also the Add form. */
+
+/* ---------- the finder ---------- */
+.finder {
+  display: grid;
+  gap: var(--s3);
+  margin-bottom: var(--s4);
+}
+.finder__fields {
+  display: grid;
+  grid-template-columns: minmax(0, 2fr) minmax(0, 1fr) minmax(0, 1fr);
+  gap: var(--s2);
+}
+.finder__search {
+  position: relative;
+  display: block;
+}
+.finder__search .field__input {
+  padding-left: 2.4rem;
+}
+.finder__search-icon {
+  position: absolute;
+  left: 0.8rem;
+  top: 50%;
+  transform: translateY(-50%);
+  color: var(--ink-muted);
+  pointer-events: none;
+}
+.finder__search input::-webkit-search-cancel-button {
+  cursor: pointer;
+}
+.txn-filter {
+  display: grid;
+  gap: var(--s3);
+}
+.finder__summary {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: var(--s1) var(--s4);
+  margin-bottom: var(--s3);
+  color: var(--ink-soft);
+  font-variant-numeric: tabular-nums;
+}
+.finder__summary strong {
+  color: var(--ink);
+}
+.finder__more {
+  display: grid;
+  justify-items: center;
+  gap: var(--s2);
+  padding: var(--s4) 0;
+  text-align: center;
+}
+
+/* ---------- the list ---------- */
+.txn-sheet {
+  overflow: hidden; /* the rounded sheet clips the table's square corners */
+}
+.txn-table th {
+  background: var(--paper-sunk);
+}
+.txn-table th:first-child,
+.txn-table td:first-child {
+  padding-left: var(--s4);
+}
+.txn-table th:last-child,
+.txn-table td:last-child {
+  padding-right: var(--s4);
+}
 .txn-table__date {
+  width: 7.5rem;
   white-space: nowrap;
   color: var(--ink-soft);
   font-variant-numeric: tabular-nums;
+}
+.txn-table__account {
+  width: 26%;
+  color: var(--ink-soft);
+}
+.txn-row {
+  cursor: pointer;
+  transition: background-color 100ms ease-out;
+}
+.txn-row:hover {
+  background: color-mix(in srgb, var(--paper-sunk) 60%, transparent);
+}
+.txn-row--open,
+.txn-row--open:hover {
+  background: var(--accent-wash);
+}
+.txn-row--open td {
+  border-bottom-color: transparent;
+}
+.txn-table tbody tr:last-child td {
+  border-bottom: 0;
 }
 .txn-row__toggle {
   border: 0;
@@ -12,60 +104,101 @@
   font-weight: var(--w-strong);
   color: var(--ink);
   text-align: left;
+  overflow-wrap: anywhere;
   cursor: pointer;
 }
 .txn-row__toggle:hover {
   text-decoration: underline;
-  text-underline-offset: 0.18em;
+  text-decoration-thickness: 1px;
+  text-underline-offset: 0.2em;
 }
-.txn-row__edited {
-  margin-left: var(--s2);
-  font-size: var(--t-small);
-  color: var(--ink-muted);
-}
-.txn-row__category {
-  display: block;
+.txn-row__sub {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: baseline;
+  gap: 0 var(--s3);
   font-size: var(--t-small);
   color: var(--ink-soft);
 }
-.txn-row__category--none {
-  color: var(--margin); /* uncategorized needs attention (the report's uncategorized line, PRD §7.4) */
+.txn-row__category--none,
+.txn-row__kind {
+  color: var(--ink-muted);
+  font-style: italic;
 }
-.txn-category {
-  display: grid;
-  gap: var(--s2);
-  padding-bottom: var(--s3);
-  border-bottom: 1px solid var(--rule);
-}
-.txn-category__status {
-  display: flex;
-  align-items: center;
-  gap: var(--s3);
-  flex-wrap: wrap;
+.txn-row__flag {
+  color: var(--margin-ink);
   font-weight: var(--w-strong);
 }
-.txn-category__change {
-  display: flex;
-  align-items: end;
-  gap: var(--s3);
-  flex-wrap: wrap;
+.txn-row__edited {
+  color: var(--ink-muted);
 }
-.txn-category__change .field {
-  min-width: 14rem;
+.txn-row__phone {
+  display: none;
 }
-.txn-row--open td {
-  border-bottom-color: transparent;
-}
+
+/* ---------- one transaction, open ---------- */
 .txn-detail > td {
-  background: var(--paper-raised);
+  padding: 0 var(--s4) var(--s4);
+  background: var(--accent-wash);
 }
 .txn-detail__body {
   display: grid;
   gap: var(--s3);
-  padding: var(--s3) 0;
+  padding: var(--s4);
+  background: var(--paper-raised);
+  border: 1px solid var(--accent-edge);
+  border-radius: var(--r-sheet);
+  font-variation-settings: "wdth" 100; /* prose and forms at full width, even where the list is condensed */
 }
-.txn-detail__body > * {
-  max-width: 40rem; /* forms keep a reading measure; the head below spans the row */
+.txn-detail__head {
+  display: flex;
+  justify-content: space-between;
+  align-items: flex-start;
+  gap: var(--s4);
+}
+.txn-detail__source {
+  display: grid;
+  gap: var(--s1);
+  min-width: 0;
+  max-width: 46rem;
+}
+.txn-detail__close {
+  flex: none;
+}
+.txn-detail__forms {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(17rem, 1fr));
+  gap: var(--s3);
+}
+.txn-panel {
+  display: grid;
+  align-content: start;
+  gap: var(--s3);
+  padding: var(--s3) var(--s4) var(--s4);
+  background: var(--paper);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+}
+.txn-panel__title {
+  font-size: var(--t-body);
+  font-weight: var(--w-title);
+}
+.txn-category__status {
+  display: flex;
+  align-items: center;
+  gap: var(--s2);
+  flex-wrap: wrap;
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+}
+.txn-category__saved {
+  color: var(--accent-strong);
+  font-weight: var(--w-strong);
+}
+.txn-correct__fields {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(9rem, 1fr));
+  gap: var(--s3);
 }
 .txn-edits {
   list-style: none;
@@ -79,151 +212,107 @@
   align-items: center;
   gap: var(--s3);
   flex-wrap: wrap;
+  font-size: var(--t-small);
 }
-.txn-correct {
-  display: grid;
-  gap: var(--s3);
+.txn-detail__delete-button {
+  color: var(--margin-ink);
+}
+.txn-detail__delete-button:hover:not(:disabled) {
+  background: var(--margin-wash);
+  color: var(--margin-ink);
 }
 
+/* ---------- Add ---------- */
 .entry-form {
   display: grid;
-  gap: var(--s4);
-  padding-top: var(--s5);
-  padding-bottom: var(--s5);
-  padding-right: var(--s5);
-  max-width: 46rem;
+  gap: var(--s5);
+  max-width: 48rem;
+  padding: var(--s5);
 }
-.entry-form select.field__input {
-  appearance: auto;
+.entry-form .form-grid {
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+}
+.entry-form__actions {
+  display: flex;
+  align-items: center;
+  gap: var(--s4);
+  flex-wrap: wrap;
+  padding-top: var(--s4);
+  border-top: 1px solid var(--rule);
 }
 .saved {
+  display: inline-flex;
+  align-items: center;
+  gap: var(--s2);
   font-weight: var(--w-strong);
-  color: var(--accent);
+  color: var(--accent-strong);
 }
 
-/* Phones: the account column folds away; the details cell still names the payee. The table keeps to the
-   screen: fixed columns for date and amount, and a long payee or email line wraps instead of pushing the
-   amount off the edge. */
+/* Phones: the list is name and amount; date and account fold under the name. The hidden columns keep zero
+   width rather than display: none, so the open row's four-column detail never grows an empty column. */
 @media (max-width: 640px) {
-  /* zero width, not display: none: the open row's detail spans four columns, and a removed one would come
-     back as an empty column at the right edge */
-  .txn-table .txn-table__account {
+  .finder__fields {
+    grid-template-columns: minmax(0, 1fr) minmax(0, 1fr);
+  }
+  .finder__search {
+    grid-column: 1 / -1;
+  }
+  .txn-sheet {
+    margin-inline: calc(-1 * var(--s2));
+  }
+  .txn-table {
+    table-layout: fixed;
+  }
+  .txn-table thead {
+    display: none;
+  }
+  .txn-table :is(th, td).txn-table__account,
+  .txn-table :is(th, td).txn-table__date {
     width: 0;
     padding: 0;
     overflow: hidden;
     visibility: hidden;
     white-space: nowrap;
+    font-size: 0;
   }
-  .txn-table {
-    table-layout: fixed;
-  }
-  .txn-table th:first-child {
-    width: 4.25rem;
-  }
-  .txn-table th.amount {
-    width: 6.75rem;
-  }
-  .txn-table th,
-  .txn-table td {
-    padding-inline: var(--s2);
-  }
-  .txn-table th:first-child,
-  .txn-table td:first-child {
-    padding-left: 0;
-  }
-  .txn-table th:last-child,
   .txn-table td.amount {
-    padding-right: 0;
+    width: 7.5rem;
+    vertical-align: top;
   }
-  .txn-table__date {
-    white-space: normal; /* "21 Oct" over "2026" */
-  }
-  .txn-row td,
-  .txn-detail__body {
+  .txn-row td {
     overflow-wrap: anywhere;
   }
+  .txn-table td.txn-row__details {
+    padding-left: var(--s3);
+  }
+  .txn-row__phone {
+    display: inline;
+    flex-basis: 100%;
+    color: var(--ink-muted);
+  }
   .txn-detail > td {
-    padding-inline: var(--s3);
+    padding: 0 var(--s2) var(--s2);
   }
-  .txn-category__change .field {
-    min-width: 0;
-    flex: 1 1 12rem;
+  .txn-detail__body {
+    padding: var(--s3);
   }
-}
-.txn-row {
-  cursor: pointer;
-}
-
-/* Date filter: everything, a shortcut, or a picked range. Pressed = what the list shows. */
-.txn-filter {
-  display: flex;
-  flex-direction: column;
-  gap: var(--s2);
-  margin-bottom: var(--s4);
-}
-.txn-filter__options {
-  display: flex;
-  flex-wrap: wrap;
-  gap: var(--s2);
-}
-.txn-filter__options button {
-  min-height: 36px;
-  padding: 0 var(--s3);
-  border: 1px solid var(--rule-strong);
-  border-radius: 999px;
-  background: var(--paper-raised);
-  color: var(--ink-soft);
-  font: inherit;
-  font-size: var(--t-small);
-  font-weight: var(--w-strong);
-  cursor: pointer;
-}
-.txn-filter__options button:hover { border-color: var(--ink); color: var(--ink); }
-.txn-filter__options button[aria-pressed="true"] { background: var(--ink); border-color: var(--ink); color: var(--on-ink); }
-.txn-filter__options button:focus-visible { outline: none; box-shadow: var(--focus); }
-.txn-filter__showing { font-size: var(--t-small); }
-
-/* The open transaction's head: where it came from on the left, Close at the row's right edge (under the
-   amount), styled as the date pills above the list. Clicking the name closes it too. */
-.txn-detail__body > .txn-detail__head {
-  max-width: none;
-  display: flex;
-  justify-content: space-between;
-  align-items: flex-start;
-  gap: var(--s4);
-  padding-bottom: var(--s3);
-  border-bottom: 1px solid var(--rule);
-}
-.txn-detail__source {
-  display: grid;
-  gap: var(--s2);
-  min-width: 0;
-  max-width: 40rem;
-}
-.txn-detail__close {
-  flex: none;
-  min-height: 32px;
-  padding: 0 var(--s3);
-  border: 1px solid var(--rule-strong);
-  border-radius: 999px;
-  background: transparent;
-  color: var(--ink-soft);
-  font: inherit;
-  font-size: var(--t-small);
-  font-weight: var(--w-strong);
-  cursor: pointer;
-}
-.txn-detail__close:hover { border-color: var(--ink); color: var(--ink); }
-.txn-detail__close:focus-visible { outline: none; box-shadow: var(--focus); }
-
-/* A saved category says so. */
-.txn-category__saved {
-  margin-top: var(--s2);
-  color: var(--accent);
-  font-weight: var(--w-strong);
-}
-
-@media (max-width: 640px) {
-  .txn-filter__options button,
-  .txn-detail__close { min-height: var(--touch); }
+  /* Close keeps its name for assistive tech; on a phone it is the icon alone, at the panel's corner */
+  .txn-detail__close {
+    width: var(--touch);
+    padding: 0;
+  }
+  .txn-detail__close-label {
+    position: absolute;
+    width: 1px;
+    height: 1px;
+    overflow: hidden;
+    clip-path: inset(50%);
+    white-space: nowrap;
+  }
+  .entry-form {
+    padding: var(--s4);
+  }
+  .entry-form .form-grid {
+    grid-template-columns: minmax(0, 1fr);
+  }
 }

@@ -23,8 +23,8 @@ export function AdminLayout() {
   }
   return (
     <div className="admin">
-      <nav className="admin__sections" aria-label="Admin sections">
-        {SECTIONS.map((s) => <NavLink key={s.to} className="admin__section" to={s.to}>{s.label}</NavLink>)}
+      <nav className="tabs admin__sections" aria-label="Admin sections">
+        {SECTIONS.map((s) => <NavLink key={s.to} className="tab admin__section" to={s.to}>{s.label}</NavLink>)}
       </nav>
       <ResyncBanner />
       <Outlet />

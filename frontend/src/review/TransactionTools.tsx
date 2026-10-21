@@ -23,6 +23,26 @@ export type Action = "category" | "payee" | "account" | "transfer" | "correct" |
 export const ALL_ACTIONS: readonly Action[] = ["category", "payee", "account", "transfer", "correct", "looks-right"];
 
 const NEW_CATEGORY = "__new_category";
+
+// The fields a parser reports it couldn't read, in the words of the transaction (the server names them as fields).
+const FIELD_WORDS: Record<string, string> = {
+  amount: "the amount", date: "the date", time: "the time", account_identifier: "the account",
+  counterparty_identifier: "the other side", payee_raw: "the payee", reference_number: "the reference number",
+  direction: "whether money went in or out", balance: "the balance", currency: "the currency",
+};
+
+/** A review reason for people: "couldn't read: payee_raw, reference_number" -> "Couldn't read the payee or the
+ *  reference number". Reasons in several parts ("; ") are each made readable; the rest pass through, capitalised. */
+export function readable(reason: string): string {
+  return reason.split("; ").map((part) => {
+    const unread = /^couldn't read: (.+)$/.exec(part);
+    const text = unread ? (() => {
+      const words = unread[1]!.split(", ").map((f) => FIELD_WORDS[f] ?? f.replaceAll("_", " "));
+      return `couldn't read ${words.length > 1 ? `${words.slice(0, -1).join(", ")} or ${words.at(-1)}` : words[0]}`;
+    })() : part;
+    return text.charAt(0).toUpperCase() + text.slice(1);
+  }).join(". ");
+}
 export const createCategory = (typed: string): Option => ({ id: NEW_CATEGORY, label: `Create category “${typed}”` });
 
 /** A category pick, as an id: an existing category, or one created on the spot (like a new payee). */
@@ -57,22 +77,22 @@ export function TransactionActions({ subject, accounts, categories, actions }: {
     <>
       <div className="item__actions">
         {offers("category") && (
-          <button className="button button--quiet" type="button" onClick={() => setAction("category")}>Category for this one</button>
+          <button className="button button--quiet button--small" type="button" onClick={() => setAction("category")}>Category for this one</button>
         )}
         {offers("payee") && subject.payee_id === null && (
-          <button className="button button--quiet" type="button" onClick={() => setAction("payee")}>Payee for this one</button>
+          <button className="button button--quiet button--small" type="button" onClick={() => setAction("payee")}>Payee for this one</button>
         )}
         {offers("account") && (
-          <button className="button button--quiet" type="button" onClick={() => setAction("account")}>Account for this one</button>
+          <button className="button button--quiet button--small" type="button" onClick={() => setAction("account")}>Account for this one</button>
         )}
         {offers("transfer") && subject.kind !== "transfer" && (
-          <button className="button button--quiet" type="button" onClick={() => setAction("transfer")}>Mark as transfer</button>
+          <button className="button button--quiet button--small" type="button" onClick={() => setAction("transfer")}>Mark as transfer</button>
         )}
         {offers("correct") && (
-          <button className="button button--quiet" type="button" onClick={() => setAction("correct")}>Correct amount or date</button>
+          <button className="button button--quiet button--small" type="button" onClick={() => setAction("correct")}>Correct amount or date</button>
         )}
         {offers("looks-right") && (
-          <button className="button button--quiet" type="button" disabled={acknowledge.isPending}
+          <button className="button button--quiet button--small" type="button" disabled={acknowledge.isPending}
             onClick={() => acknowledge.mutate(subject.id)}>Looks right</button>
         )}
       </div>
@@ -116,7 +136,7 @@ function CorrectForm({ subject, onSave, onClose }: {
       <label className="field__label">Date <input className="field__input" type="date" value={date}
         onChange={(e) => setDate(e.target.value)} /></label>
       <button className="button button--primary" type="submit">Save</button>
-      <button className="button button--quiet" type="button" onClick={onClose}>Cancel</button>
+      <button className="button button--secondary" type="button" onClick={onClose}>Cancel</button>
       {error && <p className="form-error" role="alert">{error}</p>}
     </form>
   );
@@ -135,11 +155,11 @@ export function EmailLine({ id, email }: { id: string; email: Email }) {
       <div className="item__email-links">
         {email.gmail_url && <a href={email.gmail_url} target="_blank" rel="noopener noreferrer">Open in Gmail</a>}
         {email.has_text && (
-          <button className="button button--quiet" type="button" aria-expanded={showing}
+          <button className="button button--quiet button--small" type="button" aria-expanded={showing}
             onClick={() => setShowing((v) => !v)}>{showing ? "Hide the email" : "Show the email"}</button>
         )}
       </div>
-      {showing && text.isPending && <p className="muted">Loading…</p>}
+      {showing && text.isPending && <p className="loading">Loading…</p>}
       {showing && text.isError && <p className="form-error" role="alert">{describeError(text.error)}</p>}
       {showing && text.data && <pre className="item__email-text">{text.data.text}</pre>}
     </div>

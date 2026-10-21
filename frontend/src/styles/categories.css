@@ -1,14 +1,17 @@
-/* Categories screen: a ruled list with quiet actions, then the add form. */
-.category-intro {
-  margin-bottom: var(--s4);
-  max-width: 40rem;
+/* Categories: add one at the top, then the list on one sheet, each with its quiet actions at the right. */
+.categories {
+  display: grid;
+  gap: var(--s5);
+  max-width: 42rem;
 }
 .category-list {
   list-style: none;
   margin: 0;
-  padding: 0;
-  border-top: 1px solid var(--rule);
-  max-width: 40rem;
+  padding: var(--s1) 0;
+  background: var(--paper-raised);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-sheet);
+  box-shadow: var(--shadow-sheet);
 }
 .category {
   display: flex;
@@ -16,12 +19,26 @@
   justify-content: space-between;
   gap: var(--s3);
   flex-wrap: wrap;
-  min-height: var(--touch);
-  padding: var(--s1) 0;
-  border-bottom: 1px solid var(--rule);
+  min-height: 52px;
+  padding: var(--s1) var(--s3) var(--s1) var(--s5);
+  border-top: 1px solid var(--rule);
+}
+.category:first-child {
+  border-top: 0;
 }
 .category__name {
   font-weight: var(--w-strong);
+}
+.category__actions {
+  display: flex;
+  gap: var(--s1);
+}
+.category__archive {
+  color: var(--ink-soft);
+}
+.category-list--archived {
+  margin-top: var(--s3);
+  max-width: 42rem;
 }
 .category-list--archived .category__name {
   color: var(--ink-soft);
@@ -32,16 +49,25 @@
   gap: var(--s2);
   align-items: center;
   flex: 1;
-  max-width: 30rem;
 }
 .category__rename .field__input,
 .category-add__row .field__input {
   flex: 1;
+  width: auto;
   min-width: 0;
+}
+.category__rename .field__input {
+  min-height: var(--control-h-sm);
 }
 .category-add {
   display: grid;
-  gap: var(--s1);
-  margin-top: var(--s5);
-  max-width: 40rem;
+  gap: 6px;
+}
+.category > .form-error {
+  flex-basis: 100%;
+}
+@media (max-width: 640px) {
+  .category {
+    padding-left: var(--s4);
+  }
 }

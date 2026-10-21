@@ -1,21 +1,49 @@
-/* Settings screen: one section per concern, ruled off like the other screens. */
+/* Settings: one sheet per concern, each opening with what it's for. */
 .settings-section {
-  max-width: 40rem;
-  padding: var(--s4) 0;
-  border-top: 1px solid var(--rule);
   display: grid;
-  gap: var(--s3);
+  gap: var(--s4);
   justify-items: start;
+  max-width: 44rem;
+  padding: var(--s5);
+}
+.settings-section__head {
+  display: flex;
+  align-items: flex-start;
+  gap: var(--s3);
+}
+.settings-section__icon {
+  display: grid;
+  place-items: center;
+  flex: none;
+  width: 2.5rem;
+  height: 2.5rem;
+  border-radius: var(--r-control);
+  background: var(--accent-wash);
+  color: var(--accent-strong);
 }
 .settings-section__title {
-  margin: 0;
   font-size: var(--t-lead);
   font-weight: var(--w-title);
 }
-.settings-note {
-  padding: var(--s2) var(--s3);
-  background: var(--accent-wash);
-  border-left: 3px solid var(--accent);
-  border-radius: 0 var(--r-control) var(--r-control) 0;
+.settings-section__what {
+  font-size: var(--t-small);
+  color: var(--ink-muted);
 }
-
+.settings-status {
+  display: flex;
+  align-items: baseline;
+  gap: var(--s2);
+}
+.settings-status__dot {
+  flex: none;
+  width: 0.55rem;
+  height: 0.55rem;
+  border-radius: 50%;
+  background: var(--accent);
+  box-shadow: 0 0 0 3px var(--accent-wash);
+  transform: translateY(-1px);
+}
+.settings-section > .settings-note,
+.settings-section > .form-error {
+  justify-self: stretch;
+}

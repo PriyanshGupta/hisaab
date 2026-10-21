@@ -16,6 +16,7 @@ import { formatDate } from "../dates";
 import { formatPaise } from "../money";
 import { AddAccountForm } from "./AccountsPage";
 import { ConnectButton } from "./SettingsPage";
+import { Icon } from "../ui/Icon";
 import "../styles/setup.css";
 
 const STEPS = ["Accounts", "Opening balances", "Gmail", "History", "Categorize"] as const;
@@ -32,7 +33,7 @@ export function SetupPage() {
   // back from Google's screen (a full page load): straight to the Gmail step, where its message shows
   const [walked, setWalked] = useState<"accounts" | "balances" | "gmail">(params.has("gmail") ? "gmail" : "accounts");
 
-  if (setup.isPending) return <p className="muted">Loading…</p>;
+  if (setup.isPending) return <p className="loading">Loading…</p>;
   if (setup.isError) return <p className="form-error" role="alert">{describeError(setup.error)}</p>;
   const { step } = setup.data;
   if (step === "categorize") return <Navigate to="/review?lane=categories" replace />;
@@ -45,8 +46,14 @@ export function SetupPage() {
     <>
       <header className="page-head"><h1 className="page-title">Set up Hisaab</h1></header>
       <ol className="setup-steps" aria-label="Setup steps">
-        {STEPS.map((name) => (
-          <li key={name} className="setup-steps__step" aria-current={name === shown ? "step" : undefined}>{name}</li>
+        {STEPS.map((name, i) => (
+          <li key={name} className={`setup-steps__step${i < STEPS.indexOf(shown) ? " setup-steps__step--done" : ""}`}
+            aria-current={name === shown ? "step" : undefined}>
+            <span className="setup-steps__mark" aria-hidden="true">
+              {i < STEPS.indexOf(shown) ? <Icon name="check" size={14} /> : i + 1}
+            </span>
+            {name}
+          </li>
         ))}
       </ol>
       {shown === "Accounts" && <AccountsStep setup={setup.data} onContinue={() => setWalked("balances")} />}
@@ -64,7 +71,7 @@ function AccountsStep({ setup, onContinue }: { setup: Setup; onContinue: () => v
   const formOpen = adding || (accounts.isSuccess && active.length === 0);
 
   return (
-    <section className="setup-step" aria-labelledby="step-heading">
+    <section className="sheet setup-step" aria-labelledby="step-heading">
       <h2 id="step-heading" className="setup-step__title">Your accounts</h2>
       <p>
         Add each bank account, credit card and cash wallet you want to track, with its balance on{" "}
@@ -80,12 +87,12 @@ function AccountsStep({ setup, onContinue }: { setup: Setup; onContinue: () => v
         <AddAccountForm defaultDate={setup.backfill_start} onDone={() => setAdding(false)} />
       ) : (
         <div className="actions">
-          <button className="button button--quiet" type="button" onClick={() => setAdding(true)}>
-            Add another account
-          </button>
           <button className="button button--primary" type="button" disabled={active.length === 0}
             onClick={onContinue}>
             Continue
+          </button>
+          <button className="button button--secondary" type="button" onClick={() => setAdding(true)}>
+            Add another account
           </button>
         </div>
       )}
@@ -100,7 +107,7 @@ function BalancesStep({ setup, onContinue }: { setup: Setup; onContinue: () => v
   const late = (a: Account) => a.opening_balance_date !== null && a.opening_balance_date > setup.backfill_start;
 
   return (
-    <section className="setup-step" aria-labelledby="step-heading">
+    <section className="sheet setup-step" aria-labelledby="step-heading">
       <h2 id="step-heading" className="setup-step__title">Opening balances</h2>
       <p>
         Each balance should be as of {formatDate(setup.backfill_start)} or earlier, so that the three months of
@@ -138,7 +145,7 @@ function GmailStep() {
   const [params] = useSearchParams();
   const returned = RETURN_MESSAGES[params.get("gmail") ?? ""];
   return (
-    <section className="setup-step" aria-labelledby="step-heading">
+    <section className="sheet setup-step" aria-labelledby="step-heading">
       <h2 id="step-heading" className="setup-step__title">Connect Gmail</h2>
       {returned && <p className="form-error" role="alert">{returned}</p>}
       <p>
@@ -166,7 +173,7 @@ function HistoryStep({ setup }: { setup: Setup }) {
     ? `Fetched ${p.fetched} of ~${p.estimate} emails` : `Fetched ${p.fetched} emails`;
 
   return (
-    <section className="setup-step" aria-labelledby="step-heading">
+    <section className="sheet setup-step" aria-labelledby="step-heading">
       <h2 id="step-heading" className="setup-step__title">Bringing in your history</h2>
       <p>Fetching the last three months of bank emails and reading each one. You can close this page; it carries on.</p>
       {stopped ? (

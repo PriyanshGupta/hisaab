@@ -12,9 +12,9 @@ export function UsersPage() {
     <div className="admin-users">
       <header className="page-head">
         <h1 className="page-title">Users</h1>
-        {!adding && <button className="button button--quiet" type="button" onClick={() => setAdding(true)}>Add a person</button>}
+        {!adding && <button className="button button--primary" type="button" onClick={() => setAdding(true)}>Add a person</button>}
       </header>
-      <p className="admin__lead">
+      <p className="page-lead">
         Each person signs in with their own password, connects their own Gmail and sets up their own accounts.
         Admins also see these screens.
       </p>
@@ -41,6 +41,7 @@ function AddForm({ onDone }: { onDone: () => void }) {
   };
   return (
     <form className="admin-users__add sheet" onSubmit={submit} aria-label="Add a person">
+      <h2 className="section-title admin-users__add-title">New person</h2>
       <label className="field"><span className="field__label">Name</span>
         <input className="field__input" value={name} onChange={(e) => setName(e.target.value)} required /></label>
       <label className="field"><span className="field__label">Username</span>
@@ -55,9 +56,9 @@ function AddForm({ onDone }: { onDone: () => void }) {
           <option value="admin">Admin</option>
         </select></label>
       {add.isError && <p className="form-error" role="alert">{describeError(add.error)}</p>}
-      <div className="actions">
-        <button className="button button--quiet" type="button" onClick={onDone}>Cancel</button>
+      <div className="actions admin-users__add-actions">
         <button className="button button--primary" type="submit" disabled={add.isPending}>Add</button>
+        <button className="button button--secondary" type="button" onClick={onDone}>Cancel</button>
       </div>
     </form>
   );
@@ -78,15 +79,16 @@ function Person({ u }: { u: ManagedUser }) {
   };
   return (
     <li className="admin-users__person" aria-label={u.display_name}>
+      <span className="admin-users__avatar" aria-hidden="true">{u.display_name.trim().charAt(0).toUpperCase()}</span>
       <span className="admin-users__who">
         <span className="admin-users__name">{u.display_name}</span>
         <span className="muted">{u.username}, {u.role}</span>
       </span>
       <span className="actions admin-users__actions">
-        <button className="button button--quiet" type="button" onClick={() => { setResetting(!resetting); setDone(null); }}>
+        <button className="button button--quiet button--small" type="button" onClick={() => { setResetting(!resetting); setDone(null); }}>
           Reset password
         </button>
-        <button className="button button--quiet" type="button" disabled={role.isPending}
+        <button className="button button--quiet button--small" type="button" disabled={role.isPending}
           onClick={() => role.mutate({ id: u.id, role: other })}>Make {other}</button>
       </span>
       {resetting && (

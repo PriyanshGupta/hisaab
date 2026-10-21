@@ -72,7 +72,7 @@ test("accepting asks first, naming the amount and that it counts in no total", a
     { "POST /api/balances/checks/o-1/accept": { status: 200, body: { ...SAVINGS, gaps: [] } } });
   const banner = await screen.findByRole("status", { name: /Balance check/ });
   await user.click(within(banner).getByRole("button", { name: "Accept as an adjustment" }));
-  expect(banner).toHaveTextContent("This writes a ₹4,200.00 adjustment dated 15 Oct. It counts in no total: " +
+  expect(banner).toHaveTextContent("This writes a ₹4,200.00 adjustment to HDFC Savings, dated 15 Oct. It counts in no total: " +
     "not spending, not cash out, not money in.");
   expect(api.calls).not.toContain("POST /api/balances/checks/o-1/accept");
   api.set("GET /api/balances", { status: 200, body: [SAVINGS] });

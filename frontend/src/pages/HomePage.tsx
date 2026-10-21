@@ -9,7 +9,7 @@ import { ReportPage } from "./ReportPage";
 
 export function HomePage() {
   const setup = useSetup();
-  if (setup.isPending) return <p className="muted">Loading…</p>;
+  if (setup.isPending) return <p className="loading">Loading…</p>;
   if (setup.isError) return <p className="form-error" role="alert">{describeError(setup.error)}</p>;
   if (setup.data.step === "categorize") return <Navigate to="/review?lane=categories" replace />;
   if (setup.data.step !== "done") return <Navigate to="/setup" replace />;

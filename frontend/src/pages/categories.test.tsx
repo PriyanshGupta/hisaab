@@ -78,12 +78,12 @@ test("renaming and archiving", async () => {
 
 // --- categories on transactions -------------------------------------------------------
 
-test("each transaction shows its category, or Uncategorized", async () => {
+test("each transaction shows its category, or Not categorized yet", async () => {
   setup("/transactions", { "GET /api/transactions": { status: 200, body: [
     txn(), txn({ id: "t-2", payee_name: "Big Bazaar", payee_raw: "Big Bazaar", category_id: "c-groc", category_source: "rule" }),
   ] } });
   const rows = (await screen.findAllByRole("row")).slice(1);
-  expect(rows[0]!.textContent).toContain("Uncategorized");
+  expect(rows[0]!.textContent).toContain("Not categorized yet");
   expect(rows[1]!.textContent).toContain("Groceries");
 });
 
@@ -124,7 +124,7 @@ test("an archived category reads as uncategorized and says why", async () => {
     "GET /api/transactions": { status: 200, body: [txn({ category_id: null, category_source: "rule" })] },
   });
   await user.click(await screen.findByRole("button", { name: /Swiggy/ }));
-  expect(screen.getByText("Uncategorized: the category your rule for Swiggy uses is archived.")).toBeInTheDocument();
+  expect(screen.getByText("Not categorized: the category your rule for Swiggy uses is archived.")).toBeInTheDocument();
 });
 
 // --- Add ----------------------------------------------------------------------------

@@ -165,7 +165,7 @@ test("a transaction shows where it came from: the email, a Gmail link, its text,
   await user.click(await screen.findByRole("button", { name: /PAYAPP BILLS/ }));
   expect(screen.getByText(/Email from alerts@bank.example, received 5 Oct 2026 at 09:14: Debit alert/)).toBeInTheDocument();
   expect(screen.getByRole("link", { name: "Open in Gmail" })).toHaveAttribute("href", "https://mail.google.com/mail/#all/abc");
-  expect(screen.getByText("payee not recognised")).toBeInTheDocument();
+  expect(screen.getByText("Payee not recognised")).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Show the email" }));
   expect(await screen.findByText("Rs 2468 debited")).toBeInTheDocument();
 });
@@ -178,7 +178,9 @@ test("a bank payment can be marked as a transfer: a card bill paid through an ap
   await user.click(await screen.findByRole("button", { name: /PAYAPP BILLS/ }));
   await user.click(screen.getByRole("button", { name: "Mark as transfer" }));
   await user.type(screen.getByRole("combobox", { name: "The other account for PAYAPP BILLS" }), "Regalia");
-  await user.click(screen.getByRole("option", { name: "Regalia card" }));
+  // the picker's own list: the finder's account filter above the table has a "Regalia card" option too
+  const picker = screen.getByRole("listbox", { name: "The other account for PAYAPP BILLS" });
+  await user.click(within(picker).getByRole("option", { name: "Regalia card" }));
   expect(api.bodiesFor("PATCH /api/transactions/t-9")).toEqual([{ kind: "transfer", to_account_id: "c-1" }]);
 });
 
@@ -227,4 +229,47 @@ test("an open transaction can be closed again", async () => {
   expect(screen.getByRole("form", { name: "Correct this transaction" })).toBeInTheDocument();
   await user.click(screen.getByRole("button", { name: "Close" }));
   expect(screen.queryByRole("form", { name: "Correct this transaction" })).not.toBeInTheDocument();
+});
+
+// --- finding a transaction ----------------------------------------------------------------------
+
+const MANY = [
+  txn(),
+  txn({ id: "t-2", payee_raw: "Corner Bakery", amount_paise: 25000, from_account_id: "b-1", category_id: "c-food",
+        category_source: "rule" }),
+  txn({ id: "t-3", kind: "income", payee_raw: "Salary", amount_paise: 1200000, from_account_id: null, to_account_id: "b-1" }),
+];
+const CATEGORIES = { status: 200, body: [{ id: "c-food", name: "Food", archived_at: null, created_at: "2026-10-01T00:00:00.000Z" }] };
+
+test("search narrows the list by payee or amount, and says how many and how much", async () => {
+  const { user } = setup("/transactions", { "GET /api/transactions": { status: 200, body: MANY }, "GET /api/categories": CATEGORIES });
+  expect(await screen.findByText("3 transactions")).toBeInTheDocument();
+  await user.type(screen.getByRole("searchbox", { name: "Search" }), "bakery");
+  expect(screen.getByText("1 transaction")).toBeInTheDocument();
+  expect(screen.getByText("₹250.00 spent")).toBeInTheDocument();
+  expect(screen.queryByText("Tea stall")).not.toBeInTheDocument();
+  await user.clear(screen.getByRole("searchbox", { name: "Search" }));
+  await user.type(screen.getByRole("searchbox", { name: "Search" }), "400");
+  expect(screen.getByRole("button", { name: /Tea stall/ })).toBeInTheDocument();
+  expect(screen.getByText("1 transaction")).toBeInTheDocument();
+});
+
+test("the account and category filters combine, and an empty result says so", async () => {
+  const { user } = setup("/transactions", { "GET /api/transactions": { status: 200, body: MANY }, "GET /api/categories": CATEGORIES });
+  await screen.findByText("3 transactions");
+  await user.selectOptions(screen.getByLabelText("Account"), "b-1");
+  expect(screen.getByText("2 transactions")).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("Category filter"), "c-food");
+  expect(screen.getByRole("button", { name: /Corner Bakery/ })).toBeInTheDocument();
+  expect(screen.getByText("1 transaction")).toBeInTheDocument();
+  await user.selectOptions(screen.getByLabelText("Account"), "w-1");
+  expect(screen.getByText("Nothing matches.")).toBeInTheDocument();
+});
+
+test("searching with no dates picked looks through everything, not only the latest 200", async () => {
+  const { api, user } = setup("/transactions", { "GET /api/transactions": { status: 200, body: MANY } });
+  await screen.findByText("3 transactions");
+  expect(api.urls.filter((u) => u.includes("/api/transactions"))).toEqual([expect.stringMatching(/\/api\/transactions$/)]);
+  await user.type(screen.getByRole("searchbox", { name: "Search" }), "s");
+  expect(api.urls.some((u) => /\/api\/transactions\?start=2000-01-01&end=\d{4}-\d{2}-\d{2}$/.test(u))).toBe(true);
 });

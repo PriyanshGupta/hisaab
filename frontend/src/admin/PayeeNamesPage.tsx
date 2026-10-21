@@ -19,11 +19,11 @@ export function PayeeNamesPage() {
   return (
     <div className="admin-payees">
       <header className="page-head"><h1 className="page-title">Payee names</h1></header>
-      <p className="admin__lead">
+      <p className="page-lead">
         When someone corrects a payee, the correction waits here. Promote it to name that text for everyone, past
         transactions included.
       </p>
-      {done && <p className="admin__done" role="status">{done}</p>}
+      {done && <p className="settings-note admin__done" role="status">{done}</p>}
       {list.isError && <p className="form-error" role="alert">{describeError(list.error)}</p>}
       {list.data && (list.data.length === 0
         ? <div className="empty">
@@ -57,7 +57,7 @@ function CorrectionSheet({ c, onDone }: { c: CapturedCorrection; onDone: (s: str
   };
 
   return (
-    <section className="sheet sheet--ruled admin-payee" aria-labelledby={headId}>
+    <section className="sheet admin-payee" aria-labelledby={headId}>
       <h2 id={headId} className="admin-payee__raw">{c.raw}</h2>
       <p className="admin-payee__name">{c.payee_name}</p>
       <p className="muted">{plural(c.shared, "transaction carries", "transactions carry")} this text. Reported by {reported}.</p>
@@ -74,15 +74,15 @@ function CorrectionSheet({ c, onDone }: { c: CapturedCorrection; onDone: (s: str
           <label className="field"><span className="field__label">Payee name</span>
             <input className="field__input" value={name} onChange={(e) => setName(e.target.value)} required /></label>
           <div className="actions">
-            <button className="button button--quiet" type="button" onClick={() => setEditing(false)}>Cancel</button>
             <button className="button button--primary" type="submit" disabled={busy}>Promote this pattern</button>
+            <button className="button button--secondary" type="button" onClick={() => setEditing(false)}>Cancel</button>
           </div>
         </form>
       ) : (
         <div className="actions">
           <button className="button button--primary" type="button" disabled={busy}
             onClick={() => send({ match_type: "exact", pattern: c.raw, payee_id: c.payee_id }, c.payee_name)}>Promote</button>
-          <button className="button button--quiet" type="button" onClick={() => setEditing(true)}>Edit before promoting</button>
+          <button className="button button--secondary" type="button" onClick={() => setEditing(true)}>Edit before promoting</button>
           <button className="button button--quiet" type="button" disabled={busy}
             onClick={() => dismiss.mutate({ key: c.key, payee_id: c.payee_id })}>Dismiss</button>
         </div>
