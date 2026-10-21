@@ -3,20 +3,47 @@
 // rules. They appear in the lane's Sorted list like any other categorized
 // payee, marked "auto-categorized" and changeable there; the whole batch can be
 // undone here. The model's confidence decides what is applied but is never
-// shown (user, 2026-10-19).
+// shown (user, 2026-10-19). Its outcome can be dismissed (user, 2026-10-21): the batch's id is remembered in this
+// browser, so the same message stays hidden after a reload and the next run shows its own.
 import { useState } from "react";
 
 import { describeError } from "../api/client";
 import { type AutoResult, useAutoCategorize, useLatestBatch, useUndoBatch } from "../api/review";
 
 const payeesWord = (n: number) => `${n} ${n === 1 ? "payee" : "payees"}`;
+const DISMISSED_KEY = "hisaab.review.dismissedAutoBatch";
+
+function readDismissed(): string | null {
+  try {
+    return localStorage.getItem(DISMISSED_KEY);
+  } catch {
+    return null;  // storage blocked: the message just shows again
+  }
+}
+
+function writeDismissed(batchId: string) {
+  try {
+    localStorage.setItem(DISMISSED_KEY, batchId);
+  } catch {
+    // storage blocked: dismissed for this visit only
+  }
+}
 
 export function AutoCategorize() {
   const run = useAutoCategorize();
   const latest = useLatestBatch();
   const undo = useUndoBatch();
   const [result, setResult] = useState<AutoResult | null>(null);
-  const shown = result ?? (latest.data && latest.data.applied.length > 0 ? latest.data : null);
+  const [dismissed, setDismissed] = useState<string | null>(readDismissed);
+  const stored = latest.data && latest.data.applied.length > 0 && latest.data.batch_id !== dismissed ? latest.data : null;
+  const shown = result ?? stored;
+  const dismiss = () => {
+    if (shown?.batch_id) {
+      writeDismissed(shown.batch_id);
+      setDismissed(shown.batch_id);
+    }
+    setResult(null);
+  };
 
   return (
     <section className="auto" aria-label="Auto-categorize">
@@ -30,27 +57,31 @@ export function AutoCategorize() {
       {run.isError && <p className="form-error" role="alert">{describeError(run.error)}</p>}
       {shown && <Outcome result={shown} fresh={shown === result}
         onUndo={() => shown.batch_id && undo.mutate(shown.batch_id, { onSuccess: () => setResult(null) })}
-        undoing={undo.isPending} />}
+        undoing={undo.isPending} onDismiss={dismiss} />}
       {undo.isError && <p className="form-error" role="alert">{describeError(undo.error)}</p>}
     </section>
   );
 }
 
-function Outcome({ result, fresh, onUndo, undoing }: {
-  result: AutoResult; fresh: boolean; onUndo: () => void; undoing: boolean;
+function Outcome({ result, fresh, onUndo, undoing, onDismiss }: {
+  result: AutoResult; fresh: boolean; onUndo: () => void; undoing: boolean; onDismiss: () => void;
 }) {
   const left = result.left > 0 ? ` ${result.left} ${result.left === 1 ? "is" : "are"} left for you — we couldn't categorize these.` : "";
-  if (fresh && !result.called) return <p className="auto__summary">Nothing new to categorize.{left}</p>;
+  const nothing = fresh && !result.called;
   return (
     <div className="auto__outcome">
       <p className="auto__summary">
-        {`Categorized ${payeesWord(result.applied.length)} covering ${result.transactions} transactions.`}{left}
+        {nothing ? "Nothing new to categorize." : `Categorized ${payeesWord(result.applied.length)} covering ${result.transactions} transactions.`}
+        {left}
       </p>
-      {result.applied.length > 0 && (
-        <button className="button button--quiet button--small" type="button" disabled={undoing} onClick={onUndo}>
-          Undo auto-categorize
-        </button>
-      )}
+      <span className="auto__actions">
+        {!nothing && result.applied.length > 0 && (
+          <button className="button button--quiet button--small" type="button" disabled={undoing} onClick={onUndo}>
+            Undo auto-categorize
+          </button>
+        )}
+        <button className="button button--quiet button--small" type="button" onClick={onDismiss}>Dismiss</button>
+      </span>
     </div>
   );
 }

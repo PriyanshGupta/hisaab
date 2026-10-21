@@ -1,4 +1,4 @@
-import { screen, waitFor, within } from "@testing-library/react";
+import { cleanup, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -180,6 +180,40 @@ test("a second auto-categorize with nothing new to ask says so", async () => {
   await user.click(await screen.findByRole("tab", { name: /Categories 1/ }));
   await user.click(screen.getByRole("button", { name: "Auto-categorize" }));
   expect(await screen.findByText(/Nothing new to categorize/)).toBeInTheDocument();
+});
+
+test("the auto-categorize message can be dismissed beside Undo, and stays dismissed (user, 2026-10-21)", async () => {
+  localStorage.clear();
+  const batch = { batch_id: "b-7", asked: 3, called: false, transactions: 40, left: 2,
+    applied: [{ payee_id: "p-swiggy", payee_name: "Swiggy", category_id: "c-food", confidence_percent: 95, transactions: 40 }] };
+  const routes = { "GET /api/review/auto-categorize/latest": { status: 200, body: batch } };
+  const { user } = setup([uncategorized("p-uber", "Uber")], routes, "/review?lane=categories");
+  const message = "Categorized 1 payee covering 40 transactions. 2 are left for you — we couldn't categorize these.";
+  const summary = await screen.findByText(message);
+  const actions = summary.closest(".auto__outcome")!;
+  expect(within(actions as HTMLElement).getAllByRole("button").map((b) => b.textContent))
+    .toEqual(["Undo auto-categorize", "Dismiss"]);  // side by side
+  await user.click(within(actions as HTMLElement).getByRole("button", { name: "Dismiss" }));
+  expect(screen.queryByText(message)).not.toBeInTheDocument();
+  expect(screen.queryByRole("button", { name: "Undo auto-categorize" })).not.toBeInTheDocument();
+  cleanup();
+  setup([uncategorized("p-uber", "Uber")], routes, "/review?lane=categories");  // a reload: the same batch stays hidden
+  expect(await screen.findByRole("button", { name: "Auto-categorize" })).toBeInTheDocument();
+  expect(screen.queryByText(message)).not.toBeInTheDocument();
+});
+
+test("a new auto-categorize run shows its message even after an older one was dismissed", async () => {
+  localStorage.clear();
+  const old = { batch_id: "b-7", asked: 3, called: false, transactions: 40, left: 2,
+    applied: [{ payee_id: "p-swiggy", payee_name: "Swiggy", category_id: "c-food", confidence_percent: 95, transactions: 40 }] };
+  const fresh = { ...old, batch_id: "b-8", called: true, transactions: 5, left: 0,
+    applied: [{ ...old.applied[0]!, payee_id: "p-uber", payee_name: "Uber", transactions: 5 }] };
+  const { user } = setup([uncategorized("p-uber", "Uber")], {
+    "GET /api/review/auto-categorize/latest": { status: 200, body: old },
+    "POST /api/review/auto-categorize": { status: 200, body: fresh } }, "/review?lane=categories");
+  await user.click(await screen.findByRole("button", { name: "Dismiss" }));
+  await user.click(screen.getByRole("button", { name: "Auto-categorize" }));
+  expect(await screen.findByText("Categorized 1 payee covering 5 transactions.")).toBeInTheDocument();
 });
 
 test("an empty lane says there is nothing to sort", async () => {

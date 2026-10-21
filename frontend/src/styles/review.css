@@ -349,6 +349,12 @@
   align-items: center;
   gap: var(--s2) var(--s4);
 }
+/* Undo and Dismiss stay together, wrapping as a pair under the summary on a phone */
+.auto__actions {
+  display: inline-flex;
+  flex-wrap: wrap;
+  gap: var(--s1);
+}
 
 @media (max-width: 40rem) {
   .group {
