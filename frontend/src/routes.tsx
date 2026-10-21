@@ -3,7 +3,6 @@ import { Navigate, type RouteObject } from "react-router";
 
 import { AdminLayout } from "./admin/AdminLayout";
 import { PayeeNamesPage } from "./admin/PayeeNamesPage";
-import { ResyncPage } from "./admin/ResyncPage";
 import { UsersPage } from "./admin/UsersPage";
 import { RequireAuth } from "./auth/RequireAuth";
 import { AccountsPage } from "./pages/AccountsPage";
@@ -50,7 +49,7 @@ export const routes: RouteObject[] = [
           { path: "senders", element: <SendersPage /> },
           { path: "payee-names", element: <PayeeNamesPage /> },
           { path: "users", element: <UsersPage /> },
-          { path: "resync", element: <ResyncPage /> },
+          { path: "resync", element: <Navigate to="/settings" replace /> }, // moved to Settings (user, 2026-10-21)
         ],
       },
       { path: "templates", element: <Navigate to="/admin/templates" replace /> }, // slice 22's address

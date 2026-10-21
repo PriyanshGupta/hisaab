@@ -47,3 +47,34 @@
 .settings-section > .form-error {
   justify-self: stretch;
 }
+
+/* sync a date range: two dates and the ask on one line, wrapping on a phone; the confirmation is a quiet panel */
+.settings-section + .settings-section {
+  margin-top: var(--s4);
+}
+.range-sync {
+  justify-self: stretch; /* the sheet packs its children to their width: the row needs all of it to stay one row */
+  display: flex;
+  flex-wrap: wrap;
+  align-items: end;
+  gap: var(--s3);
+}
+.range-sync .field {
+  flex: 1 1 10rem;
+  max-width: 12rem;
+}
+.range-sync__confirm {
+  display: grid;
+  gap: var(--s2);
+  justify-self: stretch;
+  padding: var(--s4);
+  background: var(--paper-sunk);
+  border: 1px solid var(--rule);
+  border-radius: var(--r-control);
+}
+.range-sync__ask {
+  font-weight: var(--w-strong);
+}
+.range-sync__confirm .actions {
+  margin-top: var(--s1);
+}

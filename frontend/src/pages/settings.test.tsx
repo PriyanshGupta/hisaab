@@ -1,4 +1,4 @@
-import { cleanup, screen, waitFor } from "@testing-library/react";
+import { cleanup, fireEvent, screen, waitFor, within } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { vi } from "vitest";
 
@@ -108,4 +108,46 @@ test("an admin gets a link to the Admin area; a member doesn't", async () => {
   setup("/settings", { "GET /api/gmail": gmail() });
   await screen.findByText("asha@example.test");
   expect(screen.queryByRole("link", { name: "Admin" })).not.toBeInTheDocument();
+});
+
+
+// --- sync a date range (user, 2026-10-21: here for everyone, was Admin's) ---------------------------------------
+
+test("anyone can sync a date range of their own inbox, after seeing what it will do", async () => {
+  const { api, user } = setup("/settings", {
+    "GET /api/gmail": gmail(),
+    "GET /api/gmail/resync/preview": { status: 200, body: { transactions: 12 } },
+    "POST /api/gmail/resync": { status: 202, body: { job_id: "j-9" } },
+    "GET /api/jobs/j-9": job("succeeded", { id: "j-9", kind: "resync",
+      result: { transactions_new: 191, needs_review: 80, already_had: 0, failed: 0 } }),
+  });
+  const section = await screen.findByRole("region", { name: "Sync a date range" });
+  fireEvent.change(within(section).getByLabelText("From"), { target: { value: "2026-06-01" } });
+  fireEvent.change(within(section).getByLabelText("To"), { target: { value: "2026-07-20" } });
+  await user.click(within(section).getByRole("button", { name: "Sync these dates…" }));
+  const ask = await within(section).findByRole("group", { name: "Sync 1 Jun 2026 to 20 Jul 2026?" });
+  expect(ask).toHaveTextContent("12 transactions already here are read again");
+  expect(ask).toHaveTextContent("A backup is taken first.");
+  expect(api.urls.some((u) => u.includes("/api/gmail/resync/preview?start=2026-06-01&end=2026-07-20"))).toBe(true);
+  expect(api.bodiesFor("POST /api/gmail/resync")).toHaveLength(0);  // only the confirmation starts it
+  await user.click(within(ask).getByRole("button", { name: "Sync" }));
+  expect(api.bodiesFor("POST /api/gmail/resync")).toEqual([{ start: "2026-06-01", end: "2026-07-20" }]);
+  expect(await within(section).findByText("191 new transactions, 80 need review.")).toBeInTheDocument();
+});
+
+test("the date-range sync waits until Gmail is connected", async () => {
+  setup("/settings", { "GET /api/gmail": gmail({ status: "not_connected", email_address: null,
+    last_successful_sync_at: null }) });
+  await screen.findByRole("button", { name: "Connect Gmail" });
+  expect(screen.queryByRole("region", { name: "Sync a date range" })).not.toBeInTheDocument();
+});
+
+test("a date-range sync the server refuses says why", async () => {
+  const { user } = setup("/settings", {
+    "GET /api/gmail": gmail(),
+    "GET /api/gmail/resync/preview": { status: 422, body: { detail: "Pick up to 6 months at a time; sync a longer stretch in parts." } },
+  });
+  const section = await screen.findByRole("region", { name: "Sync a date range" });
+  await user.click(within(section).getByRole("button", { name: "Sync these dates…" }));
+  expect(await within(section).findByRole("alert")).toHaveTextContent("Pick up to 6 months at a time");
 });

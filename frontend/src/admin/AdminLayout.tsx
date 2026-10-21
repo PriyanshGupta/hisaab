@@ -1,4 +1,6 @@
-// The Admin area (slice 24): one sidebar entry, five sections, and the parser-change banner above every one.
+// The Admin area (slice 24): one sidebar entry, four sections, and the parser-change banner above every one.
+// Syncing a date range moved to Settings, for everyone's own inbox (user, 2026-10-21); the banner keeps the
+// admin's re-sync of every inbox after a template change.
 import { NavLink, Outlet } from "react-router";
 
 import { useMe } from "../api/session";
@@ -11,7 +13,6 @@ const SECTIONS: readonly { to: string; label: string }[] = [
   { to: "/admin/senders", label: "Senders" },
   { to: "/admin/payee-names", label: "Payee names" },
   { to: "/admin/users", label: "Users" },
-  { to: "/admin/resync", label: "Re-sync" },
 ];
 
 export function AdminLayout() {

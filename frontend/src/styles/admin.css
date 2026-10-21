@@ -37,6 +37,24 @@
   margin-top: 2px;
   color: var(--margin);
 }
+.resync-banner__done {
+  margin-bottom: var(--s2);
+}
+.resync-banner__ask {
+  grid-column: 2;
+  display: grid;
+  gap: var(--s2);
+  padding: var(--s3);
+  background: var(--paper-raised);
+  border: 1px solid var(--margin-edge);
+  border-radius: var(--r-control);
+}
+.resync-banner__question {
+  font-weight: var(--w-strong);
+}
+.resync-banner__ask .resync-banner__actions {
+  grid-column: auto;
+}
 .resync-banner__actions {
   grid-column: 2;
   display: flex;
@@ -161,33 +179,6 @@
   margin-top: var(--s2);
 }
 
-/* re-sync */
-.admin-resync {
-  max-width: 48rem;
-}
-.admin-resync__form {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(10rem, 1fr));
-  gap: var(--s3) var(--s4);
-  align-items: end;
-  margin-bottom: var(--s5);
-  padding: var(--s5);
-}
-.admin-resync__confirm {
-  display: grid;
-  gap: var(--s3);
-  padding: var(--s5);
-  border-color: var(--margin-edge);
-}
-.admin-resync__confirm h2 {
-  font-size: var(--t-lead);
-  font-weight: var(--w-title);
-}
-.admin-resync__count {
-  font-size: var(--t-title);
-  font-weight: var(--w-title);
-}
-
 @media (max-width: 640px) {
   .admin-users__person {
     grid-template-columns: auto minmax(0, 1fr);
@@ -198,8 +189,6 @@
     margin-left: calc(-1 * var(--s2));
   }
   .admin-users__add,
-  .admin-resync__form,
-  .admin-resync__confirm,
   .admin-payee {
     padding: var(--s4);
   }

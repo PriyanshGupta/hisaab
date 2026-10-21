@@ -61,3 +61,24 @@ export function useJob(jobId: string | null) {
     refetchInterval: (query) => (finished(query.state.data) ? false : POLL_MS),
   });
 }
+
+export type DateRange = { start: string; end: string };
+
+/** How many of the caller's transactions a date-range sync would read again. */
+export function useOwnResyncPreview() {
+  return useMutation({
+    mutationFn: ({ start, end }: DateRange) =>
+      unwrap(() => api.GET("/api/gmail/resync/preview", { params: { query: { start, end } } })),
+  });
+}
+
+/** Sync a date range of the caller's own inbox; resolves to the job to watch. */
+export function useStartOwnResync() {
+  return useMutation({
+    mutationFn: async (body: DateRange) => {
+      const { data, error, response } = await send(() => api.POST("/api/gmail/resync", { body }));
+      if (data === undefined) throw apiError(response, error);
+      return data.job_id;
+    },
+  });
+}

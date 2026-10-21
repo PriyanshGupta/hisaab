@@ -1,4 +1,5 @@
-"""/api/gmail and /oauth/callback: connect a user's inbox, see its state, sync now (tech-design §5.5).
+"""/api/gmail and /oauth/callback: connect a user's inbox, see its state, sync now, sync a date range (tech-design
+§5.5).
 
 Connect: POST /api/gmail/connect returns Google's consent URL carrying a signed
 `state` (user id, expiry, nonce, HMAC with the session secret). Google sends
@@ -15,22 +16,27 @@ import hashlib
 import hmac
 import secrets
 import time
+from datetime import date, timedelta
 from typing import Literal, TypeAlias
 
 from fastapi import APIRouter, Depends, HTTPException, Request, status
 from fastapi.responses import RedirectResponse
 from pydantic import BaseModel
+from sqlalchemy import select
 
 from hisaab.api.deps import CurrentUser, current_user, get_db, session_secret
 from hisaab.api.setup import first_run_problem
+from hisaab.clock import local_today
 from hisaab.config import Settings
 from hisaab.db import Database
 from hisaab.ingest import connection
+from hisaab.ingest.resync import affected, enqueue_resync
 from hisaab.ingest.mailbox import Grant, MailboxError, OAuthClient, authorization_url, exchange_code
 from hisaab.ingest.sync import enqueue_sync, sync_kind
 from hisaab.senders.review import enqueue_missed_backfills
 from hisaab.jobs.queue import JobQueue
-from hisaab.models import GmailConnection
+from hisaab.models import GmailConnection, Job
+from hisaab.ops.backup import BackupFailed, backup
 
 router: APIRouter = APIRouter(prefix="/api/gmail", tags=["gmail"])
 callback_router: APIRouter = APIRouter()
@@ -53,6 +59,18 @@ class ConnectOut(BaseModel):
 
 class JobRef(BaseModel):
     job_id: str
+
+
+class DateRange(BaseModel):
+    start: str  # India dates, YYYY-MM-DD, both included
+    end: str
+
+
+class RangePreview(BaseModel):
+    transactions: int  # of yours, from emails received in the range: they are read again
+
+
+MAX_RANGE_DAYS: int = 184  # about six months: a longer sync risks the resync job's 30-minute limit
 
 
 def _mac(secret: str, payload: str) -> str:
@@ -119,6 +137,58 @@ def sync_now(request: Request, user: CurrentUser = Depends(current_user), db: Da
                             "Connect Gmail first." if state is None else "Reconnect Gmail first.")
     jobs: JobQueue = request.app.state.jobs
     return JobRef(job_id=enqueue_sync(jobs, user.id))  # joins a queued or running sync or backfill
+
+
+def _own_range(start: str, end: str) -> None:
+    """A range the caller may sync: real dates, in order, not past today, at most about six months."""
+    try:
+        first, last = date.fromisoformat(start), date.fromisoformat(end)
+    except ValueError:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "Dates must look like 2026-10-05.") from None
+    if last < first:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The range ends before it starts.")
+    if last > local_today():
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT, "The range can't reach into the future.")
+    if last - first > timedelta(days=MAX_RANGE_DAYS):
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_CONTENT,
+                            "Pick up to 6 months at a time; sync a longer stretch in parts.")
+
+
+@router.get("/resync/preview", response_model=RangePreview)
+def resync_preview(start: str = "", end: str = "", user: CurrentUser = Depends(current_user),
+                   db: Database = Depends(get_db)) -> RangePreview:
+    _own_range(start, end)
+    with db.read_session() as s:
+        return RangePreview(transactions=affected(s, start, end, user.id))
+
+
+@router.post("/resync", response_model=JobRef, status_code=status.HTTP_202_ACCEPTED)
+def resync(body: DateRange, request: Request, user: CurrentUser = Depends(current_user),
+           db: Database = Depends(get_db)) -> JobRef:
+    """Sync a date range of the caller's own inbox (user, 2026-10-21: Settings, for everyone; it was an admin
+    tool): new emails in it are fetched, ones already here read again with today's templates, edits kept. The
+    inbox is always the caller's: nothing in the request can name another. One at a time per person (a resync
+    never joins), and a backup first (tech-design §9.2): without one, nothing runs."""
+    _own_range(body.start, body.end)
+    with db.read_session() as s:
+        row: GmailConnection | None = s.get(GmailConnection, user.id)
+        state: str | None = row.status if row else None
+        running: bool = s.scalars(select(Job.id).where(
+            Job.kind == "resync", Job.user_id == user.id, Job.state.in_(("queued", "running")))).first() is not None
+    if state != "connected":
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "Connect Gmail first." if state is None else "Reconnect Gmail first.")
+    if running:
+        raise HTTPException(status.HTTP_409_CONFLICT,
+                            "A date-range sync is already running for your inbox. Try again when it finishes.")
+    settings: Settings = request.app.state.settings
+    try:
+        backup(settings.database_path, settings.backup_dir, "pre-resync")
+    except BackupFailed as e:
+        raise HTTPException(status.HTTP_500_INTERNAL_SERVER_ERROR,
+                            f"Couldn't take the backup first, so nothing was synced: {e}.") from None
+    [job_id] = enqueue_resync(request.app.state.jobs, body.start, body.end, user.id)
+    return JobRef(job_id=job_id)
 
 
 @callback_router.get(connection.CALLBACK_PATH, include_in_schema=False)

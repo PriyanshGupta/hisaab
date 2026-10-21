@@ -48,6 +48,13 @@ export function todayIso(now: Date = new Date()): string {
  * starts. An anchor dated today with history before it makes balances wrong
  * from day one (PRD §4.11).
  */
+/** The India date `days` before an ISO date. */
+export function daysBeforeIso(iso: string, days: number): string {
+  const d = new Date(`${iso}T00:00:00Z`);
+  d.setUTCDate(d.getUTCDate() - days);
+  return d.toISOString().slice(0, 10);
+}
+
 export function threeMonthsAgoIso(now: Date = new Date()): string {
   const first = new Date(now.getFullYear(), now.getMonth() - 3, 1);
   const lastDay = new Date(first.getFullYear(), first.getMonth() + 1, 0).getDate();

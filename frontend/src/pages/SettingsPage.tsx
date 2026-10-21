@@ -1,14 +1,24 @@
-// Settings (PRD §6.9): for now, the user's own Gmail connection (PRD §4.3).
+// Settings (PRD §6.9): the user's own Gmail connection (PRD §4.3), and syncing a date range of it.
 // Connect sends the browser to Google; Google sends it back here with
 // ?gmail=connected|denied|error. Sync now runs a background job and reports
-// what it stored when it ends.
-import { useState } from "react";
+// what it stored when it ends. Sync a date range (user, 2026-10-21: here for everyone; it was an admin
+// tool) brings in older mail or reads a period again, always the person's own inbox, after saying what it will do.
+import { type FormEvent, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 
 import { describeError } from "../api/client";
-import { type GmailStatus, type Job, useConnectGmail, useGmailStatus, useJob, useSyncNow } from "../api/gmail";
+import {
+  type GmailStatus,
+  type Job,
+  useConnectGmail,
+  useGmailStatus,
+  useJob,
+  useOwnResyncPreview,
+  useStartOwnResync,
+  useSyncNow,
+} from "../api/gmail";
 import { useMe } from "../api/session";
-import { formatInstantDate } from "../dates";
+import { daysBeforeIso, formatDate, formatInstantDate, todayIso } from "../dates";
 import { goTo } from "../navigate";
 import { Icon } from "../ui/Icon";
 import "../styles/settings.css";
@@ -45,6 +55,7 @@ export function SettingsPage() {
         {status.isError && <p className="form-error" role="alert">{describeError(status.error)}</p>}
         {status.data && <GmailConnection status={status.data} />}
       </section>
+      {status.data?.configured && status.data.status === "connected" && <RangeSync />}
     </>
   );
 }
@@ -122,6 +133,73 @@ function Connected({ status }: { status: GmailStatus }) {
       {job.isError && <p className="form-error" role="alert">{describeError(job.error)}</p>}
       {job.data && isDone(job.data) && <SyncOutcome job={job.data} />}
     </>
+  );
+}
+
+/** A period of the person's own inbox, fetched again: older mail comes in, mail already here is read again with
+ *  today's templates. It asks first, naming the dates and how many transactions will be read again. */
+function RangeSync() {
+  const today = todayIso();
+  const [start, setStart] = useState(daysBeforeIso(today, 6));
+  const [end, setEnd] = useState(today);
+  const preview = useOwnResyncPreview();
+  const run = useStartOwnResync();
+  const [asked, setAsked] = useState<number | null>(null);  // transactions read again, once previewed
+  const [jobId, setJobId] = useState<string | null>(null);
+  const job = useJob(jobId);
+  const running = run.isPending || (jobId !== null && (job.data === undefined || !isDone(job.data)));
+
+  const ask = (e: FormEvent) => {
+    e.preventDefault();
+    setJobId(null);
+    preview.mutate({ start, end }, { onSuccess: (p) => setAsked(p.transactions) });
+  };
+  const confirm = () => run.mutate({ start, end }, { onSuccess: (id) => { setAsked(null); setJobId(id); } });
+
+  return (
+    <section className="sheet settings-section" aria-labelledby="range-heading">
+      <div className="settings-section__head">
+        <span className="settings-section__icon" aria-hidden="true"><Icon name="download" size={20} /></span>
+        <div>
+          <h2 id="range-heading" className="settings-section__title">Sync a date range</h2>
+          <p className="settings-section__what">
+            Bring in older bank emails, or read a period again. Up to 6 months at a time; your edits stay.
+          </p>
+        </div>
+      </div>
+      <form className="range-sync" onSubmit={ask}>
+        <label className="field"><span className="field__label">From</span>
+          <input className="field__input" type="date" value={start} max={end} required
+            onChange={(e) => { setStart(e.target.value); setAsked(null); }} /></label>
+        <label className="field"><span className="field__label">To</span>
+          <input className="field__input" type="date" value={end} min={start} max={today} required
+            onChange={(e) => { setEnd(e.target.value); setAsked(null); }} /></label>
+        <button className="button button--secondary" type="submit" disabled={preview.isPending || running}>
+          Sync these dates…
+        </button>
+      </form>
+      {preview.isError && <p className="form-error" role="alert">{describeError(preview.error)}</p>}
+      {asked !== null && (
+        <div className="range-sync__confirm" role="group" aria-labelledby="range-ask">
+          <p id="range-ask" className="range-sync__ask">Sync {formatDate(start)} to {formatDate(end)}?</p>
+          <p>
+            New emails in these dates come in
+            {asked > 0 && `, and ${plural(asked, "transaction", "transactions")} already here are read again`}.
+            Your edits stay. A backup is taken first.
+          </p>
+          {run.isError && <p className="form-error" role="alert">{describeError(run.error)}</p>}
+          <div className="actions">
+            <button className="button button--primary" type="button" disabled={run.isPending} onClick={confirm}>Sync</button>
+            <button className="button button--secondary" type="button" onClick={() => setAsked(null)}>Cancel</button>
+          </div>
+        </div>
+      )}
+      {running && jobId !== null && (
+        <p className="muted" role="status">Syncing these dates… new transactions appear as it goes.</p>
+      )}
+      {job.isError && <p className="form-error" role="alert">{describeError(job.error)}</p>}
+      {job.data && isDone(job.data) && <SyncOutcome job={job.data} />}
+    </section>
   );
 }
 
