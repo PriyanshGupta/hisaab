@@ -1,5 +1,5 @@
 /*
- * Sign-in: the one bold moment. The ledger's green cloth cover carries the wordmark at cover size, with the red
+ * Sign-in and sign-up: the one bold moment. The ledger's green cloth cover carries the wordmark at cover size, with the red
  * double margin rule down its inner edge where the paper begins; the form is a white sheet on that paper, beside
  * the cover (desktop) or below it (phone).
  */
@@ -45,6 +45,7 @@
   display: grid;
   align-content: start;
   justify-items: center;
+  gap: var(--s6);
   padding: var(--s6) var(--s4);
 }
 .login__form {
@@ -71,10 +72,63 @@
   width: 100%;
   margin-top: var(--s1);
 }
-.login__help {
+.login__switch {
   font-size: var(--t-small);
   color: var(--ink-muted);
   text-align: center;
+}
+.login__switch a {
+  font-weight: var(--w-strong);
+}
+
+/* After sign-up: the setup it leads into, as the same numbered marks the setup page's stepper uses. */
+.login__next {
+  display: grid;
+  gap: var(--s3);
+  width: 100%;
+  max-width: 24rem;
+  padding: 0 var(--s2);
+}
+.login__next-title {
+  font-size: var(--t-body);
+  font-weight: var(--w-strong);
+  color: var(--ink-soft);
+}
+.login__steps {
+  display: grid;
+  gap: var(--s3);
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+.login__step {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  gap: var(--s3);
+}
+.login__step-mark {
+  display: grid;
+  place-items: center;
+  width: 1.6rem;
+  height: 1.6rem;
+  border-radius: 50%;
+  border: 1px solid var(--rule-strong);
+  background: var(--paper-raised);
+  font-size: var(--t-small);
+  font-weight: var(--w-strong);
+  font-variant-numeric: tabular-nums;
+  color: var(--ink-soft);
+}
+.login__step-title {
+  display: block;
+  font-weight: var(--w-strong);
+  line-height: 1.6rem;
+}
+.login__step-detail {
+  display: block;
+  font-size: var(--t-small);
+  color: var(--ink-muted);
 }
 
 @media (min-width: 960px) {

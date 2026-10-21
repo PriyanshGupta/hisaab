@@ -157,3 +157,70 @@ def test_app_refuses_a_short_session_secret(tmp_path: Path) -> None:
     settings: Settings = Settings(_env_file=None, database_path=tmp_path / "x.db", session_secret="short")
     with pytest.raises(RuntimeError, match="at least 32"):
         create_app(settings)
+
+
+def _signup(client: TestClient, username: str, password: str = "correct horse battery",
+            display_name: str = "Asha") -> Response:
+    return client.post("/api/auth/signup",
+                       json={"username": username, "display_name": display_name, "password": password})
+
+
+def test_signup_info_says_first_user_until_someone_signs_up(client: TestClient) -> None:
+    assert client.get("/api/auth/signup").json() == {"first_user": True}
+    _signup(client, "asha")
+    assert client.get("/api/auth/signup").json() == {"first_user": False}
+
+
+def test_first_signup_is_admin_and_signed_in(client: TestClient) -> None:
+    resp: Response = _signup(client, " Asha ")
+    assert resp.status_code == 201
+    assert resp.json()["role"] == "admin"
+    assert resp.json()["username"] == "asha"
+    assert _cookie_header(resp).startswith("hisaab_session=")
+    assert client.get("/api/auth/me").json()["username"] == "asha"
+
+
+def test_later_signups_are_members(client: TestClient) -> None:
+    _signup(client, "asha")
+    client.cookies.clear()
+    resp: Response = _signup(client, "ravi", display_name="Ravi")
+    assert resp.status_code == 201
+    assert resp.json()["role"] == "member"
+
+
+def test_signup_gets_default_categories(client: TestClient) -> None:
+    _signup(client, "asha")
+    resp: Response = client.get("/api/categories")
+    assert resp.status_code == 200  # signed in by the sign-up itself
+    assert isinstance(resp.json(), list)
+    assert len(resp.json()) > 0
+
+
+def test_signup_rejects_a_taken_username(client: TestClient, asha: str) -> None:
+    resp: Response = _signup(client, "ASHA")
+    assert resp.status_code == 409
+    assert "set-cookie" not in resp.headers
+
+
+def test_signup_rejects_a_short_password_and_creates_nobody(client: TestClient) -> None:
+    resp: Response = _signup(client, "asha", password="short")
+    assert resp.status_code == 422
+    assert "set-cookie" not in resp.headers
+    assert client.get("/api/auth/signup").json() == {"first_user": True}
+
+
+def test_signup_ignores_a_role_sent_by_the_browser(client: TestClient, asha: str) -> None:
+    resp: Response = client.post("/api/auth/signup", json={
+        "username": "ravi", "display_name": "Ravi", "password": "correct horse battery", "role": "admin"})
+    assert resp.status_code == 201
+    assert resp.json()["role"] == "member"
+
+
+def test_signup_caps_the_display_name(client: TestClient) -> None:
+    assert _signup(client, "asha", display_name="A" * 81).status_code == 422
+    assert _signup(client, "asha", display_name="A" * 80).status_code == 201
+
+
+def test_signup_caps_the_password(client: TestClient) -> None:
+    assert _signup(client, "asha", password="p" * 257).status_code == 422
+    assert _signup(client, "asha", password="p" * 256).status_code == 201

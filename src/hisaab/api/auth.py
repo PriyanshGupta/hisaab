@@ -1,4 +1,4 @@
-"""/api/auth: login, logout, who am I."""
+"""/api/auth: sign up, log in, log out, who am I."""
 
 from fastapi import APIRouter, Depends, HTTPException, Request, Response, status
 from pydantic import BaseModel
@@ -24,6 +24,16 @@ router: APIRouter = APIRouter(prefix="/api/auth", tags=["auth"])
 class LoginRequest(BaseModel):
     username: str
     password: str
+
+
+class SignupRequest(BaseModel):
+    username: str
+    display_name: str
+    password: str
+
+
+class SignupInfo(BaseModel):
+    first_user: bool  # the next account to sign up becomes the admin
 
 
 class SessionUser(BaseModel):
@@ -71,6 +81,25 @@ def login(body: LoginRequest, request: Request, response: Response, db: Database
         if new_hash:
             user.password_hash = new_hash
         token: str = sessions.create(s, session_secret(request), user_id)
+        out: SessionUser = SessionUser(
+            id=user.id, username=user.username, display_name=user.display_name, role=user.role)
+    set_session_cookie(response, token)
+    return out
+
+
+@router.get("/signup", response_model=SignupInfo)
+def signup_info(db: Database = Depends(get_db)) -> SignupInfo:
+    with db.read_session() as s:
+        return SignupInfo(first_user=not users.list_users(s))
+
+
+@router.post("/signup", response_model=SessionUser, status_code=status.HTTP_201_CREATED)
+def signup(body: SignupRequest, request: Request, response: Response, db: Database = Depends(get_db)) -> SessionUser:
+    """Create an account and sign it in. Rule violations become 409/422 in main._register_error_handlers, before
+    any cookie is set."""
+    with db.write_session(timeout=request.app.state.writer_timeout) as s:
+        user: User = users.signup(s, body.username, body.display_name, body.password)
+        token: str = sessions.create(s, session_secret(request), user.id)
         out: SessionUser = SessionUser(
             id=user.id, username=user.username, display_name=user.display_name, role=user.role)
     set_session_cookie(response, token)

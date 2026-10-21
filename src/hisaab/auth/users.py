@@ -3,11 +3,14 @@
 Rules owned here:
 - Usernames are case-insensitive: stored lowercased and trimmed, and limited
   to [a-z0-9._-]{3,32}, so "Asha" and "asha " are the same login.
-- Passwords are at least 8 characters, stored only as Argon2 hashes.
+- Passwords are 8 to 256 characters, stored only as Argon2 hashes. Display
+  names are at most 80 characters (sign-up is open to anyone on the network).
 - Roles are a stored attribute (admin | member), never "whoever came first"
   (PRD §8.6). The last admin cannot be demoted, so the instance can't lock
   itself out of administration. `python -m hisaab create-admin` is the
   out-of-band recovery path.
+- Sign-up is open (user ruling 2026-10-21, reversing PRD §6.9): the first
+  person to sign up becomes the admin, everyone after a member.
 """
 
 import re
@@ -23,6 +26,8 @@ from hisaab.models.core import USER_ROLES
 
 USERNAME_PATTERN: re.Pattern[str] = re.compile(r"[a-z0-9._-]{3,32}")
 MIN_PASSWORD_LENGTH: int = 8
+MAX_PASSWORD_LENGTH: int = 256
+MAX_DISPLAY_NAME_LENGTH: int = 80
 
 
 class UserError(ValueError):
@@ -51,6 +56,8 @@ def validate_username(raw: str) -> str:
 def validate_password(password: str) -> None:
     if len(password) < MIN_PASSWORD_LENGTH:
         raise UserError(f"Password must be at least {MIN_PASSWORD_LENGTH} characters.")
+    if len(password) > MAX_PASSWORD_LENGTH:
+        raise UserError(f"Password must be at most {MAX_PASSWORD_LENGTH} characters.")
 
 
 def validate_role(role: str) -> None:
@@ -76,6 +83,8 @@ def create_user(session: Session, username: str, display_name: str, password: st
     validate_role(role)
     if not display_name.strip():
         raise UserError("Display name is required.")
+    if len(display_name.strip()) > MAX_DISPLAY_NAME_LENGTH:
+        raise UserError(f"Display name must be at most {MAX_DISPLAY_NAME_LENGTH} characters.")
     if get_by_username(session, username) is not None:
         raise DuplicateUsername(f"Username '{username}' is already taken.")
     user: User = User(username=username, display_name=display_name.strip(), role=role,
@@ -84,6 +93,13 @@ def create_user(session: Session, username: str, display_name: str, password: st
     session.flush()
     categories.seed_defaults(session, user.id)  # every user starts with PRD §5.3's defaults
     return user
+
+
+def signup(session: Session, username: str, display_name: str, password: str) -> User:
+    """Self sign-up: admin when nobody exists yet, else member. Counted in the caller's write session, which holds
+    the writer lock, so two first sign-ups at once can't both become admin."""
+    anyone: bool = (session.scalar(select(func.count()).select_from(User)) or 0) > 0
+    return create_user(session, username, display_name, password, role="member" if anyone else "admin")
 
 
 def set_password(session: Session, user: User, new_password: str) -> None:

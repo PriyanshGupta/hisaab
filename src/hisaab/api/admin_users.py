@@ -1,6 +1,6 @@
 """/api/admin/users: admin-only user management (PRD §6.9, §10.8).
 
-Users are created by an admin (no self-signup). Password reset is
+People sign themselves up (/api/auth/signup) or an admin creates them. Password reset is
 admin-performed and ends the target's sessions. Roles can change, except that
 the last admin cannot be demoted. Every route depends on require_admin, so a
 member gets 403 and an anonymous caller 401 before any handler code runs.

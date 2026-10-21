@@ -150,3 +150,100 @@ test("home after the backfill, with nothing categorized yet, is bulk categorizat
   expect(router.state.location.pathname).toBe("/review");
   expect(router.state.location.search).toBe("?lane=categories");
 });
+
+// ---- sign-up: the first person becomes the admin, everyone after a member ----
+
+const FIRST_RUN = { status: 200, body: { first_user: true } };
+const HAS_USERS = { status: 200, body: { first_user: false } };
+
+async function fillSignup(password = "correct horse", confirm = password) {
+  const user = userEvent.setup();
+  await user.type(await screen.findByLabelText("Your name"), "Asha Kulkarni");
+  await user.type(screen.getByLabelText("Username"), "asha");
+  await user.type(screen.getByLabelText("Password"), password);
+  await user.type(screen.getByLabelText("Confirm password"), confirm);
+  await user.click(screen.getByRole("button", { name: "Create account" }));
+}
+
+test("first run: the sign-in page sends you to create the admin account", async () => {
+  mockApi({ "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": FIRST_RUN });
+  const { router } = renderApp("/");
+  expect(await screen.findByRole("heading", { name: "Create your account" })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/signup");
+  expect(screen.getByText("You'll be this ledger's admin")).toBeInTheDocument();
+  expect(screen.queryByRole("link", { name: "Sign in" })).not.toBeInTheDocument();
+});
+
+test("signing up signs you in and opens setup with a welcome", async () => {
+  const api = mockApi({
+    "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": FIRST_RUN,
+    "POST /api/auth/signup": { status: 201, body: ASHA },
+    "GET /api/setup": setupAt("accounts"), "GET /api/accounts": { status: 200, body: [] },
+    "GET /api/review": EMPTY_REVIEW,
+  });
+  const { router } = renderApp("/signup");
+  await fillSignup();
+  expect(await screen.findByRole("heading", { name: "Set up Hisaab" })).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/setup");
+  expect(screen.getByText(/Welcome, Asha Kulkarni/)).toBeInTheDocument();
+  expect(api.bodiesFor("POST /api/auth/signup")).toEqual([
+    { username: "asha", display_name: "Asha Kulkarni", password: "correct horse" }]);
+});
+
+test("mismatched passwords are caught before anything is sent", async () => {
+  const api = mockApi({ "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": HAS_USERS });
+  renderApp("/signup");
+  await fillSignup("correct horse", "correct hose");
+  expect(await screen.findByRole("alert")).toHaveTextContent("The two passwords don't match.");
+  expect(api.calls).not.toContain("POST /api/auth/signup");
+});
+
+test("a taken username shows the server's sentence", async () => {
+  mockApi({ "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": HAS_USERS,
+    "POST /api/auth/signup": { status: 409, body: { detail: "Username 'asha' is already taken." } } });
+  renderApp("/signup");
+  await fillSignup();
+  expect(await screen.findByRole("alert")).toHaveTextContent("Username 'asha' is already taken.");
+});
+
+test("once someone exists, sign-up offers the way back to sign-in", async () => {
+  mockApi({ "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": HAS_USERS });
+  const { router } = renderApp("/signup");
+  expect(await screen.findByText("to your household ledger")).toBeInTheDocument();
+  await userEvent.setup().click(await screen.findByRole("link", { name: "Sign in" }));
+  expect(router.state.location.pathname).toBe("/login");
+});
+
+test("sign-in links to sign-up", async () => {
+  mockApi({ "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": HAS_USERS });
+  const { router } = renderApp("/login");
+  await userEvent.setup().click(await screen.findByRole("link", { name: "Create an account" }));
+  expect(router.state.location.pathname).toBe("/signup");
+});
+
+test("signing in still works when the sign-up check fails", async () => {
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
+    "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": "network-error",
+    "POST /api/auth/login": { status: 200, body: ASHA } });
+  const { router } = renderApp("/login");
+  expect(await screen.findByRole("link", { name: "Create an account" })).toBeInTheDocument();
+  await signIn();
+  expect(await screen.findByRole("heading", REPORT_HEADING)).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/");
+});
+
+test("the sign-up fields carry the server's length limits", async () => {
+  mockApi({ "GET /api/auth/me": NOT_LOGGED_IN, "GET /api/auth/signup": HAS_USERS });
+  renderApp("/signup");
+  expect(await screen.findByLabelText("Your name")).toHaveAttribute("maxlength", "80");
+  expect(screen.getByLabelText("Username")).toHaveAttribute("maxlength", "32");
+  expect(screen.getByLabelText("Password")).toHaveAttribute("maxlength", "256");
+});
+
+test("visiting sign-up while signed in goes home", async () => {
+  mockApi({ "GET /api/setup": SETUP_DONE, "GET /api/report": EMPTY_REPORT, "GET /api/review": EMPTY_REVIEW,
+    "GET /api/auth/me": { status: 200, body: ASHA }, "GET /api/auth/signup": HAS_USERS });
+  const { router } = renderApp("/signup");
+  expect(await screen.findByRole("heading", REPORT_HEADING)).toBeInTheDocument();
+  expect(router.state.location.pathname).toBe("/");
+});

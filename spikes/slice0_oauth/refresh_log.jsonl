@@ -1,3 +1,0 @@
-{"at": "2026-10-10T09:50:53Z", "grant_age_days": 0.0, "result": "ok", "access_token_expires_in_s": 3599, "refresh_token_rotated": false, "granted_scopes": ["https://www.googleapis.com/auth/gmail.readonly"]}
-{"at": "2026-10-10T09:56:12Z", "grant_age_days": 0.0, "result": "ok", "access_token_expires_in_s": 3599, "refresh_token_rotated": false, "granted_scopes": ["https://www.googleapis.com/auth/gmail.readonly"]}
-{"at": "2026-10-19T15:32:34Z", "grant_age_days": 9.24, "result": "ok", "access_token_expires_in_s": 3599, "refresh_token_rotated": false, "granted_scopes": ["https://www.googleapis.com/auth/gmail.readonly"]}

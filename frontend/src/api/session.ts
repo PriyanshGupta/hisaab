@@ -1,4 +1,4 @@
-// Who is signed in, and signing in and out. The session itself is an HttpOnly
+// Who is signed in, signing up, and signing in and out. The session itself is an HttpOnly
 // cookie the browser manages; the SPA only ever asks the server who it is.
 import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
 
@@ -24,6 +24,25 @@ export function useLogin() {
     mutationFn: (credentials: { username: string; password: string }) =>
       unwrap(() => api.POST("/api/auth/login", { body: credentials })),
     onSuccess: (user) => queryClient.setQueryData(meQueryKey, user),
+  });
+}
+
+export const signupInfoKey = ["auth", "signup"] as const;
+
+/** Whether the next account to sign up becomes the admin (nobody has signed up yet). */
+export function useSignupInfo() {
+  return useQuery({ queryKey: signupInfoKey, queryFn: () => unwrap(() => api.GET("/api/auth/signup")), staleTime: 60_000 });
+}
+
+export function useSignup() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (account: { username: string; display_name: string; password: string }) =>
+      unwrap(() => api.POST("/api/auth/signup", { body: account })),
+    onSuccess: (user) => {
+      queryClient.setQueryData(meQueryKey, user);
+      void queryClient.invalidateQueries({ queryKey: signupInfoKey });
+    },
   });
 }
 

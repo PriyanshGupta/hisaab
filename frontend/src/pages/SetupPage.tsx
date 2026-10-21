@@ -11,6 +11,7 @@ import { Link, Navigate, useSearchParams } from "react-router";
 import { type Account, TYPE_LABELS, useAccounts } from "../api/accounts";
 import { describeError } from "../api/client";
 import { useSyncNow } from "../api/gmail";
+import { useMe } from "../api/session";
 import { type Setup, setupKey, useSetup } from "../api/setup";
 import { formatDate } from "../dates";
 import { formatPaise } from "../money";
@@ -29,6 +30,7 @@ const RETURN_MESSAGES: Record<string, string> = {
 
 export function SetupPage() {
   const setup = useSetup();
+  const me = useMe();
   const [params] = useSearchParams();
   // back from Google's screen (a full page load): straight to the Gmail step, where its message shows
   const [walked, setWalked] = useState<"accounts" | "balances" | "gmail">(params.has("gmail") ? "gmail" : "accounts");
@@ -45,6 +47,11 @@ export function SetupPage() {
   return (
     <>
       <header className="page-head"><h1 className="page-title">Set up Hisaab</h1></header>
+      {me.data && shown !== "History" && (
+        <p className="page-lead">
+          Welcome, {me.data.display_name}. A few steps and Hisaab starts reading your bank alerts.
+        </p>
+      )}
       <ol className="setup-steps" aria-label="Setup steps">
         {STEPS.map((name, i) => (
           <li key={name} className={`setup-steps__step${i < STEPS.indexOf(shown) ? " setup-steps__step--done" : ""}`}

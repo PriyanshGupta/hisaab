@@ -8,8 +8,9 @@ prints the PRD §9 parse rate over the local fixture corpus (parsing/measure.py)
 backup / backups take a backup now (run.sh runs `backup --before-migrating` before every
 migration) and list them, newest first; restoring is manual (OPERATIONS.md).
 
-create-admin bootstraps the first admin, since there is no self-signup
-(PRD §6.9). It is also the recovery path if every admin is locked out.
+create-admin creates an admin from the terminal. The first admin normally
+signs up in the browser (/signup); this is the recovery path if every admin
+is locked out.
 The password is read by a hidden prompt (or from stdin with --password-stdin,
 for scripting) and never accepted as an argument, so it cannot end up in
 shell history or the process list.

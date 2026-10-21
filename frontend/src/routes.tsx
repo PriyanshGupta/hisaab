@@ -16,6 +16,7 @@ import { ReviewPage } from "./pages/ReviewPage";
 import { SettingsPage } from "./pages/SettingsPage";
 import { SendersPage } from "./pages/SendersPage";
 import { SetupPage } from "./pages/SetupPage";
+import { SignupPage } from "./pages/SignupPage";
 import { StatementsPage } from "./pages/StatementsPage";
 import { TemplatesPage } from "./pages/TemplatesPage";
 import { TransactionsPage } from "./pages/TransactionsPage";
@@ -23,6 +24,7 @@ import { AppShell } from "./shell/AppShell";
 
 export const routes: RouteObject[] = [
   { path: "/login", element: <LoginPage /> },
+  { path: "/signup", element: <SignupPage /> },
   {
     element: (
       <RequireAuth>

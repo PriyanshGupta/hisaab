@@ -1,5 +1,6 @@
-// User management (PRD §6.9): the admin creates people (no self-signup), resets passwords, changes roles. A
-// reset signs the person out everywhere; the last admin can't be made a member (the server says so).
+// User management (PRD §6.9): the admin creates people (who can also sign themselves up at /signup), resets
+// passwords, changes roles. A reset signs the person out everywhere; the last admin can't be made a member (the
+// server says so).
 import { type FormEvent, useState } from "react";
 
 import { describeError } from "../api/client";
@@ -15,8 +16,8 @@ export function UsersPage() {
         {!adding && <button className="button button--primary" type="button" onClick={() => setAdding(true)}>Add a person</button>}
       </header>
       <p className="page-lead">
-        Each person signs in with their own password, connects their own Gmail and sets up their own accounts.
-        Admins also see these screens.
+        People can sign themselves up from the sign-in page, or you can add them here. Each person connects their
+        own Gmail and sets up their own accounts. Admins also see these screens.
       </p>
       {adding && <AddForm onDone={() => setAdding(false)} />}
       {users.isError && <p className="form-error" role="alert">{describeError(users.error)}</p>}

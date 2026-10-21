@@ -1,4 +1,4 @@
-"""`python -m hisaab create-admin`: bootstrap the first admin (there is no self-signup)."""
+"""`python -m hisaab create-admin`: an admin from the terminal (the recovery path; the first admin normally signs up)."""
 
 import io
 from pathlib import Path
