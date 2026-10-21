@@ -390,3 +390,51 @@ test("the order picked stays when switching lanes, and Checks has nothing to sor
   await user.click(screen.getByRole("tab", { name: /Checks/ }));
   expect(screen.queryByRole("group", { name: "Sort by" })).not.toBeInTheDocument();
 });
+
+test("categorizing a payee shown by its bank text files it, though naming it regroups the list (user, 2026-10-21)", async () => {
+  // Naming is step one; the review refresh after it moves the group from its text to the new payee id, which
+  // closed the box before step two (the category) was sent: the pick did nothing until tried again.
+  const raw = item({ id: "t-raw", payee_raw: "CHAI POINT KORAMANGALA", tags: ["uncategorized"] });
+  const { api, user } = setup([raw], {
+    "POST /api/review/name-payee": { status: 200, body: { updated: 1, payee_id: "p-new", pattern: true } },
+    "POST /api/review/payee-category": { status: 200, body: { updated: 1, overrides_kept: 0 } },
+    // the refresh after naming also reloads this; slower than the review, the box was gone before step two
+    "GET /api/review/auto-categorize/latest": { ...NO_BATCH, delayMs: 150 } });
+  await user.click(await screen.findByRole("tab", { name: /Categories 1/ }));
+  await user.click(screen.getByRole("button", { name: "Choose a category" }));
+  // what the server says after the naming: the same transaction, now under its payee
+  api.set("GET /api/review", { status: 200, body: { items: [{ ...raw, payee_id: "p-new", payee_name: "CHAI POINT KORAMANGALA" }],
+    categorized: [], sorted_accounts: [], sorted_payees: [] } });
+  await user.click(screen.getByRole("option", { name: "Food" }));
+  await waitFor(() => expect(api.bodiesFor("POST /api/review/payee-category")).toEqual([
+    { payee_id: "p-new", category_id: "c-food" }]));
+  expect(api.bodiesFor("POST /api/review/name-payee")).toEqual([{ payee_raw: "CHAI POINT KORAMANGALA", name: "CHAI POINT KORAMANGALA" }]);
+  expect(await screen.findByRole("status")).toHaveTextContent("1 transaction updated.");
+});
+
+// ---- money in is plain to see (user, 2026-10-21): a credit is green with CR, a group's total is net ----
+
+test("a credit says so, in its group's total and on its own line", async () => {
+  const { user } = setup([uncategorized("p-d", "Deepanshu Mishra", { kind: "income", amount_paise: 26000 })],
+    {}, "/review?lane=categories");
+  await screen.findByRole("list", { name: /to sort/ });
+  const [row] = rows();
+  const total = row!.querySelector(".group__total")!;
+  expect(total).toHaveTextContent("₹260.00");
+  expect(total).toHaveTextContent("credit");  // read out, beside the CR tag
+  expect(total.querySelector(".amt--credit")).not.toBeNull();
+  await user.click(within(row!).getByRole("button", { name: /Show the transactions/ }));
+  const line = within(row!).getByRole("list", { name: /Transactions in/ }).querySelector(".amt");
+  expect(line).toHaveClass("amt--credit");
+});
+
+test("a group with money both ways totals the difference, and says how many were credits", async () => {
+  setup([uncategorized("p-d", "Deepanshu Mishra", { amount_paise: 50000 }),
+    uncategorized("p-d", "Deepanshu Mishra", { kind: "income", amount_paise: 26000 }),
+    uncategorized("p-d", "Deepanshu Mishra", { amount_paise: 10000 })], {}, "/review?lane=categories");
+  await screen.findByRole("list", { name: /to sort/ });
+  const [row] = rows();
+  expect(row!.querySelector(".group__total")).toHaveTextContent("₹340.00");  // 500 + 100 out, 260 in
+  expect(row!.querySelector(".group__total .amt--credit")).toBeNull();      // net out: a debit
+  expect(within(row!).getByText("3 transactions (1 credit)")).toBeInTheDocument();
+});

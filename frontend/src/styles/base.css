@@ -709,11 +709,26 @@ input[type="file"].field__input::file-selector-button {
 .ledger td.amount {
   font-weight: var(--w-strong);
 }
+/* An amount's direction (ui/Amount.tsx): money in is green and tagged CR, as a bank statement marks it; money
+   out stays ink. */
+.amt {
+  white-space: nowrap;
+}
+.amt--credit {
+  color: var(--accent-strong);
+}
 .cr {
-  margin-left: 0.3em;
-  font-size: var(--t-small);
-  font-weight: var(--w-medium);
-  color: var(--ink-muted);
+  display: inline-block;
+  margin-left: 0.4em;
+  padding: 0 0.45em;
+  border-radius: var(--r-pill);
+  background: var(--accent-wash);
+  color: var(--accent-strong);
+  font-size: 0.72em;
+  font-weight: var(--w-strong);
+  letter-spacing: 0.03em;
+  line-height: 1.55;
+  vertical-align: 0.12em;
 }
 .ledger__total td {
   font-weight: var(--w-strong);

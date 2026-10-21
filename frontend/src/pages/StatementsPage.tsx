@@ -25,6 +25,7 @@ import {
 } from "../api/statements";
 import { formatDate, formatInstant } from "../dates";
 import { formatPaise } from "../money";
+import { Amount } from "../ui/Amount";
 import {
   type Diagnostic,
   type Kind,
@@ -272,7 +273,7 @@ function RawCells({ rows }: { rows: UnparseableRow[] }) {
 }
 
 const amount = (r: PreviewRow) => (
-  <>{formatPaise(r.amount_paise)}{r.direction === "credit" && <span className="cr">Cr</span>}</>
+  <Amount paise={r.amount_paise} credit={r.direction === "credit"} />
 );
 
 function RowGroup({ title, rows }: { title: string; rows: PreviewRow[] }) {

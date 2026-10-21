@@ -25,6 +25,7 @@ import { Field } from "../forms/Field";
 import { formatPaise, paiseToInput, parseRupees } from "../money";
 import { type Period, indiaToday, periodAt, periodTitle, shift } from "../report/period";
 import { type Action, EmailLine, readable, TransactionActions } from "../review/TransactionTools";
+import { Amount } from "../ui/Amount";
 import { Icon } from "../ui/Icon";
 import { CustomRange } from "./ReportPage";
 import "../styles/transactions.css";
@@ -276,8 +277,7 @@ function Row({ t, names, accounts, categories, open, onToggle }: {
         </td>
         <td className="txn-table__account">{accountText(t, names)}</td>
         <td className="amount">
-          {formatPaise(t.amount_paise)}
-          {isCredit(t) && <span className="cr">Cr</span>}
+          <Amount paise={t.amount_paise} credit={isCredit(t)} />
         </td>
       </tr>
       {open && (

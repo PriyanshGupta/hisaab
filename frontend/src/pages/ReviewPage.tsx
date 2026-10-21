@@ -26,12 +26,13 @@ import {
   useAssignAccount,
   useAssignIdentifier,
   useCategorizePayee,
+  useCategorizeText,
   useNamePayee,
   useNotMyAccount,
   useReview,
 } from "../api/review";
 import { useMe } from "../api/session";
-import { useCorrectTransaction } from "../api/transactions";
+import { isCredit, useCorrectTransaction } from "../api/transactions";
 import { formatDate } from "../dates";
 import { formatPaise } from "../money";
 import { AddAccountForm } from "./AccountsPage";
@@ -39,6 +40,7 @@ import { AnswerBox, type Option } from "../review/AnswerBox";
 import { AutoCategorize } from "../review/AutoCategorize";
 import { ALL_ACTIONS, createCategory, EmailLine, readable, TransactionActions, useCategoryId } from "../review/TransactionTools";
 import { countLeft, inLane, LANES, type LaneId, OPTIONAL } from "../review/lanes";
+import { Amount } from "../ui/Amount";
 import "../styles/review.css";
 
 type Group = {
@@ -51,7 +53,24 @@ const SORTS: { key: SortKey; label: string }[] = [
   { key: "amount", label: "Amount" }, { key: "count", label: "Transactions" }, { key: "name", label: "Name" }];
 
 const plural = (n: number, one: string, many = `${one}s`) => `${n} ${n === 1 ? one : many}`;
+/** Finish an answer on its request's own promise, not on mutate()'s callbacks: those are dropped once the box
+ *  unmounts, and the refresh after an answer regroups the list, often taking this very group away first. A
+ *  failure shows through the hook's error (the box is still there to show it). */
+const after = <T,>(request: Promise<T>, then: (result: T) => void) => { request.then(then, () => undefined); };
+/** All the money a group moved, either way: what "sort by amount" ranks. */
 const totalOf = (g: Group) => g.items.reduce((sum, i) => sum + i.amount_paise, 0);
+/** What a group comes to: money out less money in (negative: more came in). Shown, never the gross: a payee who
+ *  was paid 500 and sent back 260 comes to 240 out, not 760 (user, 2026-10-21). */
+const netOf = (g: Group) => g.items.reduce((sum, i) => sum + (isCredit(i) ? -i.amount_paise : i.amount_paise), 0);
+function GroupTotal({ group }: { group: Group }) {
+  const net = netOf(group);
+  return <span className="amount group__total"><Amount paise={Math.abs(net)} credit={net < 0} /></span>;
+}
+/** "3 transactions", and "(1 credit)" when money went both ways: a credit-only group's total already says CR. */
+function countText(g: Group) {
+  const credits = g.items.filter(isCredit).length;
+  return `${plural(g.items.length, "transaction")}${credits > 0 && credits < g.items.length ? ` (${plural(credits, "credit")})` : ""}`;
+}
 const byName = (a: Group, b: Group) => a.label.localeCompare(b.label, undefined, { sensitivity: "base", numeric: true });
 
 /** Biggest total first, most transactions first, or A to Z; ties fall back to the other measure, then the name. */
@@ -241,7 +260,6 @@ function SortedRow({ lane, group, expanded, accounts, categories, onToggle, onDo
   const rename = useRenamePayee();
   const [changing, setChanging] = useState(false);
   const [name, setName] = useState(group.answer ?? "");
-  const total = group.items.reduce((sum, i) => sum + i.amount_paise, 0);
   const answer = lane === "accounts" ? (group.answer ? `on ${group.answer}` : "kept as expenses, not an account")
     : lane === "payees" ? `named ${group.answer}` : group.answer;
   const canChange = lane === "categories" || (lane === "payees" && group.payeeId !== undefined);
@@ -253,10 +271,10 @@ function SortedRow({ lane, group, expanded, accounts, categories, onToggle, onDo
           <span className="group__meta">
             <span className="group__sorted-answer">{answer}</span>
             {group.auto && <span className="group__auto">auto-categorized</span>}
-            <span className="group__count">{plural(group.items.length, "transaction")}</span>
+            <span className="group__count">{countText(group)}</span>
           </span>
         </span>
-        <span className="amount group__total">{formatPaise(total)}</span>
+        <GroupTotal group={group} />
         <span className="group__actions">
           {canChange && !changing && (
             <button className="button button--quiet button--small" type="button" onClick={() => setChanging(true)}>
@@ -314,7 +332,6 @@ function GroupRow({ ref, lane, group, current, answering, expanded, accounts, ca
   categories: Category[]; onFocusRow: () => void; onAnswer: () => void; onToggle: () => void; onCancel: () => void;
   onDone: (message: string) => void;
 }) {
-  const total = totalOf(group);
   const ask = lane === "accounts" ? "Which account?" : lane === "payees" ? "Name it" : "Choose a category";
   return (
     <li ref={ref} className={`group${current ? " group--current" : ""}`} aria-current={current ? "true" : undefined}
@@ -323,10 +340,10 @@ function GroupRow({ ref, lane, group, current, answering, expanded, accounts, ca
         <span className="group__who">
           <span className="group__label">{group.label}</span>
           <span className="group__meta">
-            <span className="group__count">{plural(group.items.length, "transaction")}</span>
+            <span className="group__count">{countText(group)}</span>
           </span>
         </span>
-        <span className="amount group__total">{formatPaise(total)}</span>
+        <GroupTotal group={group} />
         <span className="group__actions">
           {group.answerable && lane !== "checks" && !answering && (
             // one main button on the screen: the row the cursor is on
@@ -362,13 +379,14 @@ function GroupAnswer({ lane, group, accounts, categories, onCancel, onDone }: {
   const notMine = useNotMyAccount();
   const name = useNamePayee();
   const categorize = useCategorizePayee();
+  const categorizeText = useCategorizeText();
   const correct = useCorrectTransaction();
   const categoryId = useCategoryId();
   const payees = usePayees();
   const me = useMe();
   const [adding, setAdding] = useState(false);
-  const error = assign.error ?? assignEach.error ?? notMine.error ?? name.error ?? categorize.error ?? correct.error
-    ?? categoryId.error;
+  const error = assign.error ?? assignEach.error ?? notMine.error ?? name.error ?? categorize.error
+    ?? categorizeText.error ?? correct.error ?? categoryId.error;
   const n = group.items.length;
 
   if (adding) {
@@ -386,12 +404,12 @@ function GroupAnswer({ lane, group, accounts, categories, onCancel, onDone }: {
       options={accounts.map((a) => ({ id: a.id, label: a.display_name }))} extras={extras}
       onPick={(o) => {
         if (o.id === "__new") setAdding(true);
-        else if (o.id === "__notmine") notMine.mutate({ identifier: group.key }, {
-          onSuccess: (r) => onDone(`${capital(group.name)}: ${plural(r.quieted, "transaction")} kept as expenses.`) });
-        else if (unknown) assignEach.mutate({ transaction_ids: ids, account_id: o.id }, {
-          onSuccess: (r) => onDone(`${plural(r.updated, "transaction")} now on ${o.label}.`) });
-        else assign.mutate({ identifier: group.key, account_id: o.id }, {
-          onSuccess: (r) => onDone(`${capital(group.name)}: ${plural(r.resolved, "transaction")} now on ${o.label}.`) });
+        else if (o.id === "__notmine") after(notMine.mutateAsync({ identifier: group.key }),
+          (r) => onDone(`${capital(group.name)}: ${plural(r.quieted, "transaction")} kept as expenses.`));
+        else if (unknown) after(assignEach.mutateAsync({ transaction_ids: ids, account_id: o.id }),
+          (r) => onDone(`${plural(r.updated, "transaction")} now on ${o.label}.`));
+        else after(assign.mutateAsync({ identifier: group.key, account_id: o.id }),
+          (r) => onDone(`${capital(group.name)}: ${plural(r.resolved, "transaction")} now on ${o.label}.`));
       }} />;
   } else if (lane === "payees") {
     const target = unknown ? { transaction_ids: ids } : { payee_raw: group.key };
@@ -404,7 +422,7 @@ function GroupAnswer({ lane, group, accounts, categories, onCancel, onDone }: {
       onPick={(o: Option, typed) => {
         const label = o.id === "__exact" ? group.key : o.id === "__create" ? typed : o.label;
         const body = o.id === "__exact" || o.id === "__create" ? { ...target, name: label } : { ...target, payee_id: o.id };
-        name.mutate(body, { onSuccess: (r) => onDone(`Named ${label}: ${plural(r.updated, "transaction")}.`) });
+        after(name.mutateAsync(body), (r) => onDone(`Named ${label}: ${plural(r.updated, "transaction")}.`));
       }} />;
   } else {
     const filed = (r: { updated: number; overrides_kept: number }) => onDone(
@@ -415,14 +433,12 @@ function GroupAnswer({ lane, group, accounts, categories, onCancel, onDone }: {
         : undefined}
       onPick={(o, typed) => void categoryId(o, typed).then(({ id }) => {
         if (unknown) {  // no payee to hold a rule: each transaction gets its own category
-          void Promise.all(ids.map((t) => correct.mutateAsync({ id: t, change: { category_override_id: id } })))
-            .then(() => onDone(`${plural(n, "transaction")} updated.`));
+          after(Promise.all(ids.map((t) => correct.mutateAsync({ id: t, change: { category_override_id: id } }))),
+            () => onDone(`${plural(n, "transaction")} updated.`));
         } else if (group.key.startsWith("raw:")) {  // not named yet: its text becomes its name, then one rule
-          const raw = group.key.slice(4);
-          name.mutate({ payee_raw: raw, name: raw }, {
-            onSuccess: (p) => categorize.mutate({ payee_id: p.payee_id, category_id: id }, { onSuccess: filed }) });
+          after(categorizeText.mutateAsync({ payee_raw: group.key.slice(4), category_id: id }), filed);
         } else {
-          categorize.mutate({ payee_id: group.key, category_id: id }, { onSuccess: filed });
+          after(categorize.mutateAsync({ payee_id: group.key, category_id: id }), filed);
         }
       })} />;
   }
@@ -441,7 +457,8 @@ function ItemLine({ item, accounts, categories, single = false }: {
 }) {
   const who = item.payee_name ?? item.payee_raw ?? "Unknown payee";
   return (
-    <li className="item" aria-label={`${formatDate(item.transaction_date)} ${who} ${formatPaise(item.amount_paise)}`}>
+    <li className="item" aria-label={`${formatDate(item.transaction_date)} ${who} ${formatPaise(item.amount_paise)}${
+      isCredit(item) ? " credit" : ""}`}>
       {single ? (
         <p className="item__line item__line--single">
           <span className="item__date">{formatDate(item.transaction_date)}</span>
@@ -452,7 +469,7 @@ function ItemLine({ item, accounts, categories, single = false }: {
           <span className="item__date">{formatDate(item.transaction_date)}</span>
           <span className="item__who">{who}</span>
           <span className="item__account muted">{item.account_label ?? ""}</span>
-          <span className="amount">{formatPaise(item.amount_paise)}</span>
+          <span className="amount"><Amount paise={item.amount_paise} credit={isCredit(item)} /></span>
         </div>
       )}
       {item.reason && <p className="item__reason">{readable(item.reason)}</p>}

@@ -103,6 +103,10 @@
 .group--current + .group {
   border-top-color: transparent;
 }
+/* the lit row is the CR tag's own green wash: the tag takes the paper so it still reads as a tag */
+.group--current .cr {
+  background: var(--paper-raised);
+}
 .group__line {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto auto;

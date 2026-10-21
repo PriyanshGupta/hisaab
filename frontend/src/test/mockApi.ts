@@ -4,7 +4,7 @@
 // `urls` in full, query strings included.
 import { vi } from "vitest";
 
-export type Reply = { status: number; body?: unknown } | "network-error";
+export type Reply = { status: number; body?: unknown; delayMs?: number } | "network-error";
 
 export function mockApi(initial: Record<string, Reply>) {
   const routes = new Map(Object.entries(initial));
@@ -21,6 +21,7 @@ export function mockApi(initial: Record<string, Reply>) {
     const reply = routes.get(key);
     if (reply === undefined) throw new Error(`mockApi: no reply for ${key}`);
     if (reply === "network-error") throw new TypeError("Failed to fetch");
+    if (reply.delayMs) await new Promise((resolve) => setTimeout(resolve, reply.delayMs)); // a slow reply, for races
     const hasBody = reply.status !== 204 && reply.body !== undefined;
     return new Response(hasBody ? JSON.stringify(reply.body) : null, {
       status: reply.status,

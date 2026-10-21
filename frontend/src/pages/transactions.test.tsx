@@ -89,7 +89,7 @@ test("with no accounts yet, Add points to Accounts", async () => {
 
 // --- /transactions ---------------------------------------------------------------
 
-test("the list shows entries as a ledger, money in marked Cr", async () => {
+test("the list shows entries as a ledger, money in marked CR in green", async () => {
   setup("/transactions", {
     "GET /api/transactions": { status: 200, body: [
       txn(),
@@ -102,8 +102,10 @@ test("the list shows entries as a ledger, money in marked Cr", async () => {
   expect(texts[0]).toContain("Tea stall");
   expect(texts[0]).toContain("Wallet");
   expect(texts[0]).toContain("₹400.00");
-  expect(texts[1]).toContain("₹12,000.00Cr");
+  expect(texts[1]).toContain("₹12,000.00CR credit");  // the tag, and what a screen reader hears
   expect(texts[1]).toContain("HDFC Savings");
+  expect(rows[1]!.querySelector(".amt")).not.toHaveClass("amt--credit");  // money out stays ink
+  expect(rows[2]!.querySelector(".amt")).toHaveClass("amt--credit");
 });
 
 test("correcting an amount keeps the entry's value visible and can be undone", async () => {

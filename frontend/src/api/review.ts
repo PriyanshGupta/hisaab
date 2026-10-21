@@ -36,6 +36,18 @@ export function useCategorizePayee() {
     unwrap(() => api.POST("/api/review/payee-category", { body })));
 }
 
+/** Categorize a payee not named yet: name it after its text, then one rule, as one action with one refresh at
+ *  the end. As two mutations, the refresh after the naming regrouped the list (text -> payee) and could remove
+ *  the box before the category was sent: the pick did nothing until tried again (user, 2026-10-21). */
+export function useCategorizeText() {
+  return useReviewMutation(async (body: { payee_raw: string; category_id: string }) => {
+    const named = await unwrap(() => api.POST("/api/review/name-payee", {
+      body: { payee_raw: body.payee_raw, name: body.payee_raw } }));
+    return unwrap(() => api.POST("/api/review/payee-category", {
+      body: { payee_id: named.payee_id, category_id: body.category_id } }));
+  });
+}
+
 export function useAssignIdentifier() {
   return useReviewMutation((body: { identifier: string; account_id: string }) =>
     unwrap(() => api.POST("/api/review/identifier", { body })));

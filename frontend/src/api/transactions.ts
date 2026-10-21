@@ -57,4 +57,5 @@ export function useDeleteTransaction() {
 }
 
 /** Money coming in (shown with a "Cr" suffix, as on bank statements). */
-export const isCredit = (t: Transaction) => t.kind === "income" || t.kind === "refund";
+/** Money in: anything with a kind (a listed transaction, a review item). */
+export const isCredit = (t: { kind: string }) => t.kind === "income" || t.kind === "refund";
