@@ -101,11 +101,57 @@
   color: var(--accent);
 }
 
-/* Phones: the account column folds away; the details cell still names the payee. */
+/* Phones: the account column folds away; the details cell still names the payee. The table keeps to the
+   screen: fixed columns for date and amount, and a long payee or email line wraps instead of pushing the
+   amount off the edge. */
 @media (max-width: 640px) {
-  .txn-table__account {
-    display: none;
+  /* zero width, not display: none: the open row's detail spans four columns, and a removed one would come
+     back as an empty column at the right edge */
+  .txn-table .txn-table__account {
+    width: 0;
+    padding: 0;
+    overflow: hidden;
+    visibility: hidden;
+    white-space: nowrap;
   }
+  .txn-table {
+    table-layout: fixed;
+  }
+  .txn-table th:first-child {
+    width: 4.25rem;
+  }
+  .txn-table th.amount {
+    width: 6.75rem;
+  }
+  .txn-table th,
+  .txn-table td {
+    padding-inline: var(--s2);
+  }
+  .txn-table th:first-child,
+  .txn-table td:first-child {
+    padding-left: 0;
+  }
+  .txn-table th:last-child,
+  .txn-table td.amount {
+    padding-right: 0;
+  }
+  .txn-table__date {
+    white-space: normal; /* "21 Oct" over "2026" */
+  }
+  .txn-row td,
+  .txn-detail__body {
+    overflow-wrap: anywhere;
+  }
+  .txn-detail > td {
+    padding-inline: var(--s3);
+  }
+  .txn-category__change .field {
+    min-width: 0;
+    flex: 1 1 12rem;
+  }
+}
+.txn-row {
+  cursor: pointer;
 }
 
 /* Date filter: everything, a shortcut, or a picked range. Pressed = what the list shows. */

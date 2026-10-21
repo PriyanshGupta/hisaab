@@ -132,6 +132,7 @@
 .report .hero {
   padding: var(--s5) var(--s5) var(--s4) 0;
   border-bottom: 1px solid var(--rule);
+  container-type: inline-size; /* the total sizes itself to this box, so a long figure never spills out */
 }
 .report .hero__top {
   display: flex;
@@ -146,7 +147,9 @@
   margin: var(--s3) 0 var(--s3);
   padding-bottom: 6px;
   border-bottom: 4px double var(--ink); /* a ledger's closed total */
-  font-size: clamp(2.6rem, 8vw, 4.2rem);
+  /* the box's width, not the window's: ₹1,23,45,678.90 still fits a phone */
+  font-size: clamp(1.75rem, 11cqi, 4.2rem);
+  max-width: 100%;
   font-weight: var(--w-wordmark);
   font-variation-settings: "wdth" var(--wdth-wordmark);
   font-variant-numeric: tabular-nums;

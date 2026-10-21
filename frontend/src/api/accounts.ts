@@ -67,13 +67,12 @@ export function useArchiveAccount() {
   });
 }
 
-export function useAddUpiId() {
-  return useAccountsMutation(async ({ id, upiId }: { id: string; upiId: string }) => {
+/** Another number, UPI ID or name the bank's alerts use for this account, kind worked out by the server
+ *  (review's own "ending 4821 is my HDFC savings"). Earlier transactions that mention it move here. */
+export function useAddIdentifier() {
+  return useAccountsMutation(async ({ id, identifier }: { id: string; identifier: string }) => {
     const { data, error, response } = await send(() =>
-      api.POST("/api/accounts/{account_id}/identifiers", {
-        params: { path: { account_id: id } },
-        body: { kind: "vpa", identifier: upiId },
-      }),
+      api.POST("/api/review/identifier", { body: { account_id: id, identifier } }),
     );
     if (data === undefined) throw apiError(response, error);
     return data;

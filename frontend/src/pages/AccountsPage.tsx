@@ -8,7 +8,7 @@ import {
   OPENING_LABELS,
   TYPE_LABELS,
   useAccounts,
-  useAddUpiId,
+  useAddIdentifier,
   useArchiveAccount,
   useCreateAccount,
   useRemoveIdentifier,
@@ -83,10 +83,10 @@ export function AccountsPage() {
 // --- one account ---------------------------------------------------------------
 
 function AccountItem({ account }: { account: Account }) {
-  const [mode, setMode] = useState<"view" | "edit" | "confirm-archive" | "add-upi">("view");
+  const [mode, setMode] = useState<"view" | "edit" | "confirm-archive" | "add-match">("view");
   const archive = useArchiveAccount();
   const isArchived = account.archived_at !== null;
-  const upiIds = account.identifiers.filter((i) => i.removable); // UPI IDs, and numbers assigned from review
+  const matches = account.identifiers.filter((i) => i.removable); // all but the last 4 it was created with
 
   return (
     <article className="account" aria-label={account.display_name}>
@@ -138,14 +138,14 @@ function AccountItem({ account }: { account: Account }) {
         </div>
       ) : (
         <>
-          {account.type !== "cash" && (
-            <UpiIds account={account} upiIds={upiIds} adding={mode === "add-upi"} onDoneAdding={() => setMode("view")} />
+          {account.type !== "cash" && ( // cash has no bank alerts to match
+            <Matches account={account} matches={matches} adding={mode === "add-match"} onDoneAdding={() => setMode("view")} />
           )}
           {mode === "view" && (
             <div className="actions">
-              {account.type === "bank" && ( // UPI IDs belong to bank accounts; a card has none
-                <button className="button button--quiet" type="button" onClick={() => setMode("add-upi")}>
-                  Add UPI ID
+              {account.type !== "cash" && (
+                <button className="button button--quiet" type="button" onClick={() => setMode("add-match")}>
+                  Add a number or name
                 </button>
               )}
               <button className="button button--quiet" type="button" onClick={() => setMode("edit")}>Edit</button>
@@ -160,48 +160,72 @@ function AccountItem({ account }: { account: Account }) {
   );
 }
 
-function UpiIds({ account, upiIds, adding, onDoneAdding }: {
-  account: Account; upiIds: Account["identifiers"]; adding: boolean; onDoneAdding: () => void;
+/** How the alert prints it: a bare 4 digits reads as "ending 4821"; UPI IDs and names as they are. */
+function matchText(i: Account["identifiers"][number]): string {
+  return i.kind === "last4" || i.kind === "card_last4" ? `ending ${i.identifier}` : i.identifier;
+}
+
+/**
+ * The other numbers, UPI IDs and names a bank's alerts use for this account (a linked card, the name a card
+ * issuer prints), beyond the last 4 digits it was created with. Most arrive from Review ("this is my card");
+ * here they can be added by hand or removed when one was assigned by mistake.
+ */
+function Matches({ account, matches, adding, onDoneAdding }: {
+  account: Account; matches: Account["identifiers"]; adding: boolean; onDoneAdding: () => void;
 }) {
-  const add = useAddUpiId();
+  const add = useAddIdentifier();
   const remove = useRemoveIdentifier();
   const [value, setValue] = useState("");
+  const [saved, setSaved] = useState<string | null>(null);
 
   const submit = (event: FormEvent) => {
     event.preventDefault();
     if (!value.trim()) return;
-    add.mutate({ id: account.id, upiId: value.trim() }, {
-      onSuccess: () => {
+    add.mutate({ id: account.id, identifier: value.trim() }, {
+      onSuccess: ({ resolved }) => {
         setValue("");
+        setSaved(resolved === 0 ? "Added."
+          : `Added. ${resolved} earlier ${resolved === 1 ? "transaction" : "transactions"} moved here.`);
         onDoneAdding();
       },
     });
   };
 
+  if (matches.length === 0 && !adding && !saved) return null;
   return (
-    <div className="upi">
-      {upiIds.length > 0 && (
-        <ul className="upi__list" aria-label={`UPI IDs for ${account.display_name}`}>
-          {upiIds.map((i) => (
-            <li key={i.id} className="upi__id">
-              <span>{i.identifier}</span>
-              <button className="upi__remove" type="button" aria-label={`Remove ${i.identifier}`}
-                onClick={() => remove.mutate({ id: account.id, identifierId: i.id })}>
-                ×
-              </button>
-            </li>
-          ))}
-        </ul>
+    <div className="matches">
+      {matches.length > 0 && (
+        <>
+          <p className="matches__label" id={`matches-${account.id}`}>Bank alerts that mention these go to this account.</p>
+          <ul className="matches__list" aria-labelledby={`matches-${account.id}`}>
+            {matches.map((i) => (
+              <li key={i.id} className="matches__item">
+                <span>{matchText(i)}</span>
+                <button className="matches__remove" type="button" aria-label={`Stop matching ${matchText(i)}`}
+                  onClick={() => { setSaved(null); remove.mutate({ id: account.id, identifierId: i.id }); }}>
+                  ×
+                </button>
+              </li>
+            ))}
+          </ul>
+        </>
       )}
       {adding && (
-        <form className="upi__add" onSubmit={submit}>
-          <input className="field__input upi__input" aria-label={`Add a UPI ID to ${account.display_name}`}
-            placeholder="name@bank" autoCapitalize="none" spellCheck={false} autoFocus value={value}
-            onChange={(e) => setValue(e.target.value)} />
-          <button className="button button--primary" type="submit" disabled={add.isPending}>Add</button>
-          <button className="button button--quiet" type="button" onClick={onDoneAdding}>Cancel</button>
+        <form className="matches__add" onSubmit={submit}>
+          <div className="matches__row">
+            <input className="field__input matches__input" aria-label={`Add to ${account.display_name}`}
+              aria-describedby={`matches-help-${account.id}`} placeholder="e.g. XX4821 or name@bank"
+              autoCapitalize="none" spellCheck={false} autoFocus value={value}
+              onChange={(e) => { setValue(e.target.value); setSaved(null); }} />
+            <button className="button button--primary" type="submit" disabled={add.isPending}>Add</button>
+            <button className="button button--quiet" type="button" onClick={onDoneAdding}>Cancel</button>
+          </div>
+          <p className="field__help" id={`matches-help-${account.id}`}>
+            As the bank's alerts print it. Earlier alerts that mention it move to this account too.
+          </p>
         </form>
       )}
+      {saved && <p className="matches__saved" role="status">{saved}</p>}
       {(add.isError || remove.isError) && (
         <p className="form-error" role="alert">{describeError(add.error ?? remove.error)}</p>
       )}

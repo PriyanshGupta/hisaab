@@ -28,7 +28,7 @@ export function SettingsPage() {
     <>
       <header className="page-head">
         <h1 className="page-title">Settings</h1>
-        {/* the Admin area is a sidebar destination; phones have no sidebar, so admins reach it from here */}
+        {/* also in the sidebar; linked here too, beside the settings it extends */}
         {me.data?.role === "admin" && <Link className="page-head__link" to="/admin">Admin</Link>}
       </header>
       <section className="settings-section" aria-labelledby="gmail-heading">

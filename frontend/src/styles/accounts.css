@@ -57,11 +57,16 @@
 }
 
 
-.upi {
+/* What else bank alerts call this account: a sentence that says so, then the numbers and names as pills. */
+.matches {
   display: grid;
   gap: var(--s2);
 }
-.upi__list {
+.matches__label {
+  font-size: var(--t-small);
+  color: var(--ink-soft);
+}
+.matches__list {
   list-style: none;
   margin: 0;
   padding: 0;
@@ -69,41 +74,57 @@
   flex-wrap: wrap;
   gap: var(--s2);
 }
-.upi__id {
+.matches__item {
   display: inline-flex;
   align-items: center;
   gap: var(--s1);
+  max-width: 100%;
   padding: 2px var(--s1) 2px var(--s3);
   background: var(--paper-raised);
   border: 1px solid var(--rule-strong);
   border-radius: 999px;
   font-size: var(--t-small);
+  overflow-wrap: anywhere;
 }
-.upi__remove {
+.matches__remove {
+  flex: none;
   border: 0;
   background: none;
   color: var(--ink-muted);
   font: inherit;
   font-size: var(--t-lead);
   line-height: 1;
-  width: 28px;
-  height: 28px;
+  width: 32px;
+  height: 32px;
   border-radius: 50%;
   cursor: pointer;
 }
-.upi__remove:hover {
+.matches__remove:hover {
   color: var(--margin);
   background: var(--margin-wash);
 }
-.upi__add {
+.matches__remove:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
+}
+.matches__add {
+  display: grid;
+  gap: var(--s1);
+  max-width: 30rem;
+}
+.matches__row {
   display: flex;
   gap: var(--s2);
   align-items: center;
-  max-width: 30rem;
 }
-.upi__input {
+.matches__input {
   flex: 1;
+  width: 0; /* grows into the free space; its built-in width would otherwise widen the whole card on a phone */
   min-width: 0;
+}
+.matches__saved {
+  color: var(--accent);
+  font-weight: var(--w-strong);
 }
 
 .confirm {

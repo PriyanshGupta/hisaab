@@ -141,10 +141,12 @@ function Row({ t, names, accounts, categories, open, onToggle }: {
   const categoryName = categories.find((c) => c.id === t.category_id)?.name;
   return (
     <>
-      <tr className={open ? "txn-row txn-row--open" : "txn-row"}>
+      {/* the whole row opens it (a phone's thumb lands anywhere); the name's button is the keyboard's way in,
+          and its click bubbles up to the row's handler */}
+      <tr className={open ? "txn-row txn-row--open" : "txn-row"} onClick={onToggle}>
         <td className="txn-table__date">{formatDate(t.transaction_date)}</td>
         <td>
-          <button className="txn-row__toggle" type="button" aria-expanded={open} onClick={onToggle}>
+          <button className="txn-row__toggle" type="button" aria-expanded={open}>
             {label}
           </button>
           {t.edits.length > 0 && <span className="txn-row__edited">edited</span>}

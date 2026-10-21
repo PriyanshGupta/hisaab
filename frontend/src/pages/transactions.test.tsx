@@ -213,6 +213,14 @@ describe("on 19 Oct 2026", () => {
   });
 });
 
+test("a tap anywhere on the row opens it, not only on the name", async () => {
+  const { user } = setup("/transactions", { "GET /api/transactions": { status: 200, body: [txn()] } });
+  await user.click(await screen.findByText("₹400.00"));
+  expect(screen.getByRole("form", { name: "Correct this transaction" })).toBeInTheDocument();
+  await user.click(screen.getByText("5 Oct 2026"));
+  expect(screen.queryByRole("form", { name: "Correct this transaction" })).not.toBeInTheDocument();
+});
+
 test("an open transaction can be closed again", async () => {
   const { user } = setup("/transactions", { "GET /api/transactions": { status: 200, body: [txn()] } });
   await user.click(await screen.findByRole("button", { name: /Tea stall/ }));

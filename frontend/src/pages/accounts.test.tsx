@@ -131,16 +131,20 @@ test("archiving asks first, then the account leaves the list", async () => {
   expect(api.calls).toContain("POST /api/accounts/a-1/archive");
 });
 
-test("a UPI ID can be added to an account", async () => {
-  const { api, user } = setup([bank]);
-  api.set("POST /api/accounts/a-1/identifiers", { status: 201, body: { id: "i-9", kind: "vpa", identifier: "asha.k@okhdfc", removable: true } });
+test("an account says what its extra numbers do, and any of them can be added: a card's too", async () => {
+  // User, 2026-10-21: pills that could only be removed, with no word on what they were for, were confusing.
+  const { api, user } = setup([bank, card]);
+  api.set("POST /api/review/identifier", { status: 200, body: { resolved: 2 } });
   const hdfc = await screen.findByRole("article", { name: "HDFC Savings" });
-  expect(within(hdfc).queryByLabelText("Add a UPI ID to HDFC Savings")).not.toBeInTheDocument(); // quiet until asked
-  await user.click(within(hdfc).getByRole("button", { name: "Add UPI ID" }));
-  await user.type(within(hdfc).getByLabelText("Add a UPI ID to HDFC Savings"), "Asha.K@okHDFC");
-  await user.click(within(hdfc).getByRole("button", { name: "Add" }));
-  expect(api.bodiesFor("POST /api/accounts/a-1/identifiers")).toEqual([{ kind: "vpa", identifier: "Asha.K@okHDFC" }]);
-  await waitFor(() => expect(within(hdfc).queryByLabelText("Add a UPI ID to HDFC Savings")).not.toBeInTheDocument());
+  expect(within(hdfc).getByText("Bank alerts that mention these go to this account.")).toBeInTheDocument();
+  const regalia = screen.getByRole("article", { name: "Regalia card" });
+  expect(within(regalia).queryByLabelText("Add to Regalia card")).not.toBeInTheDocument(); // quiet until asked
+  await user.click(within(regalia).getByRole("button", { name: "Add a number or name" }));
+  await user.type(within(regalia).getByLabelText("Add to Regalia card"), "XX4821");
+  await user.click(within(regalia).getByRole("button", { name: "Add" }));
+  expect(api.bodiesFor("POST /api/review/identifier")).toEqual([{ account_id: "a-2", identifier: "XX4821" }]);
+  expect(await within(regalia).findByRole("status")).toHaveTextContent("Added. 2 earlier transactions moved here.");
+  expect(within(regalia).queryByLabelText("Add to Regalia card")).not.toBeInTheDocument();
 });
 
 test("editing corrects the opening anchor", async () => {
@@ -195,20 +199,13 @@ test("an account without an opening balance says so", async () => {
   expect(within(hdfc).getByText("No opening balance")).toBeInTheDocument();
 });
 
-test("a number assigned from review by mistake can be removed here", async () => {
+test("a number assigned from review by mistake can be removed here, shown as the alerts print it", async () => {
   const { api, user } = setup([{ ...bank, identifiers: [...bank.identifiers,
     { id: "i-9", kind: "last4", identifier: "4821", removable: true }] }]);
   api.set("DELETE /api/accounts/a-1/identifiers/i-9", { status: 204 });
-  await user.click(await screen.findByRole("button", { name: "Remove 4821" }));
+  expect(await screen.findByText("ending 4821")).toBeInTheDocument();
+  await user.click(screen.getByRole("button", { name: "Stop matching ending 4821" }));
   expect(api.calls).toContain("DELETE /api/accounts/a-1/identifiers/i-9");
-});
-
-test("only a bank account offers Add UPI ID; a card doesn't have one", async () => {
-  setup([bank, card]);
-  const hdfc = await screen.findByRole("article", { name: "HDFC Savings" });
-  expect(within(hdfc).getByRole("button", { name: "Add UPI ID" })).toBeInTheDocument();
-  expect(within(screen.getByRole("article", { name: "Regalia card" })).queryByRole("button", { name: "Add UPI ID" }))
-    .not.toBeInTheDocument();
 });
 
 test("a bank entered by mistake can be switched to a credit card", async () => {

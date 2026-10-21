@@ -1,7 +1,7 @@
 /*
  * The authenticated frame. One markup, two layouts:
- *  phone (< 960px): slim top bar (with the red double rule beneath it), page,
- *                   and a bottom tab bar
+ *  phone (< 960px): slim top bar (menu button, wordmark; the red double rule
+ *                   beneath it), page. The sidebar is a drawer from the left.
  *  desktop:         sidebar (its right edge is the red double margin rule), page
  * The page to the right of / below the rule reads as the ledger sheet.
  */
@@ -15,10 +15,9 @@
   z-index: 2;
   display: flex;
   align-items: center;
-  justify-content: space-between;
-  gap: var(--s3);
+  gap: var(--s1);
   min-height: 52px;
-  padding: 0 var(--s4);
+  padding: 0 var(--s4) 0 var(--s1);
   background: var(--paper);
 }
 /* Red double margin rule, running horizontally under the phone bar. */
@@ -31,11 +30,24 @@
   opacity: var(--margin-rule-opacity);
   pointer-events: none;
 }
-.shell__bar-user {
-  display: flex;
-  align-items: center;
-  gap: var(--s2);
-  min-width: 0;
+.shell__menu {
+  display: grid;
+  place-items: center;
+  width: var(--touch);
+  height: var(--touch);
+  padding: 0;
+  border: 0;
+  border-radius: var(--r-control);
+  background: none;
+  color: var(--ink);
+  cursor: pointer;
+}
+.shell__menu:hover {
+  background: var(--paper-sunk);
+}
+.shell__menu:focus-visible {
+  outline: none;
+  box-shadow: var(--focus);
 }
 .shell__user-name {
   font-weight: var(--w-strong);
@@ -44,43 +56,78 @@
   white-space: nowrap;
 }
 
+/* The sidebar: a column on desktop; on phones, a drawer that slides in from the left over a scrim. */
 .shell__sidebar {
-  display: none;
+  position: fixed;
+  inset: 0 auto 0 0;
+  z-index: 4;
+  width: min(17rem, 84vw);
+  display: flex;
+  flex-direction: column;
+  gap: var(--s6);
+  padding: var(--s5) var(--s4) calc(var(--s4) + env(safe-area-inset-bottom));
+  overflow-y: auto;
+  background: var(--paper);
+  transform: translateX(-100%);
+  visibility: hidden;
+  transition: transform 180ms ease-out, visibility 0s linear 180ms;
+}
+.shell--drawer-open .shell__sidebar {
+  transform: none;
+  visibility: visible;
+  transition: transform 180ms ease-out;
+}
+/* Red double margin rule down the sidebar's right edge. */
+.shell__sidebar::after {
+  content: "";
+  position: absolute;
+  inset: 0 0 0 auto;
+  width: calc(var(--margin-rule-gap) + 2px);
+  border-inline: 1px solid var(--margin);
+  opacity: var(--margin-rule-opacity);
+  pointer-events: none;
+}
+.shell__sidebar .wordmark {
+  font-size: var(--t-title);
+  padding-left: var(--s3);
+}
+.shell__sidebar nav {
+  flex: 1;
+}
+.shell__sidebar-user {
+  display: grid;
+  justify-items: start;
+  gap: var(--s1);
+  padding: var(--s3) var(--s3) 0;
+  border-top: 1px solid var(--rule);
+}
+.shell__sidebar-user .button--quiet {
+  padding-inline: 0; /* align with the name above it */
+}
+.shell__scrim {
+  position: fixed;
+  inset: 0;
+  z-index: 3;
+  padding: 0;
+  border: 0;
+  background: rgb(20 48 42 / 0.28); /* --ink, thinned */
+  cursor: default;
 }
 
 .shell__main {
-  /* bottom padding leaves room for the fixed tab bar */
-  padding: var(--s5) var(--s4) calc(var(--touch) + var(--s7) + env(safe-area-inset-bottom));
+  padding: var(--s5) var(--s4) calc(var(--s7) + env(safe-area-inset-bottom));
   max-width: var(--content-max);
+  min-width: 0;
 }
 .shell__main:focus {
   outline: none;
 }
 
-.tabbar {
-  position: fixed;
-  inset: auto 0 0 0;
-  z-index: 2;
-  display: flex;
-  background: var(--paper-raised);
-  border-top: 1px solid var(--rule);
-  padding-bottom: env(safe-area-inset-bottom);
-}
-.tabbar__link {
-  /* Sized to their labels, in the condensed width, so five tabs fit a 360px phone. */
-  flex: 1 1 auto;
-  padding: 0 var(--s1);
-  font-variation-settings: "wdth" 80;
-  display: grid;
-  place-items: center;
-  min-height: calc(var(--touch) + var(--s2));
-  color: var(--ink-soft);
-  text-decoration: none;
-  font-weight: var(--w-strong);
-}
-.tabbar__link.active {
-  color: var(--ink);
-  box-shadow: inset 0 2px 0 var(--ink);
+@media (prefers-reduced-motion: reduce) {
+  .shell__sidebar,
+  .shell--drawer-open .shell__sidebar {
+    transition: none;
+  }
 }
 
 @media (min-width: 960px) {
@@ -89,44 +136,19 @@
     grid-template-columns: var(--sidebar-w) minmax(0, 1fr);
   }
   .shell__bar,
-  .tabbar {
+  .shell__scrim {
     display: none;
   }
   .shell__sidebar {
     position: sticky;
     top: 0;
+    z-index: auto;
+    width: auto;
     height: 100dvh;
-    display: flex;
-    flex-direction: column;
-    gap: var(--s6);
     padding: var(--s5) var(--s4) var(--s4);
-  }
-  /* Red double margin rule down the sidebar's right edge. */
-  .shell__sidebar::after {
-    content: "";
-    position: absolute;
-    inset: 0 0 0 auto;
-    width: calc(var(--margin-rule-gap) + 2px);
-    border-inline: 1px solid var(--margin);
-    opacity: var(--margin-rule-opacity);
-    pointer-events: none;
-  }
-  .shell__sidebar .wordmark {
-    font-size: var(--t-title);
-    padding-left: var(--s3);
-  }
-  .shell__sidebar nav {
-    flex: 1;
-  }
-  .shell__sidebar-user {
-    display: grid;
-    justify-items: start;
-    gap: var(--s1);
-    padding: var(--s3) var(--s3) 0;
-    border-top: 1px solid var(--rule);
-  }
-  .shell__sidebar-user .button--quiet {
-    padding-inline: 0; /* align with the name above it */
+    transform: none;
+    visibility: visible;
+    transition: none;
   }
   .shell__main {
     padding: var(--s6) var(--s6) var(--s7);
